@@ -17,6 +17,8 @@ else:
 class HostbotComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
         ComponentXMPP.__init__(self, jid, secret, server, port)
+        self.nick = 'Hostbot'
+        self.auto_authorize = True
 
         # You don't need a session_start handler, but that is
         # where you would broadcast initial presence.
@@ -24,7 +26,11 @@ class HostbotComponent(ComponentXMPP):
         # The message event is triggered whenever a message
         # stanza is received. Be aware that that includes
         # MUC messages and error messages.
-        self.add_event_handler("message", self.message)
+        self.add_event_handler('message', self.message)
+        self.add_event_handler('presence_probe', self.handle_probe)
+
+    def fulljid_with_user(self):
+        return 'host' + '@' + self.boundjid.full
 
     def message(self, msg):
         if msg['type'] in ['groupchat', 'error']: return
@@ -38,13 +44,19 @@ class HostbotComponent(ComponentXMPP):
                         + "\n(All commands should be followed by a space, and then the text on which you want the command to operate.)").send()
                 elif cmd == 'echo':
                     msg.reply("Echo:\n%(body)s" % {'body': body}).send()
+                elif cmd == 'roster':
+                    self.update_roster('hatter@localhost', name='Mad Hatter', groups=['Chatidea Contacts'])
+                    msg.reply("cool").send()
                 else:
                     msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
             else:
                 msg.reply("Hi, welcome to Chatidea.im!\nType /help for a list of commands.").send()
         else:
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
-
+            
+    def handle_probe(self, presence):
+        #handle proxy bot stuff here
+        self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
 
 if __name__ == '__main__':
     optp = OptionParser()
