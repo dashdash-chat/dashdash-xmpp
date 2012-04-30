@@ -1,2 +1,26 @@
 chatidea
 ========
+
+useful commands:
+----------------
+
+    erlc -I /lib/ejabberd/include -pa /vagrant/ejabberd/src -o /lib/ejabberd/ebin /vagrant/ejabberd/src/mod_register.erl && cp /vagrant/ejabberd/src/ejabberd.cfg /etc/ejabber && ejabberdctl restart
+
+    sudo tail -f /var/log/ejabberd/ejabberd.log
+
+    sudo ejabberdctl restart
+
+    vim /etc/ejabberd/ejabberd.cfg 
+    tail -f /var/log/ejabberd/ejabberd.log
+
+    mysql -u root -p < /vagrant/init_users.sql
+    mysql -u root -pos6juc8ik4if6jiev3co
+
+    python /vagrant/register_account.py -v -u 'temp0' -p 'FgT5bk3' 
+
+    python /vagrant/sleekxmpp/examples/register_account_for_other.py -v -j 'admin1@localhost' -p 'FgT5bk3' -n 'temp0' -w 'FgT5bk3'
+
+passwords:
+----------
+    admin password: FgT5bk3
+    sql password: os6juc8ik4if6jiev3co
