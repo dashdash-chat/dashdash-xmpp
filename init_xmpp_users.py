@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
 import sys
 import MySQLdb
 import sleekxmpp
@@ -15,6 +14,7 @@ if sys.version_info < (3, 0):
     sys.setdefaultencoding('utf8')
 else:
     raw_input = input
+
 
 class RegistrarBot(sleekxmpp.ClientXMPP):
 
@@ -59,10 +59,7 @@ class RegistrarBot(sleekxmpp.ClientXMPP):
         self.disconnect()
 
 if __name__ == '__main__':
-    # Setup the command line arguments.
     optp = OptionParser()
-
-    # Output verbosity options.
     optp.add_option('-q', '--quiet', help='set logging to ERROR',
                     action='store_const', dest='loglevel',
                     const=logging.ERROR, default=logging.INFO)
@@ -72,16 +69,12 @@ if __name__ == '__main__':
     optp.add_option('-v', '--verbose', help='set logging to COMM',
                     action='store_const', dest='loglevel',
                     const=5, default=logging.INFO)
-
-    # JID and password options.
     optp.add_option("-j", "--jid", dest="jid",
                     help="JID to use")
     optp.add_option("-p", "--password", dest="password",
                     help="password to use")
-
     opts, args = optp.parse_args()
 
-    # Setup logging.
     logging.basicConfig(level=opts.loglevel,
                         format='%(levelname)-8s %(message)s')
 

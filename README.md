@@ -25,3 +25,4 @@ passwords:
     admin password: FgT5bk3
     sql root password: os6juc8ik4if6jiev3co
     sql python-helper password: vap4yirck8irg4od4lo6
+    hostbot component secret: yeij9bik9fard3ij4bai
