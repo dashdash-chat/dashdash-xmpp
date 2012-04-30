@@ -27,23 +27,23 @@ class HostbotComponent(ComponentXMPP):
         self.add_event_handler("message", self.message)
 
     def message(self, msg):
-        """
-        Process incoming message stanzas. Be aware that this also
-        includes MUC messages and error messages. It is usually
-        a good idea to check the messages's type before processing
-        or sending replies.
-
-        Since a component may send messages from any number of JIDs,
-        it is best to always include a from JID.
-
-        Arguments:
-            msg -- The received message stanza. See the documentation
-                   for stanza objects and the Message stanza to see
-                   how it may be used.
-        """
-        # The reply method will use the messages 'to' JID as the
-        # outgoing reply's 'from' JID.
-        msg.reply("Thanks for sending\n%(body)s" % msg).send()
+        if msg['type'] in ['groupchat', 'error']: return
+        if msg['to'].user == 'host':
+            if msg['body'].startswith('/'):
+                cmd, space, body = msg['body'].lstrip('/').partition(' ')
+                if cmd == 'help':
+                    msg.reply("The available commands are:"
+                        + "\n    /help - print a list of commands"
+                        + "\n    /echo - echo back the message you sent"
+                        + "\n(All commands should be followed by a space, and then the text on which you want the command to operate.)").send()
+                elif cmd == 'echo':
+                    msg.reply("Echo:\n%(body)s" % {'body': body}).send()
+                else:
+                    msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
+            else:
+                msg.reply("Hi, welcome to Chatidea.im!\nType /help for a list of commands.").send()
+        else:
+            resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
 
 
 if __name__ == '__main__':
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     opts, args = optp.parse_args()
 
     if opts.jid is None:
-        opts.jid = 'hostbot.localhost'
+        opts.jid = 'bot.localhost'
     if opts.password is None:
         opts.password = 'yeij9bik9fard3ij4bai'
     if opts.server is None:
