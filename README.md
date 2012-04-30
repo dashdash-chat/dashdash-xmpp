@@ -23,4 +23,5 @@ useful commands:
 passwords:
 ----------
     admin password: FgT5bk3
-    sql password: os6juc8ik4if6jiev3co
+    sql root password: os6juc8ik4if6jiev3co
+    sql python-helper password: vap4yirck8irg4od4lo6
