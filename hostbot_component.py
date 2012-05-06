@@ -5,6 +5,7 @@ import MySQLdb
 import logging
 import getpass
 from optparse import OptionParser
+import subprocess
 import uuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
@@ -16,6 +17,7 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
+PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
 
 class HostbotComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
@@ -39,7 +41,7 @@ class HostbotComponent(ComponentXMPP):
         self.add_event_handler('presence_probe', self.handle_probe)
     
     def cleanup(self):
-        self._dbs_close()    
+        self._dbs_close()
     
     def fulljid_with_user(self):
         return 'host' + '@' + self.boundjid.full
@@ -91,13 +93,14 @@ class HostbotComponent(ComponentXMPP):
         iq['from'] = self.fulljid_with_user()
         iq['to'] = self.main_server
         iq['register']['username'] = new_jid
-        iq['register']['password'] = 'ow4coirm5oc5coc9folv'
+        iq['register']['password'] = PROXYBOT_PASSWORD
         try:
             iq.send()
             self.cursor_state.execute("""INSERT INTO cur_proxybots (user1, user2) 
                 VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
+            subprocess.call(["python", "/vagrant/chatidea/proxybot_client.py", '-j', '%s@localhost' % new_jid, '-p', PROXYBOT_PASSWORD], shell=False)
+            #TODO add the two users for this proxybot to the python subprocess call
             logging.info("Account created for %s!" % new_jid)
-            #NEXT launch new proxybot process here for: new_jid, ow4coirm5oc5coc9folv, user1, user2
         except IqError as e:
             logging.error("Could not register account: %s" % e.iq['error']['text'])
         except IqTimeout:
