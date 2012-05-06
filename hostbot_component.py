@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+import MySQLdb
 import logging
 import getpass
 from optparse import OptionParser
+import uuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
+from sleekxmpp.exceptions import IqError, IqTimeout
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -17,18 +20,27 @@ else:
 class HostbotComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
         ComponentXMPP.__init__(self, jid, secret, server, port)
+        self.main_server = server
+        self.boundjid.resource = 'python_component'
+        self.boundjid.regenerate()
         self.nick = 'Hostbot'
         self.auto_authorize = True
+        self._dbs_open()
+        self.cursor_state.execute("DROP TABLE IF EXISTS cur_proxybots;", {})
+        self.cursor_state.execute("""CREATE TABLE cur_proxybots (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            user1 VARCHAR(15),
+            user2 VARCHAR(15),
+            created TIMESTAMP DEFAULT NOW()
+        )""", {})
 
-        # You don't need a session_start handler, but that is
-        # where you would broadcast initial presence.
-
-        # The message event is triggered whenever a message
-        # stanza is received. Be aware that that includes
-        # MUC messages and error messages.
+        # You don't need a session_start handler, but that is where you would broadcast initial presence.
         self.add_event_handler('message', self.message)
         self.add_event_handler('presence_probe', self.handle_probe)
-
+    
+    def cleanup(self):
+        self._dbs_close()    
+    
     def fulljid_with_user(self):
         return 'host' + '@' + self.boundjid.full
 
@@ -55,8 +67,62 @@ class HostbotComponent(ComponentXMPP):
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
             
     def handle_probe(self, presence):
-        #handle proxy bot stuff here
+        sender = presence['from'].user
+        self.cursor_chatidea.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': sender})
+        contacts = [contact[0] for contact in self.cursor_chatidea.fetchall()]
+        for contact in contacts:
+            self.cursor_state.execute("""SELECT COUNT(*) FROM cur_proxybots WHERE 
+                (user1 = %(sender)s AND user2 = %(contact)s) OR 
+                (user1 = %(contact)s AND user2 = %(sender)s)
+                """, {'sender': sender, 'contact': contact})
+            if not int(self.cursor_state.fetchall()[0][0]):
+                #TODO check to make sure users are online before making proxybots for them
+                #   Since we can rely on the proxybot to destroy itself when it has fewer than
+                #   two online users, we can just make them naively for now, but it's a hack.
+                self._register_proxybot(sender, contact)
         self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
+    
+    def _register_proxybot(self, user1, user2):
+        new_jid = 'proxybot%d' % (uuid.uuid4().int)
+        print new_jid
+        print self.fulljid_with_user()
+        iq = self.Iq()
+        iq['type'] = 'set'
+        iq['from'] = self.fulljid_with_user()
+        iq['to'] = self.main_server
+        iq['register']['username'] = new_jid
+        iq['register']['password'] = 'ow4coirm5oc5coc9folv'
+        try:
+            iq.send()
+            self.cursor_state.execute("""INSERT INTO cur_proxybots (user1, user2) 
+                VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
+            logging.info("Account created for %s!" % new_jid)
+            #NEXT launch new proxybot process here for: new_jid, ow4coirm5oc5coc9folv, user1, user2
+        except IqError as e:
+            logging.error("Could not register account: %s" % e.iq['error']['text'])
+        except IqTimeout:
+            logging.error("No response from server.")
+
+    def _dbs_open(self):
+        self.db_chatidea = None
+        self.cursor_chatidea = None
+        self.db_state = None
+        self.cursor_state = None
+        try:
+            self.db_chatidea = MySQLdb.connect('localhost', 'python-helper', 'vap4yirck8irg4od4lo6', 'chatidea')
+            self.cursor_chatidea = self.db_chatidea.cursor()
+            self.db_state = MySQLdb.connect('localhost', 'python-helper', 'vap4yirck8irg4od4lo6', 'chatidea_state')
+            self.cursor_state = self.db_state.cursor()
+        except MySQLdb.Error, e:
+            print "Error %d: %s" % (e.args[0], e.args[1])
+            self.dbs_close()
+            sys.exit(1)
+
+    def _dbs_close(self):
+        if self.db_chatidea:
+            self.db_chatidea.close()
+        if self.db_state:
+            self.db_state.close()
 
 if __name__ == '__main__':
     optp = OptionParser()
@@ -95,10 +161,12 @@ if __name__ == '__main__':
     xmpp.registerPlugin('xep_0030') # Service Discovery
     xmpp.registerPlugin('xep_0004') # Data Forms
     xmpp.registerPlugin('xep_0060') # PubSub
+    xmpp.register_plugin('xep_0077') # In-band Registration
     xmpp.registerPlugin('xep_0199') # XMPP Ping
-
+    
     if xmpp.connect('127.0.0.1'):
         xmpp.process(block=True)
+        xmpp.cleanup()
         print("Done")
     else:
         print("Unable to connect.")
