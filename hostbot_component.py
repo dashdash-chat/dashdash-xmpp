@@ -17,7 +17,7 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
+PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv' #TODO read from config file
 
 class HostbotComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
@@ -98,8 +98,11 @@ class HostbotComponent(ComponentXMPP):
             iq.send()
             self.cursor_state.execute("""INSERT INTO cur_proxybots (user1, user2) 
                 VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
-            subprocess.call(["python", "/vagrant/chatidea/proxybot_client.py", '-j', '%s@localhost' % new_jid, '-p', PROXYBOT_PASSWORD], shell=False)
-            #TODO add the two users for this proxybot to the python subprocess call
+            subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
+                '-u', new_jid,
+                '-s', self.main_server,
+                '-1', user1,
+                '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logging.info("Account created for %s!" % new_jid)
         except IqError as e:
             logging.error("Could not register account: %s" % e.iq['error']['text'])

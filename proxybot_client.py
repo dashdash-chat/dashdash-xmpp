@@ -12,20 +12,26 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-
+PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv' #TODO read from config file
+    
 class ProxyBot(sleekxmpp.ClientXMPP):
-    def __init__(self, jid, password):
+    def __init__(self, username, server, contacts):
         # if not jid.startswith('proxybot'):
         #     logging.error("Not a valid proxybot JID: %s" % jid)
         #     return
-        sleekxmpp.ClientXMPP.__init__(self, jid, password)
+        sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), PROXYBOT_PASSWORD)
         self.convo_active = False
         self.add_event_handler("session_start", self.start)
         self.add_event_handler("message", self.message)
+        print ' '
+        print contacts
+        print ' '
     
     def disconnect(self, reconnect=False, wait=None, send_close=True):    
         if self.authenticated:
             self['xep_0077'].cancel_registration(jid=self.boundjid.host, ifrom=self.boundjid, block=False)
+            if not self.convo_active:
+                print "TODO remove entry from database, since we've disconnected from an unavailable presense"
         super(ProxyBot, self).disconnect(reconnect=reconnect, wait=True, send_close=send_close)
                                                   
     def start(self, event):
@@ -48,21 +54,29 @@ if __name__ == '__main__':
     optp.add_option('-v', '--verbose', help='set logging to COMM',
                     action='store_const', dest='loglevel',
                     const=5, default=logging.INFO)
-    optp.add_option("-j", "--jid", dest="jid",
-                    help="JID to use")
-    optp.add_option("-p", "--password", dest="password",
-                    help="password to use")
+    optp.add_option("-u", "--username", dest="username",
+                    help="proxybot username")
+    optp.add_option("-s", "--server", dest="server",
+                    help="server for proxybot and contacts")
+    optp.add_option("-1", "--contact1", dest="contact1",
+                    help="first contact's username")
+    optp.add_option("-2", "--contact2", dest="contact2",
+                    help="second contact's username")
     opts, args = optp.parse_args()
 
     logging.basicConfig(level=opts.loglevel,
                         format='%(levelname)-8s %(message)s')
 
-    if opts.jid is None:
-        opts.jid = raw_input("Username: ")
-    if opts.password is None:
-        opts.password = getpass.getpass("Password: ")
+    if opts.username is None:
+        opts.username = raw_input("Proxybot username: ")
+    if opts.server is None:
+        opts.server = raw_input("Server for proxybot and contacts: ")
+    if opts.contact1 is None:
+        opts.contact1 = raw_input("First contact for this proxybot: ")
+    if opts.contact2 is None:
+        opts.contact2 = getpass.getpass("Second contact for this proxybot: ")
 
-    xmpp = ProxyBot(opts.jid, opts.password)
+    xmpp = ProxyBot(opts.username, opts.server, [opts.contact1, opts.contact2])
     xmpp.register_plugin('xep_0030') # Service Discovery
     # xmpp.register_plugin('xep_0004') # Data Forms
     # xmpp.register_plugin('xep_0060') # PubSub
