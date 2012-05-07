@@ -19,6 +19,8 @@ useful commands:
     mysql -u root -p < /vagrant/init_users.sql
     mysql -u root -pos6juc8ik4if6jiev3co
 
+    python /vagrant/chatidea/hostbot_component.py -v
+
     python /vagrant/register_account.py -v -u 'temp0' -p 'FgT5bk3' 
 
     python /vagrant/sleekxmpp/examples/register_account_for_other.py -v -j 'admin1@localhost' -p 'FgT5bk3' -n 'temp0' -w 'FgT5bk3'

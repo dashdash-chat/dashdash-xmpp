@@ -7,6 +7,7 @@ import getpass
 from optparse import OptionParser
 import subprocess
 import uuid
+import xmlrpclib
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
@@ -17,7 +18,12 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv' #TODO read from config file
+#TODO read these from config file?
+HOSTBOT_PASSWORD = 'yeij9bik9fard3ij4bai'
+PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
+SERVER_URL = '127.0.0.1'
+XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
+XMLRPC_LOGIN = {'user': 'host', 'server': 'localhost', 'password': HOSTBOT_PASSWORD} #NOTE the server is not bot.localhost because of xml_rpc authentication
 
 class HostbotComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
@@ -35,6 +41,7 @@ class HostbotComponent(ComponentXMPP):
             user2 VARCHAR(15),
             created TIMESTAMP DEFAULT NOW()
         )""", {})
+        self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
 
         # You don't need a session_start handler, but that is where you would broadcast initial presence.
         self.add_event_handler('message', self.message)
@@ -86,16 +93,12 @@ class HostbotComponent(ComponentXMPP):
     
     def _register_proxybot(self, user1, user2):
         new_jid = 'proxybot%d' % (uuid.uuid4().int)
-        print new_jid
-        print self.fulljid_with_user()
-        iq = self.Iq()
-        iq['type'] = 'set'
-        iq['from'] = self.fulljid_with_user()
-        iq['to'] = self.main_server
-        iq['register']['username'] = new_jid
-        iq['register']['password'] = PROXYBOT_PASSWORD
         try:
-            iq.send()
+            self.xmlrpc_server.register(XMLRPC_LOGIN, {
+                'user': new_jid,
+                'host': 'localhost',
+                'password': PROXYBOT_PASSWORD
+            })
             self.cursor_state.execute("""INSERT INTO cur_proxybots (user1, user2) 
                 VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
@@ -104,10 +107,8 @@ class HostbotComponent(ComponentXMPP):
                 '-1', user1,
                 '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logging.info("Account created for %s!" % new_jid)
-        except IqError as e:
-            logging.error("Could not register account: %s" % e.iq['error']['text'])
-        except IqTimeout:
-            logging.error("No response from server.")
+        except xmlrpclib.Fault as e:
+            logging.error("Could not register account: %s" % e)
 
     def _dbs_open(self):
         self.db_chatidea = None
@@ -154,7 +155,7 @@ if __name__ == '__main__':
     if opts.jid is None:
         opts.jid = 'bot.localhost'
     if opts.password is None:
-        opts.password = 'yeij9bik9fard3ij4bai'
+        opts.password = HOSTBOT_PASSWORD
     if opts.server is None:
         opts.server = 'localhost'
     if opts.port is None:
@@ -165,12 +166,11 @@ if __name__ == '__main__':
 
     xmpp = HostbotComponent(opts.jid, opts.password, opts.server, opts.port)
     xmpp.registerPlugin('xep_0030') # Service Discovery
-    xmpp.registerPlugin('xep_0004') # Data Forms
-    xmpp.registerPlugin('xep_0060') # PubSub
-    xmpp.register_plugin('xep_0077') # In-band Registration
+    # xmpp.registerPlugin('xep_0004') # Data Forms
+    # xmpp.registerPlugin('xep_0060') # PubSub
     xmpp.registerPlugin('xep_0199') # XMPP Ping
     
-    if xmpp.connect('127.0.0.1'):
+    if xmpp.connect(SERVER_URL):
         xmpp.process(block=True)
         xmpp.cleanup()
         print("Done")

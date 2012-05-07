@@ -4,6 +4,7 @@ import sys
 import logging
 import getpass
 from optparse import OptionParser
+import xmlrpclib
 import sleekxmpp
 
 if sys.version_info < (3, 0):
@@ -12,7 +13,13 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv' #TODO read from config file
+#TODO read these from config file?
+HOSTBOT_PASSWORD = 'yeij9bik9fard3ij4bai'
+PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
+SERVER_URL = '127.0.0.1'
+XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
+XMLRPC_LOGIN = {'user': 'host', 'server': 'localhost', 'password': HOSTBOT_PASSWORD} #NOTE the server is not bot.localhost because of xml_rpc authentication
+
     
 class ProxyBot(sleekxmpp.ClientXMPP):
     def __init__(self, username, server, contacts):
@@ -21,42 +28,77 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         #     return
         sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), PROXYBOT_PASSWORD)
         self.convo_active = False
-        self.contacts = contacts
+        self.contacts = set(contacts)
+        self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
         self.add_event_handler("session_start", self._start)
         self.add_event_handler("message", self._message)
-        self.add_event_handler('presence_subscribe', self._handle_subscribe)
     
     def disconnect(self, reconnect=False, wait=None, send_close=True):    
         if self.authenticated:
-            self['xep_0077'].cancel_registration(jid=self.boundjid.host, ifrom=self.boundjid, block=False)
             if not self.convo_active:
-                print "TODO remove entry from database, since we've disconnected from an unavailable presense"
+                contacts = list(self.contacts)
+                self._delete_rosteritem_proxy(contacts[0], contacts[1])
+                self._delete_rosteritem_proxy(contacts[1], contacts[0])
+                print "TODO remove entry from database, since we've disconnected from an unavailable presense"  
+            self._xmlrpc_command('unregister', {
+                'user': self.boundjid.user,
+                'host': self.boundjid.host
+            })
         super(ProxyBot, self).disconnect(reconnect=reconnect, wait=True, send_close=send_close)
                                                   
     def _start(self, event):
-        self.sendPresenceSubscription(pto='%s@%s' % (self.contacts[0], self.boundjid.host), 
-                                      ptype='subscribe', 
-                                      pnick=self.contacts[1])
-        self.sendPresenceSubscription(pto='%s@%s' % (self.contacts[1], self.boundjid.host), 
-                                      ptype='subscribe', 
-                                      pnick=self.contacts[0])                     
-        # self.send_presence() because no one is on the list
+        contacts = list(self.contacts)
+        self._add_rosteritem_proxy(contacts[0], contacts[1])
+        self._add_rosteritem_proxy(contacts[1], contacts[0])
+        for contact in self.contacts:
+            self.send_presence(pto='%s@localhost' % contact, pshow="available") # because no one is on the list
+        self.send_presence() # need this so we can receive messages
         self.get_roster()
-        print self.client_roster
+        
+    def _xmlrpc_command(self, command, data):
+            fn = getattr(self.xmlrpc_server, command)
+            return fn({
+                'user': self.boundjid.user,
+                'server': self.boundjid.host,
+                'password': PROXYBOT_PASSWORD
+            }, data)
 
-    def _handle_subscribe(self, presence):
-        print ' '
-        print 'in presence'
-        print presence
-        print ' '
-        if presence['from'].user in self.contacts:
-            self.sendPresence(pto=presence['from'], ptype='subscribed')
-        else:
-            self.sendPresence(pto=presence['from'], ptype='unsubscribed')
+    def _add_rosteritem_proxy(self, contact1, contact2):
+        self._xmlrpc_command('add_rosteritem', {
+            'localuser': contact1,
+            'localserver': self.boundjid.host,
+            'user': self.boundjid.user,
+            'server': self.boundjid.host,
+            'nick': contact2,
+            'group': 'Chatidea Contacts',
+            'subs': 'both'
+        })
+        # self._xmlrpc_command('add_rosteritem', {
+        #     'localuser': self.boundjid.user,
+        #     'localserver': self.boundjid.host,
+        #     'user': contact1,
+        #     'server': self.boundjid.host,
+        #     'nick': contact1,
+        #     'group': 'participants',
+        #     'subs': 'both'
+        # })
+
+    def _delete_rosteritem_proxy(self, contact1, contact2):
+        self._xmlrpc_command('delete_rosteritem', {
+            'localuser': contact1,
+            'localserver': self.boundjid.host,
+            'user': self.boundjid.user,
+            'server': self.boundjid.host
+        })
 
     def _message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            msg.reply("Thanks for sending\n%(body)s" % msg).send()
+            if msg['from'].user in self.contacts:
+                for contact in self.contacts:
+                    if msg['from'].user is not contact:
+                        self.send_message(mto="%s@localhost" % contact, mbody=msg['body'], mtype='chat')
+            else:
+                msg.reply("You cannot send messages with this proxybot.").send()
 
 
 if __name__ == '__main__':
@@ -96,7 +138,6 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0030') # Service Discovery
     # xmpp.register_plugin('xep_0004') # Data Forms
     # xmpp.register_plugin('xep_0060') # PubSub
-    xmpp.register_plugin('xep_0077') # In-band Registrations
     xmpp.register_plugin('xep_0199') # XMPP Ping
 
     if xmpp.connect():
