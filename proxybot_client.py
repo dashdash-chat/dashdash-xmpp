@@ -21,11 +21,10 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         #     return
         sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), PROXYBOT_PASSWORD)
         self.convo_active = False
-        self.add_event_handler("session_start", self.start)
-        self.add_event_handler("message", self.message)
-        print ' '
-        print contacts
-        print ' '
+        self.contacts = contacts
+        self.add_event_handler("session_start", self._start)
+        self.add_event_handler("message", self._message)
+        self.add_event_handler('presence_subscribe', self._handle_subscribe)
     
     def disconnect(self, reconnect=False, wait=None, send_close=True):    
         if self.authenticated:
@@ -34,11 +33,28 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 print "TODO remove entry from database, since we've disconnected from an unavailable presense"
         super(ProxyBot, self).disconnect(reconnect=reconnect, wait=True, send_close=send_close)
                                                   
-    def start(self, event):
-        self.send_presence()
+    def _start(self, event):
+        self.sendPresenceSubscription(pto='%s@%s' % (self.contacts[0], self.boundjid.host), 
+                                      ptype='subscribe', 
+                                      pnick=self.contacts[1])
+        self.sendPresenceSubscription(pto='%s@%s' % (self.contacts[1], self.boundjid.host), 
+                                      ptype='subscribe', 
+                                      pnick=self.contacts[0])                     
+        # self.send_presence() because no one is on the list
         self.get_roster()
+        print self.client_roster
 
-    def message(self, msg):
+    def _handle_subscribe(self, presence):
+        print ' '
+        print 'in presence'
+        print presence
+        print ' '
+        if presence['from'].user in self.contacts:
+            self.sendPresence(pto=presence['from'], ptype='subscribed')
+        else:
+            self.sendPresence(pto=presence['from'], ptype='unsubscribed')
+
+    def _message(self, msg):
         if msg['type'] in ('chat', 'normal'):
             msg.reply("Thanks for sending\n%(body)s" % msg).send()
 

@@ -19,6 +19,24 @@ make
 sudo make install
 sudo ejabberdctl start
 
+cd /vagrant
+sudo apt-get install subversion
+svn co https://svn.process-one.net/ejabberd-modules
+cd /vagrant/ejabberd-modules/mod_admin_extra/trunk
+./build.sh
+cp /vagrant/ejabberd-modules/mod_admin_extra/trunk/ebin/mod_admin_extra.beam /lib/ejabberd/ebin/
+cd /vagrant/ejabberd-modules/ejabberd_xmlrpc/trunk
+./build.sh
+cp /vagrant/ejabberd-modules/ejabberd_xmlrpc/trunk/ebin/ejabberd_xmlrpc.beam /lib/ejabberd/ebin/
+cd /home/vagrant/
+wget http://ejabberd.jabber.ru/files/contributions/xmlrpc-1.13-ipr2.tgz
+tar -xzvf xmlrpc-1.13-ipr2.tgz
+cd xmlrpc-1.13/src
+make
+cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/
+
+sudo ejabberdctl restart
+
 sudo apt-get install mysql-server
 sudo apt-get install libmysqlclient-dev
 mysql -u root -p < /vagrant/init_users.sql 

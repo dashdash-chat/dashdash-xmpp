@@ -4,7 +4,8 @@ chatidea
 useful commands:
 ----------------
 
-    erlc -I /lib/ejabberd/include -pa /vagrant/ejabberd/src -o /lib/ejabberd/ebin /vagrant/ejabberd/src/mod_register.erl && cp /vagrant/chatidea/ejabberd.cfg /etc/ejabberd && ejabberdctl restart
+    erlc -I /lib/ejabberd/include -pa /vagrant/ejabberd/src -o /lib/ejabberd/ebin /vagrant/ejabberd/src/mod_register.erl
+    cp /vagrant/chatidea/ejabberd.cfg /etc/ejabberd && ejabberdctl restart
 
     sudo tail -f /var/log/ejabberd/ejabberd.log
 
