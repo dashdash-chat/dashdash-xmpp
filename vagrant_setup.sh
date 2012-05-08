@@ -12,7 +12,7 @@ sudo apt-get install libexpat1-dev
 sudo apt-get install git-core
 git clone git@github.com:lehrblogger/ejabberd.git
 cd ejabberd
-git checkout -b 2.1.x origin/2.1.x
+git checkout -b tag-v2.1.11 v2.1.11
 cd src
 ./configure
 make
@@ -34,6 +34,14 @@ tar -xzvf xmlrpc-1.13-ipr2.tgz
 cd xmlrpc-1.13/src
 make
 cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/
+
+# no longer using multicast
+# cd /home/vagrant/
+# wget https://git.process-one.net/ejabberd/badlop-ejabberd/archive-tarball/multicast-2.1.x multicast-2.1.x
+# tar -xzvf multicast-2.1.x
+# erlc -I /lib/ejabberd/include -pa /vagrant/ejabberd/src -o /lib/ejabberd/ebin /home/vagrant/ejabberd-badlop-ejabberd/src/mod_multicast.erl
+
+git clone https://git.process-one.net/~badlop/ejabberd/badlop-ejabberd/commits/multicast-2.1.x
 
 sudo ejabberdctl restart
 
