@@ -21,6 +21,7 @@ else:
 #TODO read these from config file?
 HOSTBOT_PASSWORD = 'yeij9bik9fard3ij4bai'
 PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
+USERINFOBOT_PASSWORD = 'nal4rey2hun5ewv4ud6p'
 SERVER_URL = '127.0.0.1'
 XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
 XMLRPC_LOGIN = {'user': 'host', 'server': 'localhost', 'password': HOSTBOT_PASSWORD} #NOTE the server is not bot.localhost because of xml_rpc authentication
@@ -46,6 +47,8 @@ class HostbotComponent(ComponentXMPP):
         # You don't need a session_start handler, but that is where you would broadcast initial presence.
         self.add_event_handler('message', self.message)
         self.add_event_handler('presence_probe', self.handle_probe)
+        
+        #TODO make sure userinfo@localhost is registered
     
     def cleanup(self):
         self._dbs_close()

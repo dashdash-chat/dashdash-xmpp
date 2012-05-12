@@ -1,6 +1,8 @@
 -- GRANT USAGE ON *.* TO 'python-helper'@'localhost';
 -- DROP USER 'python-helper'@'localhost';
 -- CREATE USER 'python-helper'@'localhost' IDENTIFIED BY 'vap4yirck8irg4od4lo6';
+-- CREATE USER 'userinfo-helper'@'localhost' IDENTIFIED BY 'rycs3yuf8of4vit9fac3';
+-- GRANT SELECT ON chatidea.convo_starts TO 'userinfo-helper'@'localhost';
 
 -- DROP DATABASE IF EXISTS chatidea;
 -- CREATE DATABASE chatidea;

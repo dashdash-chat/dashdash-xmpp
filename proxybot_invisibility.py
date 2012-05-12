@@ -38,16 +38,3 @@ class ProxybotInvisibility(ElementBase):
         list_xml.append(item_xml)
         
 register_stanza_plugin(Iq, ProxybotInvisibility)
-
-# May now use as so, within the context of a SleekXMPP instance.
-# >>> iq = self.Iq()
-# >>> iq['gtalk_invisible']['version'] = "2"
-# >>> iq['gtalk_invisible']['status'] = "Can't see me!"
-# >>> iq['gtalk_invisible']['show'] = "DND"
-# >>> iq['gtalk_invisible']['invisible'] = True
-# >>> iq.send()
-#
-# To test interactively, you can use:
-# python -i gtalk_invisible.py
-# >>> i = Iq()
-# >>> ... same as above ...
