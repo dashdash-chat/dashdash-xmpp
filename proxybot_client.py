@@ -6,6 +6,7 @@ import getpass
 from optparse import OptionParser
 import xmlrpclib
 import sleekxmpp
+from proxybot_invisibility import ProxybotInvisibility
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -14,147 +15,170 @@ else:
     raw_input = input
 
 #TODO read these from config file?
+#TODO make 'participants' groupname a variable?
 PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
 SERVER_URL = '127.0.0.1'
 XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
 
-def debug_with_space(messages):
-    print ' '
-    for message in messages:
-        print message
-    print ' '
-  
+class Stage:
+    IDLE = 1
+    ACTIVE = 2
+    RETIRED = 3
+
 class ProxyBot(sleekxmpp.ClientXMPP):
     def __init__(self, username, server, contacts):
         if not username.startswith('proxybot'):
             logging.error("Not a valid proxybot JID: %s" % jid)
-            self._xmlrpc_unregister()
             return
         sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), PROXYBOT_PASSWORD)
-        self.is_registered = True
-        self.convo_active = False
+        self.stage = Stage.IDLE
         self.contacts = set(contacts)
+        self.invisible = False
         self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
         self.add_event_handler("session_start", self._handle_start)
-        self.add_event_handler("message", self._handle_message)
+        self.add_event_handler('presence_probe', self._handle_presence_probe)
+        self.add_event_handler('presence_available', self._handle_presence_available)
         self.add_event_handler('presence_unavailable', self._handle_presence_unavailable)
+        self.add_event_handler("message", self._handle_message)
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self._handle_chatstate)
-    
-    def connect(self, *args, **kwargs): 
-        for contact in self.contacts:
-            res = self._xmlrpc_command('user_sessions_info', {
-                'user': contact,
+
+    def retire(self):
+        if self.stage is Stage.ACTIVE and len(self.contacts) < 2:
+            self.stage = Stage.RETIRED
+            self.disconnect(wait=True)
+            self._xmlrpc_command('unregister', {
+                'user': username or self.boundjid.user,
                 'host': self.boundjid.host
             })
-            if len(res['sessions_info']) == 0:  # one of the two initial users is no longer online!
-                self._xmlrpc_unregister()
-                return False
-        return super(ProxyBot, self).connect(*args, **kwargs)
+            logging.warning("TODO: update component DB? or maybe component unregisters me?")
+        else:
+            logging.error("Attempted retire from an %s stage with the following %d contacts: %s" %  (self.stage, len(self.contacts), str(list(self.contacts)).strip('[]')))
 
     def disconnect(self, *args, **kwargs):    
-        if self.authenticated:
-            if not self.convo_active:
-                for contact in self.contacts:
-                    self._delete_rosteritem_proxy(contact)
-                print "TODO remove entry from database, since we've disconnected from an unavailable presense"
+        self._delete_proxy_rosteritems(self.contacts)
         super(ProxyBot, self).disconnect(*args, **kwargs)        
-        self._xmlrpc_unregister()
-
+    
     def _handle_start(self, event):
-        contacts = list(self.contacts)
-        self._add_rosteritem_proxy(contacts[0], contacts[1])
-        self._add_rosteritem_proxy(contacts[1], contacts[0])
-        for contact in self.contacts:
-            self.send_presence(pto='%s@localhost' % contact, pshow="available") # because no one is on the list
-        self.send_presence() # need this so we can receive messages
+        if len(self.contacts) != 2:
+             logging.error("In session_start with %d extra contacts! %s" %  (len(self.contacts) - 2, str(list(self.contacts)).strip('[]')))
+        contact1, contact2 = list(self.contacts)
+        self._add_participant(contact1)
+        self._add_participant(contact2)
+        self._add_proxy_rosteritem(contact1, nick=contact2)
+        self._add_proxy_rosteritem(contact2, nick=contact1)
         self.get_roster()
+        iq = self.Iq()
+        iq['from'] = self.boundjid.full
+        iq['type'] = 'set'
+        iq['proxybot_invisibility'].make_list('invisible-to-participants')
+        iq['proxybot_invisibility'].add_item(itype='group', ivalue='participants', iaction='deny', iorder=1)
+        iq['proxybot_invisibility'].add_item(iaction='allow', iorder=2)
+        iq.send()
+        self._set_invisiblity(False) # this sends initial presence
 
-    def _xmlrpc_unregister(self, username=None):
-        self._xmlrpc_command('unregister', {
-            'user': username or self.boundjid.user,
-            'host': self.boundjid.host
-        })
-        if not username:
-            self.is_registered = False
-    def _xmlrpc_command(self, command, data):
-            if self.is_registered:
-                fn = getattr(self.xmlrpc_server, command)
-            else:  # if the proxybot has already unregistered itself, don't try to execute more xmlrpc commands!
-                fn = lambda *args, **kwargs: None
-            return fn({
-                'user': self.boundjid.user,
-                'server': self.boundjid.host,
-                'password': PROXYBOT_PASSWORD
-            }, data)
+    def _handle_presence_probe(self, presence):
+        logging.error("WTF PRESENCE PROBE %s" % presence)
+  
+    def _handle_presence_available(self, presence):
+        if presence['from'].user not in self.contacts: return
+        print '_handle_presence_available for %s' % presence['from'].user
+        if self.stage is Stage.IDLE:
+            if len(self.contacts) != 2:
+                 logging.error("In Stage.IDLE with %d extra contacts! %s" %  (len(self.contacts) - 2, str(list(self.contacts)).strip('[]')))
+            contact1, contact2 = list(self.contacts)
+            other_contact = self.contacts.difference([presence['from'].user]).pop()
+            print 'MOTHERFUCKER is maybe online: %s' % other_contact
+            try:
+                if self.invisible and other_contact and self._has_active_session(other_contact):
+                    self._set_invisiblity(False)
+            except xmlrpclib.ProtocolError, e:
+                logging.error('ProtocolError in user_sessions_info for %s, assuming offline: %s' % (other_contact, str(e)))
+                
+    def _handle_presence_unavailable(self, presence):
+        if presence['from'].user not in self.contacts: return
+        print ' _handle_presence_UNavailable for %s' % presence['from'].user
+        if self.stage is Stage.IDLE:
+            if len(self.contacts) != 2:
+                 logging.error("In Stage.IDLE with %d extra contacts! %s" %  (len(self.contacts) - 2, str(list(self.contacts)).strip('[]')))
+            # if either contact goes offline, we definitely want to be invisible until both are online again
+            self._set_invisiblity(True)
+        elif self.stage is Stage.ACTIVE and presence['from'].user in self.contacts:
+            self._remove_participant(presence['from'].user)
 
-    def _add_rosteritem_proxy(self, contact1, contact2):
-        # proxybot adds self to contact1's roster as contact2
-        self._xmlrpc_command('add_rosteritem', {
-            'group': 'Chatidea Contacts',
-            'localuser': contact1,
-            'user': self.boundjid.user,
-            'nick': contact2,
-            'subs': 'both',
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
-        self._xmlrpc_command('add_rosteritem', {
-            'group': 'participants',
-            'localuser': self.boundjid.user,
-            'user': contact1,
-            'nick': contact1,
-            'subs': 'both',
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
+    def _set_invisiblity(self, visibility):
+        logging.warning('setting invisiblity to %s' % visibility)
+        self.invisible = visibility
+        self.send_presence(ptype='unavailable')
+        iq = self.Iq()
+        iq['from'] = self.boundjid.full
+        iq['type'] = 'set'
+        if self.invisible:
+            iq['proxybot_invisibility'].make_active('invisible-to-participants')
+        else:
+            iq['proxybot_invisibility'].make_active()
+        iq.send()
+        self.send_presence()
 
-    def _delete_rosteritem_proxy(self, contact):
-        # proxybot deletes self from contact's roster
-        self._xmlrpc_command('delete_rosteritem', {
-            'localuser': contact,
-            'user': self.boundjid.user,
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
-        self._xmlrpc_command('delete_rosteritem', {
-            'localuser': self.boundjid.user,
-            'user': contact,
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
+    def _remove_participant(self, participant):
+        self.contacts.remove(participant)
+        logging.warning("TODO: remove yourself from the rosters of all of the user's friends")
+        logging.warning("TODO: update component DB with removed participant")
+        self._broadcast_alert('%s has disconnected and left the conversation' % participant)
+        if len(self.contacts) < 2:
+            self.retire()
 
-    def _handle_presence_unavailable(self, presence):    
-        self.contacts.remove(presence['from'].user)
-        self._delete_rosteritem_proxy(presence['from'].user)
-        msg = self.Message()
-        msg['body'] = '%s has disconnected and left the conversation' % presence['from'].user
-        #TODO send new nickname with offline status, keep in roster??
-        self._broadcast_message(msg)
-        if len(self.contacts) < 2: 
-            self.disconnect(wait=True)
-
-    def _handle_chatstate(self, msg):
-        #TODO ask Lance how to properly handle this double message problem.
-        new_msg = msg.__copy__()
-        del new_msg['body']
-        self._broadcast_message(new_msg, new_msg['from'].user)
+    def _add_participant(self, participant):
+        self.contacts.add(participant)
+        logging.warning("TODO: add yourself to the rosters of all of the user's friends")
+        logging.warning("TODO: update component DB with added participant") 
+        self._broadcast_alert('%s has joined the conversation' % participant)
 
     def _handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            if msg['from'].user in self.contacts:
-                self._broadcast_message(msg, msg['from'].user)
-            elif not msg['from'].user.startswith('proxybot'):
-                msg.reply("You cannot send messages with this proxybot.").send()
+            if self.stage is Stage.ACTIVE:
+                logging.warning("TODO: update component DB with new particpant")
+            elif self.stage is Stage.IDLE:
+                logging.warning("TODO: add yourself to the rosters of all of BOTH users' friends")
+                logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
+                self.Stage = Stage.ACTIVE
+            else:
+                msg.reply("Sorry, but this conversation is no longer active. Try starting or joining a different one!").send()
+                logging.error("Received message %s in retired stage." % msg)
+                return
+            # now we know we're in an active stage, and can proceed with the message broadcast
+            if msg['body'].startswith('/'): #LATER proper command handling
+                if msg['body'].startswith('/leave'):
+                    self._remove_participant(msg['from'].user)
+                else:
+                    msg.reply("TODO: handle other slash commands").send()
+            else:
+                if msg['from'].user not in self.contacts: #LATER restrict newcomers to friends of participants
+                    self._add_participant(msg['from'].user)
+                if msg['from'].user in self.contacts:     #NOTE for now this will always be true
+                    self._broadcast_message(msg, msg['from'].user)
+                else:
+                    msg.reply("You cannot send messages with this proxybot.").send()
+
+    def _handle_chatstate(self, msg):
+        #LATER try this without new_msg
+        #LATER do i need to duplicate complex _handle_message logic here?
+        new_msg = msg.__copy__()
+        del new_msg['body']
+        self._broadcast_message(new_msg, new_msg['from'].user)
+    
+    def _broadcast_alert(self, body):
+        msg = self.Message()
+        msg['body'] = body
+        self._broadcast_message(msg)
 
     def _broadcast_message(self, msg, sender=None):
         del msg['id']
         del msg['from']
-        del msg['html'] #TODO fix html, but it's a pain with reformatting
+        del msg['html'] #LATER fix html, but it's a pain with reformatting
         if msg['body'] and msg['body'] != '':
             if sender:
-                if len(self.contacts) > 2:
-                    msg['body'] = '[%s]: %s' % (sender, msg['body'])
+                msg['body'] = '[%s] %s' % (sender, msg['body']) # all messages need this, so you know who the conversation is with later
             else:
                 msg['body'] = '/me %s' % (msg['body'])
         for contact in self.contacts:
@@ -162,6 +186,52 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 new_msg = msg.__copy__()
                 new_msg['to'] = "%s@localhost" % contact
                 new_msg.send()
+
+
+    def _xmlrpc_command(self, command, data):
+            fn = getattr(self.xmlrpc_server, command)
+            return fn({
+                'user': self.boundjid.user,
+                'server': self.boundjid.host,
+                'password': PROXYBOT_PASSWORD
+            }, data)
+    def _add_participant(self, user):
+        self._xmlrpc_command('add_rosteritem', {
+            'group': 'participants',
+            'localuser': self.boundjid.user,
+            'user': user,
+            'nick': user,
+            'subs': 'both',
+            'localserver': self.boundjid.host,
+            'server':      self.boundjid.host
+        })
+    def _add_proxy_rosteritem(self, target, nick=None):
+        self._xmlrpc_command('add_rosteritem', {
+            'group': 'Chatidea Contacts',
+            'localuser': target,
+            'user': self.boundjid.user,
+            'nick': nick or self.boundjid.user,
+            'subs': 'both',
+            'localserver': self.boundjid.host,
+            'server':      self.boundjid.host
+        })
+    def _delete_proxy_rosteritem(self, target):
+        self._xmlrpc_command('delete_rosteritem', {
+           'localuser': target,
+           'user': self.boundjid.user,
+           'localserver': self.boundjid.host,
+           'server':      self.boundjid.host
+        })
+    def _delete_proxy_rosteritems(self, contacts):
+        for contact in contacts:
+            self._delete_proxy_rosteritem(contact)
+    def _has_active_session(self, user):
+        res = self._xmlrpc_command('user_sessions_info', {
+            'user': user,
+            'host': self.boundjid.host
+        })
+        return len(res['sessions_info']) > 0
+
 
 if __name__ == '__main__':
     optp = OptionParser()
@@ -198,9 +268,6 @@ if __name__ == '__main__':
 
     xmpp = ProxyBot(opts.username, opts.server, [opts.contact1, opts.contact2])
     xmpp.register_plugin('xep_0030') # Service Discovery
-    # xmpp.register_plugin('xep_0033') # Extended Stanza Addressing
-    # xmpp.register_plugin('xep_0004') # Data Forms
-    # xmpp.register_plugin('xep_0060') # PubSub
     xmpp.register_plugin('xep_0085') # Chat State Notifications
     xmpp.register_plugin('xep_0199') # XMPP Ping
 
