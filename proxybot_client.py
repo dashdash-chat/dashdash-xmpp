@@ -53,9 +53,12 @@ def participants_and_observers_only(fn):
         if args[1]['from'].user in args[0].participants.union(observers):
             return fn(*args, **kwargs)
         else:
+            print args[1]
+            #TODO add msg.reply("You cannot send messages with this proxybot.").send()
             logging.debug("This stanza from %s is only handled for conversation participants and observers." % args[1]['from'].user)
             return
     return wrapped
+
 
 class ProxyBot(sleekxmpp.ClientXMPP):
     def __init__(self, username, server, participants):
@@ -74,17 +77,8 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self._handle_chatstate)
 
-    @active_only
-    def retire(self):
-        if len(self.participants) < 2:
-            self.stage = Stage.RETIRED
-            self.disconnect(wait=True)
-            logging.warning("TODO: update component DB, and ask component to unregister me")
-        else:
-            logging.error("Attempted retire from an %s stage with the following %d participants: %s" %  (self.stage, len(self.participants), str(list(self.participants)).strip('[]')))
-
     def disconnect(self, *args, **kwargs):
-        for participant in self.participants:
+        for participant in self.participants.union(self._get_observers()):
             participant.delete_from_rosters()
         super(ProxyBot, self).disconnect(*args, **kwargs)        
     
@@ -102,39 +96,50 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         # is everyone online? this also sends the initial presence
         self._set_invisiblity(not reduce(lambda a, b: a.is_online() and b.is_online(), self.participants))
 
+    def _get_observers(self):
+        observers = set([])
+        for participant in self.participants:
+            observers = observers.union(participant.observers())
+        return observers.difference(self.participants)
+
     @active_only
     def _remove_participant(self, user):    
-        if len(self.participants) < 3:
-            self.retire()
+        if len(self.participants) <= 2:  # then after this person leaves, there will only be 1, so we can preemptively retire
+            self.stage = Stage.RETIRED
+            self.disconnect(wait=True)
+            logging.warning("TODO: update component DB, and ask component to unregister me")
         else:
-            old_observers = set([])
-            for participant in self.participants:
-                old_observers = old_observers.union(participant.observers())
+            old_observers = self._get_observers()
             self.participants.remove(user)
-            self._broadcast_alert('%s has left the conversation' % user)
-            new_observers = self.participants.copy()  # start with this, so you don't accidentally remove an active participant
-            for participant in self.participants:
-                new_observers = new_observers.union(participant.observers())
+            new_observers = self._get_observers()
             observers_to_remove = old_observers.difference(new_observers)
             for observer in observers_to_remove:
                 observer.delete_from_rosters()
-            self.send_presence() # so that it appears as online to removed participants
+            # everyone needs a new nick
+                # observers all need the same nick, with the removed contact
+                # participants need a customized nick
+            self.send_presence()  # so that it appears as online to removed participants
+            self._broadcast_alert('%s has left the conversation' % user)
             logging.warning("TODO: update component DB with removed participant")
 
     @active_only
-    def _add_participant(self, user):        
-        self._broadcast_alert('%s has joined the conversation' % user) #broadcast before the user is in the conversation, to prevent offline message queueing
+    def _add_participant(self, user):
+        self._broadcast_alert('%s has joined the conversation' % user)  # broadcast before the user is in the conversation, to prevent offline message queueing
         new_participant = Participant(user, self.boundjid.user)
-        old_observers = set([])
-        for participant in self.participants:
-            old_observers = old_observers.union(participant.observers())
-        new_observers = new_participant.observers().difference(old_observers)    
+        old_observers = self._get_observers().union(self.participants)  # don't re-add to current participants
+        new_observers = new_participant.observers().difference(old_observers)
         for observer in new_observers:
-            participant.add_to_rosters(self.participants)
+            observer.add_to_rosters(self.participants)
         self.participants.add(new_participant)
+        for observer in new_participant.observers():
+            observer.move_to_active(self.participants)
+        # everyone needs a new nick
+            # observers all need the same nick, with the added contact
+            # participants need a customized nick
+            # the participant who just joined is the only one with the right nick
         self.send_presence()
         logging.warning("TODO: update component DB with added participant")
-    
+
     @participants_only
     def _handle_presence_available(self, presence):
         if self.stage is Stage.IDLE:
@@ -154,42 +159,6 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         elif self.stage is Stage.ACTIVE:
             self._remove_participant(presence['from'].user)
 
-    @participants_and_observers_only
-    def _handle_presence_probe(self, presence):
-        logging.error("                  PRESENCE PROBE %s" % presence)    
-
-    @participants_and_observers_only
-    def _handle_message(self, msg):
-        if msg['type'] in ('chat', 'normal'):
-            if self.stage is Stage.ACTIVE:
-                logging.warning("TODO: update component DB with new particpant")
-            elif self.stage is Stage.IDLE:    
-                self.stage = Stage.ACTIVE
-                observers = set([])
-                for participant in self.participants:
-                    observers = observers.union(participant.observers())
-                for observer in observers:
-                    observer.add_to_rosters(self.participants)
-                self.send_presence()
-                logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
-            else:
-                msg.reply("Sorry, but this conversation is no longer active. Try starting or joining a different one!").send()
-                logging.error("Received message %s in retired stage." % msg)
-                return
-            # now we know we're in an active stage, and can proceed with the message broadcast
-            if msg['body'].startswith('/'): #LATER proper command handling
-                if msg['body'].startswith('/leave'):
-                    self._remove_participant(msg['from'].user)
-                else:
-                    msg.reply("TODO: handle other slash commands").send()
-            else:
-                if msg['from'].user not in self.participants: #LATER restrict newcomers to friends of participants
-                    self._add_participant(msg['from'].user)
-                if msg['from'].user in self.participants:     #NOTE for now this will always be true
-                    self._broadcast_message(msg, msg['from'].user)
-                else:
-                    msg.reply("You cannot send messages with this proxybot.").send()
-
     @participants_only
     def _handle_chatstate(self, msg):
         #LATER try this without new_msg
@@ -197,7 +166,34 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         new_msg = msg.__copy__()
         del new_msg['body']
         self._broadcast_message(new_msg, new_msg['from'].user)
-    
+
+    @participants_and_observers_only
+    def _handle_presence_probe(self, presence):
+        logging.error("                  PRESENCE PROBE %s" % presence)    
+
+    @participants_and_observers_only
+    def _handle_message(self, msg):
+        if msg['type'] in ('chat', 'normal'):
+            if self.stage is Stage.IDLE:
+                self.stage = Stage.ACTIVE
+                observers = self._get_observers()
+                for observer in observers:
+                    observer.add_to_rosters(self.participants)
+                for participant in self.participants:
+                    participant.move_to_active(self.participants)
+                self.send_presence()
+                logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
+            # now we know we're in an active stage, and can proceed with the message broadcast
+            if msg['body'].startswith('/'):
+                if msg['body'].startswith('/leave'):
+                    self._remove_participant(msg['from'].user)
+                else:
+                    msg.reply("TODO: handle other slash commands").send()
+            else:
+                if msg['from'].user not in self.participants:
+                    self._add_participant(msg['from'].user)
+                self._broadcast_message(msg, msg['from'].user)
+
     def _broadcast_alert(self, body):
         msg = self.Message()
         msg['body'] = body

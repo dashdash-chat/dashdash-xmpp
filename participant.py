@@ -19,6 +19,9 @@ XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
 
 #should User keep track of more roster state? or is it enough to own the add/removes?
 class User(object):
+    active_group = 'Chatidea Conversations'
+    idle_group = 'Chatidea Contacts'
+    
     def __init__(self, user, proxybot):
         self._user = user
         self._proxybot = proxybot
@@ -30,9 +33,9 @@ class User(object):
     def proxybot(self):
         return self._proxybot
     
-    def add_to_rosters(self, participants):
+    def add_to_rosters(self, participants, group):
         self._add_proxy_rosteritem()
-        self._add_user_rosteritem(self._get_nick(participants))
+        self._add_user_rosteritem(self._get_nick(participants), group)
         
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
@@ -68,9 +71,9 @@ class User(object):
            'localuser': self._proxybot,
            'user': self._user
         })
-    def _add_user_rosteritem(self, nick=None):
+    def _add_user_rosteritem(self, nick=None, group=None):
         self._xmlrpc_command('add_rosteritem', { 'localserver': HOST, 'server': HOST,
-            'group': 'Chatidea Contacts',
+            'group': group or 'Chatidea Contacts',
             'localuser': self._user,
             'user': self._proxybot,
             'nick': nick or self._proxybot,
@@ -92,6 +95,8 @@ class User(object):
             logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (self._user, str(e)))
             return False
         
+    def __str__(self):
+        return self.user()
     def __eq__(self, other):
         if isinstance(other, str) or isinstance(other, unicode):
             return other == self.user()
@@ -105,7 +110,8 @@ class User(object):
         return hash(self.user())
 
 class Observer(User):
-    pass
+    def add_to_rosters(self, participants):
+        super(Observer, self).add_to_rosters(participants, group=self.active_group)
             
 class Participant(User):
     def __init__(self, *args, **kwargs):
@@ -115,6 +121,12 @@ class Participant(User):
         #TODO fetch observers from DB
         #TODO instantiate objects
         #TODO add to set
+    
+    def add_to_rosters(self, participants):
+        super(Participant, self).add_to_rosters(participants, group=self.idle_group)
+
+    def move_to_active(self, participants):    
+        self._add_user_rosteritem(self._get_nick(participants), group=self.active_group)
 
     def observers(self):
         return self._observers
