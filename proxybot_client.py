@@ -102,9 +102,9 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             observers = observers.union(participant.observers())
         return observers.difference(self.participants)
 
-    def _get_nick(self, viewer):
+    def _get_nick(self, viewer=None):
         #NOTE observers all see the same nick and are never a participant, so if the viewer is an observer the .difference() won't ever matter
-        others = [participant.user() for participant in self.participants.difference([viewer])]
+        others = [participant.user() for participant in self.participants.difference([viewer] if viewer else [])]
         if len(others) == 1:
             return others[0]
         elif len(others) > 1:
@@ -112,6 +112,14 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             return '%s%s and %s' % (comma_sep, others[-2], others[-1])
         else:
             return self.boundjid.user
+    
+    def _update_nick_in_rosters(self):
+        observer_nick = self._get_nick()
+        for observer in self._get_observers():
+            observer.update_roster(observer_nick)            
+        for participant in self.participants:
+            participant.update_roster(self._get_nick(participant))
+        self.send_presence()  # so that it appears as online to removed participants
 
     @active_only
     def _remove_participant(self, user):    
@@ -126,10 +134,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             observers_to_remove = old_observers.difference(new_observers)
             for observer in observers_to_remove:
                 observer.delete_from_rosters()
-            # everyone needs a new nick
-                # observers all need the same nick, with the removed contact
-                # participants need a customized nick
-            self.send_presence()  # so that it appears as online to removed participants
+            self._update_nick_in_rosters()
             self._broadcast_alert('%s has left the conversation' % user)
             logging.warning("TODO: update component DB with removed participant")
 
@@ -138,17 +143,11 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         self._broadcast_alert('%s has joined the conversation' % user)  # broadcast before the user is in the conversation, to prevent offline message queueing
         new_participant = Participant(user, self.boundjid.user)
         old_observers = self._get_observers().union(self.participants)  # don't re-add to current participants
+        self.participants.add(new_participant)
         new_observers = new_participant.observers().difference(old_observers)
         for observer in new_observers:
             observer.add_to_rosters(self._get_nick(observer))
-        self.participants.add(new_participant)
-        for observer in new_participant.observers():
-            observer.move_to_active(self._get_nick(observer))
-        # everyone needs a new nick
-            # observers all need the same nick, with the added contact
-            # participants need a customized nick
-            # the participant who just joined is the only one with the right nick
-        self.send_presence()
+        self._update_nick_in_rosters()
         logging.warning("TODO: update component DB with added participant")
 
     @participants_only
@@ -191,7 +190,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 for observer in observers:
                     observer.add_to_rosters(self._get_nick(observer))
                 for participant in self.participants:
-                    participant.move_to_active(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
+                    participant.update_roster(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
                 self.send_presence()
                 logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
             # now we know we're in an active stage, and can proceed with the message broadcast

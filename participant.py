@@ -25,6 +25,8 @@ class User(object):
     def __init__(self, user, proxybot):
         self._user = user
         self._proxybot = proxybot
+        self.current_nick = None
+        self.current_group = None
         self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
     
     def user(self):
@@ -40,9 +42,10 @@ class User(object):
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
         self._delete_user_rosteritem()
-
-    def move_to_active(self, nick):    
-        self._add_user_rosteritem(nick, self.active_group)
+        
+    def update_roster(self, nick):
+        if nick != self.current_nick or self.active_group != self.current_group:  # only update if there's a change
+            self._add_user_rosteritem(nick, self.active_group)  # roster items only change for active proxybots
 
     def _xmlrpc_command(self, command, data):
             fn = getattr(self.xmlrpc_server, command)
@@ -65,6 +68,8 @@ class User(object):
            'user': self._user
         })
     def _add_user_rosteritem(self, nick, group):
+        self.current_nick = nick
+        self.current_group = group
         self._xmlrpc_command('add_rosteritem', { 'localserver': HOST, 'server': HOST,
             'group': group,
             'localuser': self._user,
