@@ -33,24 +33,17 @@ class User(object):
     def proxybot(self):
         return self._proxybot
     
-    def add_to_rosters(self, participants, group):
+    def add_to_rosters(self, nick, group):
         self._add_proxy_rosteritem()
-        self._add_user_rosteritem(self._get_nick(participants), group)
+        self._add_user_rosteritem(nick, group)
         
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
         self._delete_user_rosteritem()
-    
-    def _get_nick(self, participants):
-        others = [participant.user() for participant in participants.difference([self._user])]
-        if len(others) > 1:
-            comma_sep = ''.join(['%s, ' % other for other in others[:-2]])
-            return '%s%s and %s' % (comma_sep, others[-2], others[-1])
-        elif len(others) == 1:
-            return others[0]
-        else:
-            return self._proxybot
-            
+
+    def move_to_active(self, nick):    
+        self._add_user_rosteritem(nick, self.active_group)
+
     def _xmlrpc_command(self, command, data):
             fn = getattr(self.xmlrpc_server, command)
             return fn({
@@ -71,12 +64,12 @@ class User(object):
            'localuser': self._proxybot,
            'user': self._user
         })
-    def _add_user_rosteritem(self, nick=None, group=None):
+    def _add_user_rosteritem(self, nick, group):
         self._xmlrpc_command('add_rosteritem', { 'localserver': HOST, 'server': HOST,
-            'group': group or 'Chatidea Contacts',
+            'group': group,
             'localuser': self._user,
             'user': self._proxybot,
-            'nick': nick or self._proxybot,
+            'nick': nick,
             'subs': 'both'
         })
     def _delete_user_rosteritem(self):
@@ -110,8 +103,8 @@ class User(object):
         return hash(self.user())
 
 class Observer(User):
-    def add_to_rosters(self, participants):
-        super(Observer, self).add_to_rosters(participants, group=self.active_group)
+    def add_to_rosters(self, nick):
+        super(Observer, self).add_to_rosters(nick, self.active_group)
             
 class Participant(User):
     def __init__(self, *args, **kwargs):
@@ -122,11 +115,8 @@ class Participant(User):
         #TODO instantiate objects
         #TODO add to set
     
-    def add_to_rosters(self, participants):
-        super(Participant, self).add_to_rosters(participants, group=self.idle_group)
-
-    def move_to_active(self, participants):    
-        self._add_user_rosteritem(self._get_nick(participants), group=self.active_group)
+    def add_to_rosters(self, nick):
+        super(Participant, self).add_to_rosters(nick, self.idle_group)
 
     def observers(self):
         return self._observers

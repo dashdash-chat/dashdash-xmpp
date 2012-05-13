@@ -84,7 +84,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
     
     def _handle_start(self, event):
         for participant in self.participants:
-            participant.add_to_rosters(self.participants)
+            participant.add_to_rosters(self._get_nick(participant))
         self.get_roster()
         iq = self.Iq()
         iq['from'] = self.boundjid.full
@@ -101,6 +101,17 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         for participant in self.participants:
             observers = observers.union(participant.observers())
         return observers.difference(self.participants)
+
+    def _get_nick(self, viewer):
+        #NOTE observers all see the same nick and are never a participant, so if the viewer is an observer the .difference() won't ever matter
+        others = [participant.user() for participant in self.participants.difference([viewer])]
+        if len(others) == 1:
+            return others[0]
+        elif len(others) > 1:
+            comma_sep = ''.join(['%s, ' % other for other in others[:-2]])
+            return '%s%s and %s' % (comma_sep, others[-2], others[-1])
+        else:
+            return self.boundjid.user
 
     @active_only
     def _remove_participant(self, user):    
@@ -129,10 +140,10 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         old_observers = self._get_observers().union(self.participants)  # don't re-add to current participants
         new_observers = new_participant.observers().difference(old_observers)
         for observer in new_observers:
-            observer.add_to_rosters(self.participants)
+            observer.add_to_rosters(self._get_nick(observer))
         self.participants.add(new_participant)
         for observer in new_participant.observers():
-            observer.move_to_active(self.participants)
+            observer.move_to_active(self._get_nick(observer))
         # everyone needs a new nick
             # observers all need the same nick, with the added contact
             # participants need a customized nick
@@ -178,9 +189,9 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 self.stage = Stage.ACTIVE
                 observers = self._get_observers()
                 for observer in observers:
-                    observer.add_to_rosters(self.participants)
+                    observer.add_to_rosters(self._get_nick(observer))
                 for participant in self.participants:
-                    participant.move_to_active(self.participants)
+                    participant.move_to_active(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
                 self.send_presence()
                 logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
             # now we know we're in an active stage, and can proceed with the message broadcast
