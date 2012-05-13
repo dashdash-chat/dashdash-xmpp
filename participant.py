@@ -95,15 +95,12 @@ class User(object):
     def __eq__(self, other):
         if isinstance(other, str) or isinstance(other, unicode):
             return other == self.user()
+        elif isinstance(other, User):
+            return other.user() == self.user()
         else:
-            #TODO fix this so that it properly calls parent function, AttributeError: 'super' object has no attribute '__eq__'
-            return super(User, self).__eq__(*args, **kwargs)
+            return NotImplemented
     def __ne__(self, other):
-        if isinstance(other, str) or isinstance(other, unicode):
-            return other != self.user()
-        else:
-            #TODO fix this so that it properly calls parent function, AttributeError: 'super' object has no attribute '__eq__'
-            return super(User, self).__ne__(*args, **kwargs)
+        return not self.__eq__(other)
     def __hash__(self):
         return hash(self.user())
 

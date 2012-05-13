@@ -37,9 +37,14 @@ INSERT INTO convo_starts (count, sender, recipient) VALUES (45, 'alice', 'chesir
 INSERT INTO convo_starts (count, sender, recipient) VALUES (50, 'chesire_cat', 'alice');
 INSERT INTO convo_starts (count, sender, recipient) VALUES (13, 'alice', 'dormouse');
 INSERT INTO convo_starts (count, sender, recipient) VALUES (10, 'dormouse', 'alice');
+INSERT INTO convo_starts (count, sender, recipient) VALUES (4, 'dormouse', 'chesire_cat');
+INSERT INTO convo_starts (count, sender, recipient) VALUES (4, 'chesire_cat', 'dormouse');
+INSERT INTO convo_starts (count, sender, recipient) VALUES (24, 'queen_of_hearts', 'alice');
+INSERT INTO convo_starts (count, sender, recipient) VALUES (10, 'queen_of_hearts', 'dormouse');
+INSERT INTO convo_starts (count, sender, recipient) VALUES (10, 'queen_of_hearts', 'chesire_cat');
+
 INSERT INTO convo_starts (count, sender, recipient) VALUES (0, 'march_hare', 'queen_of_hearts');
 INSERT INTO convo_starts (count, sender, recipient) VALUES (2, 'queen_of_hearts', 'march_hare');
-INSERT INTO convo_starts (count, sender, recipient) VALUES (24, 'queen_of_hearts', 'alice');
 INSERT INTO convo_starts (count, sender, recipient) VALUES (1, 'alice', 'queen_of_hearts');
 
 DROP TABLE IF EXISTS cur_proxybots;
