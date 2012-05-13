@@ -15,11 +15,11 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-#TODO read these from config file?
+
 #TODO make 'contacts' groupname a variable?
+#TODO read these from config file?
 PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
-SERVER_URL = '127.0.0.1'
-XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
+
 
 class Stage:
     IDLE = 1
@@ -34,9 +34,8 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             return
         sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), PROXYBOT_PASSWORD)
         self.stage = Stage.IDLE
-        self.participants = set([Participant(participant) for participant in participants])
+        self.participants = set([Participant(participant, self.boundjid.user) for participant in participants])
         self.invisible = False
-        self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
         self.add_event_handler("session_start", self._handle_start)
         self.add_event_handler('presence_probe', self._handle_presence_probe)
         self.add_event_handler('presence_available', self._handle_presence_available)
@@ -59,15 +58,14 @@ class ProxyBot(sleekxmpp.ClientXMPP):
 
     def disconnect(self, *args, **kwargs):
         for participant in self.participants:
-            self._delete_proxy_rosteritem(participant)
+            participant.delete_from_rosters()
         super(ProxyBot, self).disconnect(*args, **kwargs)        
     
     def _handle_start(self, event):
         if len(self.participants) != 2:
              logging.error("In session_start with %d extra participants! %s" %  (len(self.participants) - 2, str(list(self.participants)).strip('[]')))
         for participant in self.participants:
-            self._add_own_rosteritem(participant)
-            self._add_proxy_rosteritem(participant)
+            participant.add_to_rosters(self.participants)
         self.get_roster()
         iq = self.Iq()
         iq['from'] = self.boundjid.full
@@ -76,20 +74,20 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         iq['proxybot_invisibility'].add_item(itype='group', ivalue='contacts', iaction='deny', iorder=1)
         iq['proxybot_invisibility'].add_item(iaction='allow', iorder=2)
         iq.send()
-        self._set_invisiblity(False) # this sends initial presence
+        # is everyone online? this also sends the initial presence
+        self._set_invisiblity(not reduce(lambda a, b: a.is_online() and b.is_online(), self.participants))
 
     def _remove_participant(self, user):    
-        old_guests = set([])
+        old_observers = set([])
         for participant in self.participants:
-            old_guests = old_guests.union(participant.guests())
+            old_observers = old_observers.union(participant.observers())
         self.participants.remove(user)
-        new_guests = set([])
+        new_observers = set([])
         for participant in self.participants:
-            new_guests = new_guests.union(participant.guests())
-        guests_to_remove = old_guests.difference(new_guests)
-        for guest in guests_to_remove:
-            self._delete_own_rosteritem(guest)
-            self._delete_proxy_rosteritem(guest)
+            new_observers = new_observers.union(participant.observers())
+        observers_to_remove = old_observers.difference(new_observers)
+        for observer in observers_to_remove:
+            participant.delete_from_rosters()
         self.send_presence()
         logging.warning("TODO: update component DB with removed participant")
         self._broadcast_alert('%s has disconnected and left the conversation' % user)
@@ -99,14 +97,13 @@ class ProxyBot(sleekxmpp.ClientXMPP):
     def _add_participant(self, user):
         if self.stage is Stage.ACTIVE:
             self._broadcast_alert('%s has joined the conversation' % user) #broadcast before the user is in the conversation, to prevent offline message queueing
-        new_participant = Participant(user)
-        old_guests = set([])
+        new_participant = Participant(user, self.boundjid.user)
+        old_observers = set([])
         for participant in self.participants:
-            old_guests = old_guests.union(participant.guests())
-        new_guests = new_participant.guests().difference(old_guests)    
-        for guest in new_guests:
-            self._add_own_rosteritem(guest)
-            self._add_proxy_rosteritem(guest)
+            old_observers = old_observers.union(participant.observers())
+        new_observers = new_participant.observers().difference(old_observers)    
+        for observer in new_observers:
+            participant.add_to_rosters(self.participants)
         self.participants.add(new_participant)    
         self.send_presence()
         logging.warning("TODO: update component DB with added participant")
@@ -120,11 +117,9 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             if len(self.participants) != 2:
                  logging.error("In Stage.IDLE with %d extra participants! %s" %  (len(self.participants) - 2, str(list(self.participants)).strip('[]')))
             other_participant = self.participants.difference([presence['from'].user]).pop()
-            try:
-                if self.invisible and other_participant and other_participant.is_online():
-                    self._set_invisiblity(False)
-            except xmlrpclib.ProtocolError, e:
-                logging.error('ProtocolError in user_sessions_info for %s, assuming offline: %s' % (other_participant, str(e)))
+            if self.invisible and other_participant and other_participant.is_online():
+                self._set_invisiblity(False)
+      
                 
     def _handle_presence_unavailable(self, presence):
         if presence['from'].user not in self.participants: return
@@ -156,12 +151,11 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 logging.warning("TODO: update component DB with new particpant")
             elif self.stage is Stage.IDLE:    
                 self.stage = Stage.ACTIVE
-                guests = set([])
+                observers = set([])
                 for participant in self.participants:
-                    guests = guests.union(participant.guests())
-                for guest in guests:
-                    self._add_own_rosteritem(guest)
-                    self._add_proxy_rosteritem(guest)
+                    observers = observers.union(participant.observers())
+                for observer in observers:
+                    observer.add_to_rosters(self.participants)
                 self.send_presence()
                 logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
             else:
@@ -208,71 +202,6 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 new_msg = msg.__copy__()
                 new_msg['to'] = "%s@localhost" % participant.user()
                 new_msg.send()
-
-    def get_nick(self, viewer):
-        if self.stage is Stage.IDLE:
-            return self.participants.difference([viewer]).pop().user()
-        elif self.stage is Stage.ACTIVE:
-            others = [participant.user() for participant in self.participants.difference([viewer])]
-            if len(others) > 1:
-                comma_sep = ''.join(['%s, ' % other for other in others[:-2]])
-                print '%s%s and %s' % (comma_sep, others[-2], others[-1])
-                return '%s%s and %s' % (comma_sep, others[-2], others[-1])
-            else:
-                print others[0]
-                return others[0]
-        else:
-            return self.boundjid.user
-
-    def _xmlrpc_command(self, command, data):
-            fn = getattr(self.xmlrpc_server, command)
-            return fn({
-                'user': self.boundjid.user,
-                'server': self.boundjid.host,
-                'password': PROXYBOT_PASSWORD
-            }, data)
-    def _add_own_rosteritem(self, user):
-        if isinstance(user, Participant):
-            user = user.user()
-        self._xmlrpc_command('add_rosteritem', {
-            'group': 'contacts',
-            'localuser': self.boundjid.user,
-            'user': user,
-            'nick': user,
-            'subs': 'both',
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
-    def _delete_own_rosteritem(self, user):
-        if isinstance(user, Participant):
-            user = user.user()
-        self._xmlrpc_command('delete_rosteritem', {
-           'localuser': self.boundjid.user,
-           'user': user,
-           'localserver': self.boundjid.host,
-           'server':      self.boundjid.host
-        })
-    def _add_proxy_rosteritem(self, user):
-        if isinstance(user, Participant):
-            user = user.user()
-        self._xmlrpc_command('add_rosteritem', {
-            'group': 'Chatidea Contacts',
-            'localuser': user,
-            'user': self.boundjid.user,
-            'nick': self.get_nick(user),
-            'subs': 'both',
-            'localserver': self.boundjid.host,
-            'server':      self.boundjid.host
-        })
-    def _delete_proxy_rosteritem(self, user):
-        if isinstance(user, Participant):
-            user = user.user()
-        self._xmlrpc_command('delete_rosteritem', {
-           'localuser': user,
-           'user': self.boundjid.user,
-           'localserver': self.boundjid.host,
-           'server':      self.boundjid.host
-        })
 
 
 if __name__ == '__main__':
