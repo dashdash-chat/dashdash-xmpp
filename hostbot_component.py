@@ -11,6 +11,7 @@ import xmlrpclib
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
+from constants import Stage, ProxybotCommand
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -21,7 +22,6 @@ else:
 #TODO read these from config file?
 HOSTBOT_PASSWORD = 'yeij9bik9fard3ij4bai'
 PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
-USERINFOBOT_PASSWORD = 'nal4rey2hun5ewv4ud6p'
 SERVER_URL = '127.0.0.1'
 XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
 XMLRPC_LOGIN = {'user': 'host', 'server': 'localhost', 'password': HOSTBOT_PASSWORD} #NOTE the server is not bot.localhost because of xml_rpc authentication
@@ -44,12 +44,31 @@ class HostbotComponent(ComponentXMPP):
         )""", {})
         self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
 
-        # You don't need a session_start handler, but that is where you would broadcast initial presence.
+        self.add_event_handler("session_start", self.start)
         self.add_event_handler('message', self.message)
         self.add_event_handler('presence_probe', self.handle_probe)
         
         #TODO make sure userinfo@localhost is registered
     
+    def start(self, event):
+        print self.boundjid.full
+        self['xep_0050'].add_command(node=ProxybotCommand.activate,
+                                     name='Activate proxybot',
+                                     handler=self._command_activate,
+                                     jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=ProxybotCommand.retire,
+                                     name='Retire proxybot',
+                                     handler=self._command_retire,
+                                     jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=ProxybotCommand.add_participant,
+                                     name='Add a participant',
+                                     handler=self._command_add_participant,
+                                     jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=ProxybotCommand.remove_participant,
+                                     name='Remove a participant',
+                                     handler=self._command_remove_participant,
+                                     jid=self.boundjid.full)
+
     def cleanup(self):
         self._dbs_close()
     
@@ -94,6 +113,90 @@ class HostbotComponent(ComponentXMPP):
                 self._register_proxybot(sender, contact)
         self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
     
+    
+
+    def _command_activate(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Activate proxybot')
+        form['instructions'] = 'Record the activation of a proxybot in the database.'
+        form.addField(var='proxybot',
+                      ftype='text-single',
+                      label='The username of the proxybot')
+        session['payload'] = form
+        session['next'] = self._command_activate_complete
+        session['has_next'] = False
+        return session
+    def _command_retire(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Retire proxybot')
+        form['instructions'] = 'Record the retirement of a proxybot in the database.'
+        form.addField(var='proxybot',
+                      ftype='text-single',
+                      label='The username of the proxybot')
+        form.addField(var='user',
+                      ftype='text-single',
+                      label='The last user to leave the conversation')
+        session['payload'] = form
+        session['next'] = self._command_retire_complete
+        session['has_next'] = False
+        return session
+    def _command_add_participant(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Add a participant')
+        form['instructions'] = 'Record the addition of a participant to an active proxybot in the database.'
+        form.addField(var='proxybot',
+                      ftype='text-single',
+                      label='The username of the proxybot')
+        form.addField(var='user',
+                      ftype='text-single',
+                      label='The user to add')
+        session['payload'] = form
+        session['next'] = self._command_add_participant_complete
+        session['has_next'] = False
+        return session
+    def _command_remove_participant(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Remove a participant')
+        form['instructions'] = 'Record the removal of a participant from an active proxybot in the database.'
+        form.addField(var='proxybot',
+                      ftype='text-single',
+                      label='The username of the proxybot')
+        form.addField(var='user',
+                      ftype='text-single',
+                      label='The user to remove')
+        session['payload'] = form
+        session['next'] = self._command_remove_participant_complete
+        session['has_next'] = False
+        return session
+
+    def _command_activate_complete(self, payload, session):
+        form = payload
+        proxybot = form['values']['proxybot']
+        print 'TODO: update DB to make proxybot %s active' % proxybot
+        session['payload'] = None
+        session['next'] = None
+        return session
+    def _command_retire_complete(self, payload, session):
+        form = payload
+        proxybot = form['values']['proxybot']
+        user = form['values']['user']
+        print 'TODO: update DB to make proxybot %s retired, and remove user %s' % (proxybot, user)
+        session['payload'] = None
+        session['next'] = None
+        return session
+    def _command_add_participant_complete(self, payload, session):
+        form = payload
+        proxybot = form['values']['proxybot']
+        user = form['values']['user']
+        print 'TODO: update DB to add user %s to proxybot %s' % (user, proxybot)
+        session['payload'] = None
+        session['next'] = None
+        return session
+    def _command_remove_participant_complete(self, payload, session):
+        form = payload
+        proxybot = form['values']['proxybot']
+        user = form['values']['user']
+        print 'TODO: update DB to remove user %s from proxybot %s' % (user, proxybot)
+        session['payload'] = None
+        session['next'] = None
+        return session
+
     def _register_proxybot(self, user1, user2):
         new_jid = 'proxybot%d' % (uuid.uuid4().int)
         try:
@@ -169,7 +272,8 @@ if __name__ == '__main__':
 
     xmpp = HostbotComponent(opts.jid, opts.password, opts.server, opts.port)
     xmpp.registerPlugin('xep_0030') # Service Discovery
-    # xmpp.registerPlugin('xep_0004') # Data Forms
+    xmpp.register_plugin('xep_0004') # Data Forms
+    xmpp.register_plugin('xep_0050') # Adhoc Commands
     # xmpp.registerPlugin('xep_0060') # PubSub
     xmpp.registerPlugin('xep_0199') # XMPP Ping
     

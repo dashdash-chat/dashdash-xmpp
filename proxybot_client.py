@@ -8,6 +8,7 @@ import xmlrpclib
 import sleekxmpp
 from proxybot_invisibility import ProxybotInvisibility
 from participant import Participant
+from constants import Stage, ProxybotCommand
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -19,12 +20,7 @@ else:
 #TODO make 'contacts' groupname a variable?
 #TODO read these from config file?
 PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
-
-
-class Stage:
-    IDLE = 1
-    ACTIVE = 2
-    RETIRED = 3
+HOSTBOT_JID = 'bot.localhost/python_component'
 
 
 def active_only(fn):
@@ -53,8 +49,7 @@ def participants_and_observers_only(fn):
         if args[1]['from'].user in args[0].participants.union(observers):
             return fn(*args, **kwargs)
         else:
-            print args[1]
-            #TODO add msg.reply("You cannot send messages with this proxybot.").send()
+            args[1].reply("You cannot send messages with this proxybot.").send()
             logging.debug("This stanza from %s is only handled for conversation participants and observers." % args[1]['from'].user)
             return
     return wrapped
@@ -69,17 +64,19 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         self.stage = Stage.IDLE
         self.participants = set([Participant(participant, self.boundjid.user) for participant in participants[0:2]]) # only two participants to start!
         self.invisible = False
-        self.add_event_handler("session_start", self._handle_start)
+        self.add_event_handler('session_start', self._handle_start)
         self.add_event_handler('presence_probe', self._handle_presence_probe)
         self.add_event_handler('presence_available', self._handle_presence_available)
         self.add_event_handler('presence_unavailable', self._handle_presence_unavailable)
-        self.add_event_handler("message", self._handle_message)
+        self.add_event_handler('message', self._handle_message)
+        self.add_event_handler('disconnect', self.disconnect, threaded=True)
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self._handle_chatstate)
 
     def disconnect(self, *args, **kwargs):
         for participant in self.participants.union(self._get_observers()):
             participant.delete_from_rosters()
+        kwargs['wait'] = True
         super(ProxyBot, self).disconnect(*args, **kwargs)        
     
     def _handle_start(self, event):
@@ -122,11 +119,16 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         self.send_presence()  # so that it appears as online to removed participants
 
     @active_only
-    def _remove_participant(self, user):    
+    def _remove_participant(self, user):
         if len(self.participants) <= 2:  # then after this person leaves, there will only be 1, so we can preemptively retire
             self.stage = Stage.RETIRED
-            self.disconnect(wait=True)
-            logging.warning("TODO: update component DB, and ask component to unregister me")
+            session = {'user': user,
+                       'next': self._command_retire_start,
+                       'error': self._command_error}
+            self['xep_0050'].start_command(jid=HOSTBOT_JID,
+                                           node=ProxybotCommand.retire,
+                                           session=session)
+            logging.info('Removing user %s from the conversation and retiring the proxybot' % user)
         else:
             old_observers = self._get_observers()
             self.participants.remove(user)
@@ -136,7 +138,13 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 observer.delete_from_rosters()
             self._update_nick_in_rosters()
             self._broadcast_alert('%s has left the conversation' % user)
-            logging.warning("TODO: update component DB with removed participant")
+            session = {'user': user,
+                       'next': self._command_remove_participant_start,
+                       'error': self._command_error}
+            self['xep_0050'].start_command(jid=HOSTBOT_JID,
+                                           node=ProxybotCommand.remove_participant,
+                                           session=session)
+            logging.info('Removing user %s from the conversation' % user)
 
     @active_only
     def _add_participant(self, user):
@@ -148,7 +156,13 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         for observer in new_observers:
             observer.add_to_rosters(self._get_nick(observer))
         self._update_nick_in_rosters()
-        logging.warning("TODO: update component DB with added participant")
+        session = {'user': user,
+                   'next': self._command_add_participant_start,
+                   'error': self._command_error}
+        self['xep_0050'].start_command(jid=HOSTBOT_JID,
+                                       node=ProxybotCommand.add_participant,
+                                       session=session)
+        logging.info('Adding user %s to the conversation' % user)
 
     @participants_only
     def _handle_presence_available(self, presence):
@@ -179,7 +193,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
 
     @participants_and_observers_only
     def _handle_presence_probe(self, presence):
-        logging.error("                  PRESENCE PROBE %s" % presence)    
+        logging.error("                  PRESENCE PROBE %s" % presence)
 
     @participants_and_observers_only
     def _handle_message(self, msg):
@@ -192,13 +206,18 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 for participant in self.participants:
                     participant.update_roster(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
                 self.send_presence()
-                logging.warning("TODO: update component DB with stage change, so it can create a new proxybot for you")
+                session = {'next': self._command_activate_start,
+                           'error': self._command_error}
+                self['xep_0050'].start_command(jid=HOSTBOT_JID,
+                                               node=ProxybotCommand.activate,
+                                               session=session)
+                logging.info('Activating the proxybot')
             # now we know we're in an active stage, and can proceed with the message broadcast
             if msg['body'].startswith('/'):
                 if msg['body'].startswith('/leave'):
                     self._remove_participant(msg['from'].user)
                 else:
-                    msg.reply("TODO: handle other slash commands").send()
+                    msg.reply("LATER: handle other slash commands").send()
             else:
                 if msg['from'].user not in self.participants:
                     self._add_participant(msg['from'].user)
@@ -217,7 +236,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             if sender:
                 msg['body'] = '[%s] %s' % (sender, msg['body']) # all messages need this, so you know who the conversation is with later
             else:
-                msg['body'] = '/me %s' % (msg['body'])
+                msg['body'] = '/me *%s*' % (msg['body'])
         for participant in self.participants:
             if not sender or sender != participant:
                 new_msg = msg.__copy__()
@@ -236,6 +255,48 @@ class ProxyBot(sleekxmpp.ClientXMPP):
             iq['proxybot_invisibility'].make_active()
         iq.send()
         self.send_presence()
+
+    def _command_activate_start(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='proxybot',
+                      value=self.boundjid.user)
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+    def _command_retire_start(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='proxybot',
+                      value=self.boundjid.user)
+        form.addField(var='user',
+                      value=session['user'])
+        session['payload'] = form
+        session['next'] = self._command_retire_finished
+        self['xep_0050'].complete_command(session)
+    def _command_add_participant_start(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='proxybot',
+                      value=self.boundjid.user)
+        form.addField(var='user',
+                      value=session['user'])
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+    def _command_remove_participant_start(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='proxybot',
+                      value=self.boundjid.user)
+        form.addField(var='user',
+                      value=session['user'])
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+    def _command_retire_finished(self, iq, session):
+        self.event('disconnect', {})
+    def _command_error(self, iq, session):
+        logging.error("COMMAND: %s %s" % (iq['error']['condition'],
+                                          iq['error']['text']))
+        self['xep_0050'].terminate_command(session)
+
 
 if __name__ == '__main__':
     optp = OptionParser()
@@ -272,6 +333,8 @@ if __name__ == '__main__':
 
     xmpp = ProxyBot(opts.username, opts.server, [opts.participant1, opts.participant2])
     xmpp.register_plugin('xep_0030') # Service Discovery
+    xmpp.register_plugin('xep_0004') # Data Forms
+    xmpp.register_plugin('xep_0050') # Adhoc Commands
     xmpp.register_plugin('xep_0085') # Chat State Notifications
     xmpp.register_plugin('xep_0199') # XMPP Ping
 
