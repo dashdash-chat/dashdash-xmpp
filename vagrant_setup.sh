@@ -54,4 +54,6 @@ pip-2.6 install dnspython
 pip-2.6 install mysql-python
 
 git clone git@github.com:lehrblogger/SleekXMPP.git sleekxmpp
+cd sleekxmpp
+git checkout develop
 sudo python setup.py install
