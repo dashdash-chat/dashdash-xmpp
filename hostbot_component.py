@@ -11,6 +11,7 @@ import xmlrpclib
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
+import constants
 from constants import Stage, ProxybotCommand
 
 if sys.version_info < (3, 0):
@@ -19,39 +20,57 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-#TODO read these from config file?
-HOSTBOT_PASSWORD = 'yeij9bik9fard3ij4bai'
-PROXYBOT_PASSWORD = 'ow4coirm5oc5coc9folv'
-SERVER_URL = '127.0.0.1'
-XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
-XMLRPC_LOGIN = {'user': 'host', 'server': 'localhost', 'password': HOSTBOT_PASSWORD} #NOTE the server is not bot.localhost because of xml_rpc authentication
-
 class HostbotComponent(ComponentXMPP):
-    def __init__(self, jid, secret, server, port):
-        ComponentXMPP.__init__(self, jid, secret, server, port)
-        self.main_server = server
-        self.boundjid.resource = 'python_component'
+    def __init__(self):
+        ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
         self.boundjid.regenerate()
         self.nick = 'Hostbot'
         self.auto_authorize = True
-        self._dbs_open()
-        self.cursor_state.execute("DROP TABLE IF EXISTS cur_proxybots;", {})
-        self.cursor_state.execute("""CREATE TABLE cur_proxybots (
+        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
+        self.db = None
+        self.cursor = None
+        try:
+            self.db = MySQLdb.connect(constants.server, constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
+            self.cursor = self.db.cursor()
+        except MySQLdb.Error, e:
+            logging.error("Failed to connect to database and creat cursor, %d: %s" % (e.args[0], e.args[1]))
+            self.cleanup()
+        self.cursor.execute("SELECT username FROM users WHERE has_jid = 0")
+        usernames = [username[0] for username in self.cursor.fetchall()]   
+        for username in usernames:
+            try:
+                self._xmlrpc_command('register', {
+                    'user': username,
+                    'host': constants.server,
+                    'password': constants.default_user_password
+                })
+                self.cursor.execute("UPDATE users SET has_jid = 1 WHERE username = %(username)s", {'username': username})
+            except MySQLdb.Error, e:
+                logging.error('Failed to register account for user %s with MySQL error %s' % (username, e))
+                self.cleanup()
+            except xmlrpclib.ProtocolError, e:
+                logging.error('Failed to register account for user %s with XML RPC error %s' % (username, e))
+                self.cleanup()
+        self.cursor.execute("DROP TABLE IF EXISTS cur_proxybots;", {})
+        self.cursor.execute("""CREATE TABLE cur_proxybots (
             id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             user1 VARCHAR(15),
             user2 VARCHAR(15),
             created TIMESTAMP DEFAULT NOW()
         )""", {})
-        self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
-
+        self.cursor.execute("DROP TABLE IF EXISTS cur_proxybot_participants;", {})
+        self.cursor.execute("""CREATE TABLE cur_proxybot_participants (
+            proxybot_id INT UNSIGNED NOT NULL PRIMARY KEY,
+        	FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
+        	user VARCHAR(15),
+            created TIMESTAMP DEFAULT NOW()
+        )""", {})
         self.add_event_handler("session_start", self.start)
         self.add_event_handler('message', self.message)
         self.add_event_handler('presence_probe', self.handle_probe)
-        
-        #TODO make sure userinfo@localhost is registered
     
     def start(self, event):
-        print self.boundjid.full
+        # these must happen after the hostbot's session has been started
         self['xep_0050'].add_command(node=ProxybotCommand.activate,
                                      name='Activate proxybot',
                                      handler=self._command_activate,
@@ -70,7 +89,9 @@ class HostbotComponent(ComponentXMPP):
                                      jid=self.boundjid.full)
 
     def cleanup(self):
-        self._dbs_close()
+        if self.db:
+            self.db.close()
+        sys.exit(1)
     
     def fulljid_with_user(self):
         return 'host' + '@' + self.boundjid.full
@@ -87,9 +108,6 @@ class HostbotComponent(ComponentXMPP):
                         + "\n(All commands should be followed by a space, and then the text on which you want the command to operate.)").send()
                 elif cmd == 'echo':
                     msg.reply("Echo:\n%(body)s" % {'body': body}).send()
-                elif cmd == 'roster':
-                    self.update_roster('hatter@localhost', name='Mad Hatter', groups=['Chatidea Contacts'])
-                    msg.reply("cool").send()
                 else:
                     msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
             else:
@@ -98,22 +116,20 @@ class HostbotComponent(ComponentXMPP):
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
             
     def handle_probe(self, presence):
-        sender = presence['from'].user
-        self.cursor_chatidea.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': sender})
-        contacts = [contact[0] for contact in self.cursor_chatidea.fetchall()]
-        for contact in contacts:
-            self.cursor_state.execute("""SELECT COUNT(*) FROM cur_proxybots WHERE 
-                (user1 = %(sender)s AND user2 = %(contact)s) OR 
-                (user1 = %(contact)s AND user2 = %(sender)s)
-                """, {'sender': sender, 'contact': contact})
-            if not int(self.cursor_state.fetchall()[0][0]):
-                #TODO check to make sure users are online before making proxybots for them
-                #   Since we can rely on the proxybot to destroy itself when it has fewer than
-                #   two online users, we can just make them naively for now, but it's a hack.
-                self._register_proxybot(sender, contact)
+        # sender = presence['from'].user
+        # self.cursor.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': sender})
+        # contacts = [contact[0] for contact in self.cursor.fetchall()]
+        # for contact in contacts:
+        #     self.cursor.execute("""SELECT COUNT(*) FROM cur_proxybots WHERE 
+        #         (user1 = %(sender)s AND user2 = %(contact)s) OR 
+        #         (user1 = %(contact)s AND user2 = %(sender)s)
+        #         """, {'sender': sender, 'contact': contact})
+        #     if not int(self.cursor.fetchall()[0][0]):
+        #         #TODO check to make sure users are online before making proxybots for them
+        #         #   Since we can rely on the proxybot to destroy itself when it has fewer than
+        #         #   two online users, we can just make them naively for now, but it's a hack.
+        #         self._register_proxybot(sender, contact)
         self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
-    
-    
 
     def _command_activate(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Activate proxybot')
@@ -200,42 +216,29 @@ class HostbotComponent(ComponentXMPP):
     def _register_proxybot(self, user1, user2):
         new_jid = 'proxybot%d' % (uuid.uuid4().int)
         try:
-            self.xmlrpc_server.register(XMLRPC_LOGIN, {
+            self._xmlrpc_command('register', {
                 'user': new_jid,
-                'host': 'localhost',
-                'password': PROXYBOT_PASSWORD
+                'host': constants.server,
+                'password': constants.proxybot_password
             })
-            self.cursor_state.execute("""INSERT INTO cur_proxybots (user1, user2) 
+            self.cursor.execute("""INSERT INTO cur_proxybots (user1, user2) 
                 VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
                 '-u', new_jid,
-                '-s', self.main_server,
+                '-s', constants.localhost,
                 '-1', user1,
                 '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logging.info("Account created for %s!" % new_jid)
         except xmlrpclib.Fault as e:
             logging.error("Could not register account: %s" % e)
 
-    def _dbs_open(self):
-        self.db_chatidea = None
-        self.cursor_chatidea = None
-        self.db_state = None
-        self.cursor_state = None
-        try:
-            self.db_chatidea = MySQLdb.connect('localhost', 'python-helper', 'vap4yirck8irg4od4lo6', 'chatidea')
-            self.cursor_chatidea = self.db_chatidea.cursor()
-            self.db_state = MySQLdb.connect('localhost', 'python-helper', 'vap4yirck8irg4od4lo6', 'chatidea_state')
-            self.cursor_state = self.db_state.cursor()
-        except MySQLdb.Error, e:
-            print "Error %d: %s" % (e.args[0], e.args[1])
-            self.dbs_close()
-            sys.exit(1)
-
-    def _dbs_close(self):
-        if self.db_chatidea:
-            self.db_chatidea.close()
-        if self.db_state:
-            self.db_state.close()
+    def _xmlrpc_command(self, command, data):
+        fn = getattr(self.xmlrpc_server, command)
+        return fn({
+            'user': constants.hostbot_xmlrpc_jid,  #NOTE the server is not bot.localhost because of xml_rpc authentication
+            'server': constants.server,
+            'password': constants.hostbot_xmlrpc_password
+        }, data)
 
 if __name__ == '__main__':
     optp = OptionParser()
@@ -258,26 +261,16 @@ if __name__ == '__main__':
                     help="port to connect to")
     opts, args = optp.parse_args()
 
-    if opts.jid is None:
-        opts.jid = 'bot.localhost'
-    if opts.password is None:
-        opts.password = HOSTBOT_PASSWORD
-    if opts.server is None:
-        opts.server = 'localhost'
-    if opts.port is None:
-        opts.port = 5237
-
     logging.basicConfig(level=opts.loglevel,
                         format='%(levelname)-8s %(message)s')
 
-    xmpp = HostbotComponent(opts.jid, opts.password, opts.server, opts.port)
+    xmpp = HostbotComponent()
     xmpp.registerPlugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0050') # Adhoc Commands
-    # xmpp.registerPlugin('xep_0060') # PubSub
     xmpp.registerPlugin('xep_0199') # XMPP Ping
     
-    if xmpp.connect(SERVER_URL):
+    if xmpp.connect(constants.server):
         xmpp.process(block=True)
         xmpp.cleanup()
         print("Done")

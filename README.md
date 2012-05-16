@@ -16,7 +16,7 @@ useful commands:
     vim /etc/ejabberd/ejabberd.cfg 
     tail -f /var/log/ejabberd/ejabberd.log
 
-    mysql -u root -p < /vagrant/init_users.sql
+    mysql -u root -pos6juc8ik4if6jiev3co < /vagrant/chatidea/init_users.sql
     mysql -u root -pos6juc8ik4if6jiev3co
 
     python /vagrant/chatidea/hostbot_component.py -v

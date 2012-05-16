@@ -3,6 +3,7 @@
 import sys
 import MySQLdb
 import xmlrpclib
+import constants
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -10,24 +11,15 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-#TODO read these from config file?
-#TODO make 'contacts' groupname a variable?
-ROSTERBOT_PASSWORD = 'nal4rey2hun5ewv4ud6p'
-HOST = 'localhost' #todo make same as server URL
-SERVER_URL = '127.0.0.1'
-XMLRPC_SERVER_URL = 'http://%s:4560' % SERVER_URL
 
-#should User keep track of more roster state? or is it enough to own the add/removes?
+#IDEA should User keep track of more roster state? or is it enough to own the add/removes?
 class User(object):
-    active_group = 'Chatidea Conversations'
-    idle_group = 'Chatidea Contacts'
-    
     def __init__(self, user, proxybot):
         self._user = user
         self._proxybot = proxybot
         self.current_nick = None
         self.current_group = None
-        self.xmlrpc_server = xmlrpclib.ServerProxy(XMLRPC_SERVER_URL)
+        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
     
     def user(self):
         return self._user
@@ -44,33 +36,33 @@ class User(object):
         self._delete_user_rosteritem()
         
     def update_roster(self, nick):
-        if nick != self.current_nick or self.active_group != self.current_group:  # only update if there's a change
-            self._add_user_rosteritem(nick, self.active_group)  # roster items only change for active proxybots
+        if nick != self.current_nick or constants.active_group != self.current_group:  # only update if there's a change
+            self._add_user_rosteritem(nick, constants.active_group)  # roster items only change for active proxybots
 
     def _xmlrpc_command(self, command, data):
             fn = getattr(self.xmlrpc_server, command)
             return fn({
-                'user': 'rosterbot',
-                'server': HOST,
-                'password': ROSTERBOT_PASSWORD
+                'user': constants.rosterbot_xmlrpc_jid,
+                'server': constants.server,
+                'password': constants.rosterbot_xmlrpc_password
             }, data)
     def _add_proxy_rosteritem(self):
-        self._xmlrpc_command('add_rosteritem', { 'localserver': HOST, 'server': HOST,
-            'group': 'contacts',
+        self._xmlrpc_command('add_rosteritem', { 'localserver': constants.server, 'server': constants.server,
+            'group': constants.proxybot_group,
             'localuser': self._proxybot,
             'user': self._user,
             'nick': self._user,
             'subs': 'both'
         })
     def _delete_proxy_rosteritem(self):
-        self._xmlrpc_command('delete_rosteritem', { 'localserver': HOST, 'server': HOST,
+        self._xmlrpc_command('delete_rosteritem', { 'localserver': constants.server, 'server': constants.server,
            'localuser': self._proxybot,
            'user': self._user
         })
     def _add_user_rosteritem(self, nick, group):
         self.current_nick = nick
         self.current_group = group
-        self._xmlrpc_command('add_rosteritem', { 'localserver': HOST, 'server': HOST,
+        self._xmlrpc_command('add_rosteritem', { 'localserver': constants.server, 'server': constants.server,
             'group': group,
             'localuser': self._user,
             'user': self._proxybot,
@@ -78,7 +70,7 @@ class User(object):
             'subs': 'both'
         })
     def _delete_user_rosteritem(self):
-        self._xmlrpc_command('delete_rosteritem', { 'localserver': HOST, 'server': HOST,
+        self._xmlrpc_command('delete_rosteritem', { 'localserver': constants.server, 'server': constants.server,
            'localuser': self._user,
            'user': self._proxybot
         })
@@ -86,7 +78,7 @@ class User(object):
         try:              
             res = self._xmlrpc_command('user_sessions_info', {
                 'user': self._user,
-                'host': HOST
+                'host': constants.server
             })
             return len(res['sessions_info']) > 0
         except xmlrpclib.ProtocolError, e:
@@ -109,7 +101,7 @@ class User(object):
 
 class Observer(User):
     def add_to_rosters(self, nick):
-        super(Observer, self).add_to_rosters(nick, self.active_group)
+        super(Observer, self).add_to_rosters(nick, constants.active_group)
             
 class Participant(User):
     def __init__(self, *args, **kwargs):
@@ -121,7 +113,7 @@ class Participant(User):
         #TODO add to set
     
     def add_to_rosters(self, nick):
-        super(Participant, self).add_to_rosters(nick, self.idle_group)
+        super(Participant, self).add_to_rosters(nick, constants.idle_group)
 
     def observers(self):
         return self._observers
@@ -130,12 +122,13 @@ class Participant(User):
         db = None
         cursor = None
         try:
-            db = MySQLdb.connect('localhost', 'userinfo-helper', 'rycs3yuf8of4vit9fac3', 'chatidea')
+            db = MySQLdb.connect(constants.server, constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
             cursor = db.cursor()
             cursor.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': self.user()})
             self._observers = set([Observer(contact[0], self.proxybot()) for contact in cursor.fetchall()]) 
+            db.close()  # no need to keep the DB connection open!
         except MySQLdb.Error, e:
             print "Error %d: %s" % (e.args[0], e.args[1])
             db.close()
             sys.exit(1)
-        db.close()  # no need to keep the DB connection open!
+        
