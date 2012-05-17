@@ -105,28 +105,31 @@ class HostbotComponent(ComponentXMPP):
         undirected_graph_edges = set([frozenset(pair) for pair in self.cursor.fetchall()])  # symmetric relationships for now
         for edge in undirected_graph_edges:
             user1, user2 = list(edge)
-            proxybot_id = uuid.uuid4()
-            new_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
-            try:
-                self._xmlrpc_command('register', {
-                    'user': new_jid,
-                    'host': constants.server,
-                    'password': constants.proxybot_password
-                })
-                self.cursor.execute("INSERT INTO cur_proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
-                self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
-                    {'proxybot_id': proxybot_id, 'username': user1})
-                self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
-                    {'proxybot_id': proxybot_id, 'username': user2})
-                subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                    '-u', new_jid,
-                    '-1', user1,
-                    '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
-            except MySQLdb.Error, e:
-                logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
-            except xmlrpclib.Fault as e:
-                logging.error("Could not register account: %s" % e)
+            self._create_new_proxybot(user1, user2)
+    
+    def _create_new_proxybot(self, user1, user2):
+        proxybot_id = uuid.uuid4()
+        new_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
+        try:
+            self._xmlrpc_command('register', {
+                'user': new_jid,
+                'host': constants.server,
+                'password': constants.proxybot_password
+            })
+            self.cursor.execute("INSERT INTO cur_proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
+            self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
+                {'proxybot_id': proxybot_id, 'username': user1})
+            self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
+                {'proxybot_id': proxybot_id, 'username': user2})
+            subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
+                '-u', new_jid,
+                '-1', user1,
+                '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
+        except MySQLdb.Error, e:
+            logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
+        except xmlrpclib.Fault as e:
+            logging.error("Could not register account: %s" % e)
 
     def cleanup(self):
         if self.db:
@@ -164,6 +167,12 @@ class HostbotComponent(ComponentXMPP):
         form.addField(var='proxybot',
                       ftype='text-single',
                       label='The username of the proxybot')
+        form.addField(var='user1',
+                      ftype='text-single',
+                      label='The first of the two users in the conversation')
+        form.addField(var='user2',
+                      ftype='text-single',
+                      label='The second of the two users in the conversation')
         session['payload'] = form
         session['next'] = self._command_activate_complete
         session['has_next'] = False
@@ -207,35 +216,41 @@ class HostbotComponent(ComponentXMPP):
         session['next'] = self._command_remove_participant_complete
         session['has_next'] = False
         return session
-
     def _command_activate_complete(self, payload, session):
         form = payload
-        proxybot = form['values']['proxybot']
-        print 'TODO: update DB to make proxybot %s active' % proxybot
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
+        user1 = form['values']['user1']
+        user2 = form['values']['user2']
+        self._create_new_proxybot(user1, user2)
+        self.cursor.execute("UPDATE cur_proxybots SET state = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None
         return session
     def _command_retire_complete(self, payload, session):
         form = payload
-        proxybot = form['values']['proxybot']
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        print 'TODO: update DB to make proxybot %s retired, and remove user %s' % (proxybot, user)
+        self.cursor.execute("UPDATE cur_proxybots SET state = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self.cursor.execute("DELETE FROM cur_proxybot_participants WHERE username = %(username)s and proxybot_id = %(proxybot_id)s",
+            {'username': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None
         return session
     def _command_add_participant_complete(self, payload, session):
         form = payload
-        proxybot = form['values']['proxybot']
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        print 'TODO: update DB to add user %s to proxybot %s' % (user, proxybot)
+        self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
+            {'proxybot_id': shortuuid.decode(proxybot_id), 'username': user})
         session['payload'] = None
         session['next'] = None
         return session
     def _command_remove_participant_complete(self, payload, session):
         form = payload
-        proxybot = form['values']['proxybot']
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        print 'TODO: update DB to remove user %s from proxybot %s' % (user, proxybot)
+        self.cursor.execute("DELETE FROM cur_proxybot_participants WHERE username = %(username)s and proxybot_id = %(proxybot_id)s",
+            {'username': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None
         return session

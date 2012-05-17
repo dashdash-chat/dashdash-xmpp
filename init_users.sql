@@ -41,7 +41,7 @@ INSERT INTO convo_starts (count, sender, recipient) VALUES (1, 'alice', 'queen_o
 -- DROP TABLE IF EXISTS cur_proxybots;
 -- CREATE TABLE cur_proxybots (
 --     id INT UNSIGNED NOT NULL PRIMARY KEY,
--- 	state ENUM('idle', 'active', 'retired') NOT NULL,
+-- 	   state ENUM('idle', 'active', 'retired') NOT NULL,
 --     created TIMESTAMP DEFAULT NOW()
 -- );
 -- DROP TABLE IF EXISTS cur_proxybot_participants;

@@ -200,7 +200,9 @@ class ProxyBot(sleekxmpp.ClientXMPP):
                 for participant in self.participants:
                     participant.update_roster(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
                 self.send_presence()
-                session = {'next': self._command_activate_start,
+                session = {'user1': msg['from'].user,
+                           'user2': self.participants.difference([msg['from'].user]).pop().user(),  # ugh verbose
+                           'next': self._command_activate_start,
                            'error': self._command_error}
                 self['xep_0050'].start_command(jid=constants.hostbot_jid,
                                                node=ProxybotCommand.activate,
@@ -254,6 +256,10 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         form = self['xep_0004'].makeForm(ftype='submit')
         form.addField(var='proxybot',
                       value=self.boundjid.user)
+        form.addField(var='user1',
+                      value=session['user1'])
+        form.addField(var='user2',
+                      value=session['user2'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
