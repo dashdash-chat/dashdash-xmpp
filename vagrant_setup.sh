@@ -52,6 +52,7 @@ mysql -u root -p < /vagrant/init_users.sql
 apt-get install python-setuptools # OR python-dev TRY BOTH
 pip-2.6 install dnspython
 pip-2.6 install mysql-python
+pip-2.6 install shortuuid
 
 git clone git@github.com:lehrblogger/SleekXMPP.git sleekxmpp
 cd sleekxmpp

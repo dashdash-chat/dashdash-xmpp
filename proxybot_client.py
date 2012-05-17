@@ -50,13 +50,13 @@ def participants_and_observers_only(fn):
 
 
 class ProxyBot(sleekxmpp.ClientXMPP):
-    def __init__(self, username, server, participants):
+    def __init__(self, username, participant1, participant2):
         if not username.startswith(constants.proxybot_prefix):
-            logging.error("Proxybot JID %s does not start with %s" % (jid, constants.proxybot_prefix))
+            logging.error("Proxybot JID %s does not start with %s" % (username, constants.proxybot_prefix))
             return
-        sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (username, server), constants.proxybot_password)
+        sleekxmpp.ClientXMPP.__init__(self, '%s@%s/%s' % (username, constants.server, constants.proxybot_resource), constants.proxybot_password)
         self.stage = Stage.IDLE
-        self.participants = set([Participant(participant, self.boundjid.user) for participant in participants[0:2]]) # only two participants to start!
+        self.participants = set([Participant(participant1, self.boundjid.user), Participant(participant2, self.boundjid.user)])
         self.invisible = False
         self.add_event_handler('session_start', self._handle_start)
         self.add_event_handler('presence_probe', self._handle_presence_probe)
@@ -305,8 +305,6 @@ if __name__ == '__main__':
                     const=5, default=logging.INFO)
     optp.add_option("-u", "--username", dest="username",
                     help="proxybot username")
-    optp.add_option("-s", "--server", dest="server",
-                    help="server for proxybot and participants")
     optp.add_option("-1", "--participant1", dest="participant1",
                     help="first participant's username")
     optp.add_option("-2", "--participant2", dest="participant2",
@@ -318,14 +316,12 @@ if __name__ == '__main__':
 
     if opts.username is None:
         opts.username = raw_input("Proxybot username: ")
-    if opts.server is None:
-        opts.server = raw_input("Server for proxybot and participants: ")
     if opts.participant1 is None:
         opts.participant1 = raw_input("First participant for this proxybot: ")
     if opts.participant2 is None:
         opts.participant2 = getpass.getpass("Second participant for this proxybot: ")
 
-    xmpp = ProxyBot(opts.username, opts.server, [opts.participant1, opts.participant2])
+    xmpp = ProxyBot(opts.username, opts.participant1, opts.participant2)
     xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0050') # Adhoc Commands

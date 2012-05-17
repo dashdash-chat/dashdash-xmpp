@@ -27,7 +27,7 @@ useful commands:
     
     python /vagrant/chatidea/proxybot_client.py -u proxybot262522004685566022765104720483704520632 -s localhost -1 alice -2 dormouse
 
-    ejabberdctl unregister proxybot12345 localhost && ejabberdctl register proxybot12345 localhost ow4coirm5oc5coc9folv && python /vagrant/chatidea/proxybot_client.py -u proxybot12345 -s localhost -1 alice -2 dormouse -v
+    PROXYBOT='proxybot_ow4coirm5oc5coc9folv' && ejabberdctl unregister $PROXYBOT localhost && ejabberdctl register $PROXYBOT localhost ow4coirm5oc5coc9folv && python /vagrant/chatidea/proxybot_client.py -u $PROXYBOT -1 alice -2 dormouse
 
 passwords:
 ----------

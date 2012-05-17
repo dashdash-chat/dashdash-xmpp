@@ -41,6 +41,7 @@ INSERT INTO convo_starts (count, sender, recipient) VALUES (1, 'alice', 'queen_o
 -- DROP TABLE IF EXISTS cur_proxybots;
 -- CREATE TABLE cur_proxybots (
 --     id INT UNSIGNED NOT NULL PRIMARY KEY,
+-- 	state ENUM('idle', 'active', 'retired') NOT NULL,
 --     created TIMESTAMP DEFAULT NOW()
 -- );
 -- DROP TABLE IF EXISTS cur_proxybot_participants;
@@ -54,11 +55,12 @@ INSERT INTO convo_starts (count, sender, recipient) VALUES (1, 'alice', 'queen_o
 DROP USER 'hostbot'@'localhost';
 CREATE USER 'hostbot'@'localhost' IDENTIFIED BY 'ish9gen8ob8hap7ac9hy';
 GRANT SELECT, UPDATE ON chatidea.users TO 'hostbot'@'localhost';
+GRANT SELECT ON chatidea.convo_starts TO 'hostbot'@'localhost';
 GRANT ALL ON chatidea.cur_proxybots TO 'hostbot'@'localhost';
 GRANT ALL ON chatidea.cur_proxybot_participants TO 'hostbot'@'localhost';
 
 DROP USER 'userinfo'@'localhost';
 CREATE USER 'userinfo'@'localhost' IDENTIFIED BY 'me6oth8ig3tot7as2ash';
-GRANT SELECT,UPDATE ON chatidea.convo_starts TO 'userinfo'@'localhost';
+GRANT SELECT,INSERT,UPDATE ON chatidea.convo_starts TO 'userinfo'@'localhost';
 
 FLUSH PRIVILEGES;

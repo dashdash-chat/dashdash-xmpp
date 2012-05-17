@@ -2,7 +2,8 @@
 server = 'localhost'
 xmlrpc_port = 4560
 
-proxybot_prefix = 'proxybot'
+proxybot_prefix = 'proxybot_'
+proxybot_resource = 'python_client'
 proxybot_password = 'ow4coirm5oc5coc9folv'
 hostbot_jid = 'bot.localhost/python_component'
 hostbot_secret = 'is3joic8vorn8uf4ge4o'

@@ -7,6 +7,7 @@ import getpass
 from optparse import OptionParser
 import subprocess
 import uuid
+import shortuuid
 import xmlrpclib
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
@@ -23,10 +24,11 @@ else:
 class HostbotComponent(ComponentXMPP):
     def __init__(self):
         ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
+        shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
         self.boundjid.regenerate()
         self.nick = 'Hostbot'
         self.auto_authorize = True
-        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
+        # Connect to the database
         self.db = None
         self.cursor = None
         try:
@@ -35,8 +37,10 @@ class HostbotComponent(ComponentXMPP):
         except MySQLdb.Error, e:
             logging.error("Failed to connect to database and creat cursor, %d: %s" % (e.args[0], e.args[1]))
             self.cleanup()
+        # Initialize user accounts #LATER remove when I have real users
+        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
         self.cursor.execute("SELECT username FROM users WHERE has_jid = 0")
-        usernames = [username[0] for username in self.cursor.fetchall()]   
+        usernames = [username[0] for username in self.cursor.fetchall()] 
         for username in usernames:
             try:
                 self._xmlrpc_command('register', {
@@ -51,26 +55,35 @@ class HostbotComponent(ComponentXMPP):
             except xmlrpclib.ProtocolError, e:
                 logging.error('Failed to register account for user %s with XML RPC error %s' % (username, e))
                 self.cleanup()
+        # Unregister old proxybots
+        self.cursor.execute("SELECT id FROM cur_proxybots", {})
+        proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
+        for proxybot_id in proxybot_ids:
+            self._xmlrpc_command('unregister', {
+                'user': '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_id))),
+                'host': constants.server,
+            })
+        # Initialize database tables
         self.cursor.execute("DROP TABLE IF EXISTS cur_proxybots;", {})
         self.cursor.execute("""CREATE TABLE cur_proxybots (
-            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-            user1 VARCHAR(15),
-            user2 VARCHAR(15),
+            id CHAR(36) NOT NULL PRIMARY KEY,
+          state ENUM('idle', 'active', 'retired') NOT NULL,
             created TIMESTAMP DEFAULT NOW()
         )""", {})
         self.cursor.execute("DROP TABLE IF EXISTS cur_proxybot_participants;", {})
         self.cursor.execute("""CREATE TABLE cur_proxybot_participants (
-            proxybot_id INT UNSIGNED NOT NULL PRIMARY KEY,
-        	FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
-        	user VARCHAR(15),
+            proxybot_id CHAR(36) NOT NULL,
+          FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
+          username VARCHAR(15),
             created TIMESTAMP DEFAULT NOW()
         )""", {})
+        # Add event handlers
         self.add_event_handler("session_start", self.start)
         self.add_event_handler('message', self.message)
         self.add_event_handler('presence_probe', self.handle_probe)
-    
+
     def start(self, event):
-        # these must happen after the hostbot's session has been started
+        # Register these commands *after* session_start
         self['xep_0050'].add_command(node=ProxybotCommand.activate,
                                      name='Activate proxybot',
                                      handler=self._command_activate,
@@ -87,6 +100,33 @@ class HostbotComponent(ComponentXMPP):
                                      name='Remove a participant',
                                      handler=self._command_remove_participant,
                                      jid=self.boundjid.full)
+        # Create the proxybots *after* those commands are ready 
+        self.cursor.execute("SELECT sender, recipient FROM convo_starts", {})
+        undirected_graph_edges = set([frozenset(pair) for pair in self.cursor.fetchall()])  # symmetric relationships for now
+        for edge in undirected_graph_edges:
+            user1, user2 = list(edge)
+            proxybot_id = uuid.uuid4()
+            new_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
+            try:
+                self._xmlrpc_command('register', {
+                    'user': new_jid,
+                    'host': constants.server,
+                    'password': constants.proxybot_password
+                })
+                self.cursor.execute("INSERT INTO cur_proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
+                self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
+                    {'proxybot_id': proxybot_id, 'username': user1})
+                self.cursor.execute("INSERT INTO cur_proxybot_participants (proxybot_id, username) VALUES (%(proxybot_id)s, %(username)s)",
+                    {'proxybot_id': proxybot_id, 'username': user2})
+                subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
+                    '-u', new_jid,
+                    '-1', user1,
+                    '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
+            except MySQLdb.Error, e:
+                logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
+            except xmlrpclib.Fault as e:
+                logging.error("Could not register account: %s" % e)
 
     def cleanup(self):
         if self.db:
@@ -116,19 +156,6 @@ class HostbotComponent(ComponentXMPP):
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
             
     def handle_probe(self, presence):
-        # sender = presence['from'].user
-        # self.cursor.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': sender})
-        # contacts = [contact[0] for contact in self.cursor.fetchall()]
-        # for contact in contacts:
-        #     self.cursor.execute("""SELECT COUNT(*) FROM cur_proxybots WHERE 
-        #         (user1 = %(sender)s AND user2 = %(contact)s) OR 
-        #         (user1 = %(contact)s AND user2 = %(sender)s)
-        #         """, {'sender': sender, 'contact': contact})
-        #     if not int(self.cursor.fetchall()[0][0]):
-        #         #TODO check to make sure users are online before making proxybots for them
-        #         #   Since we can rely on the proxybot to destroy itself when it has fewer than
-        #         #   two online users, we can just make them naively for now, but it's a hack.
-        #         self._register_proxybot(sender, contact)
         self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
 
     def _command_activate(self, iq, session):
@@ -212,25 +239,6 @@ class HostbotComponent(ComponentXMPP):
         session['payload'] = None
         session['next'] = None
         return session
-
-    def _register_proxybot(self, user1, user2):
-        new_jid = 'proxybot%d' % (uuid.uuid4().int)
-        try:
-            self._xmlrpc_command('register', {
-                'user': new_jid,
-                'host': constants.server,
-                'password': constants.proxybot_password
-            })
-            self.cursor.execute("""INSERT INTO cur_proxybots (user1, user2) 
-                VALUES (%(user1)s, %(user2)s)""", {'user1': user1, 'user2': user2})
-            subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                '-u', new_jid,
-                '-s', constants.localhost,
-                '-1', user1,
-                '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            logging.info("Account created for %s!" % new_jid)
-        except xmlrpclib.Fault as e:
-            logging.error("Could not register account: %s" % e)
 
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
