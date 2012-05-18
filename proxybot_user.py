@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import MySQLdb
+import logging
 import xmlrpclib
 import constants
 

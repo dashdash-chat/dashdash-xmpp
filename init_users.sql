@@ -6,7 +6,7 @@ DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(15),
-	has_jid BOOLEAN NOT NULL DEFAULT 0,
+    has_jid BOOLEAN NOT NULL DEFAULT 0,
     created TIMESTAMP DEFAULT NOW()
 );
 INSERT INTO users (username) VALUES ('alice');
@@ -22,7 +22,7 @@ CREATE TABLE convo_starts (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     sender VARCHAR(15),
     recipient VARCHAR(15),
-	count INT UNSIGNED NOT NULL DEFAULT 0,
+    count INT UNSIGNED NOT NULL DEFAULT 0,
     created TIMESTAMP DEFAULT NOW()
 );
 INSERT INTO convo_starts (count, sender, recipient) VALUES (45, 'alice', 'chesire_cat');
@@ -41,14 +41,14 @@ INSERT INTO convo_starts (count, sender, recipient) VALUES (1, 'alice', 'queen_o
 -- DROP TABLE IF EXISTS cur_proxybots;
 -- CREATE TABLE cur_proxybots (
 --     id INT UNSIGNED NOT NULL PRIMARY KEY,
--- 	   state ENUM('idle', 'active', 'retired') NOT NULL,
+--     state ENUM('idle', 'active', 'retired') NOT NULL,
 --     created TIMESTAMP DEFAULT NOW()
 -- );
 -- DROP TABLE IF EXISTS cur_proxybot_participants;
 -- CREATE TABLE cur_proxybot_participants (
 --     proxybot_id INT UNSIGNED NOT NULL PRIMARY KEY,
--- 	FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
--- 	user VARCHAR(15),
+--     FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
+--     user VARCHAR(15),
 --     created TIMESTAMP DEFAULT NOW()
 -- );
 

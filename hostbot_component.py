@@ -106,6 +106,7 @@ class HostbotComponent(ComponentXMPP):
         for edge in undirected_graph_edges:
             user1, user2 = list(edge)
             self._create_new_proxybot(user1, user2)
+        self.send_presence(pfrom=self.fulljid_with_user(), pnick=self.nick, pstatus="Who do you want to chat with?", pshow="available")
     
     def _create_new_proxybot(self, user1, user2):
         proxybot_id = uuid.uuid4()
@@ -159,7 +160,7 @@ class HostbotComponent(ComponentXMPP):
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
             
     def handle_probe(self, presence):
-        self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pto=presence['from'], pstatus="Who do you want to chat with?", pshow="available")
+        self.sendPresence(pfrom=self.fulljid_with_user(), pnick=self.nick, pstatus="Who do you want to chat with?", pshow="available", pto=presence['from'])
 
     def _command_activate(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Activate proxybot')
