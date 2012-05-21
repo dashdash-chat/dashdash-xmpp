@@ -125,7 +125,8 @@ class HostbotComponent(ComponentXMPP):
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
                 '-u', new_jid,
                 '-1', user1,
-                '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                '-2', user2,
+                '--daemon'], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
         except MySQLdb.Error, e:
             logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
@@ -264,14 +265,12 @@ class HostbotComponent(ComponentXMPP):
             'password': constants.hostbot_xmlrpc_password
         }, data)
 
+
 if __name__ == '__main__':
     optp = OptionParser()
     optp.add_option('-q', '--quiet', help='set logging to ERROR',
                     action='store_const', dest='loglevel',
                     const=logging.ERROR, default=logging.INFO)
-    optp.add_option('-d', '--debug', help='set logging to DEBUG',
-                    action='store_const', dest='loglevel',
-                    const=logging.DEBUG, default=logging.INFO)
     optp.add_option('-v', '--verbose', help='set logging to COMM',
                     action='store_const', dest='loglevel',
                     const=5, default=logging.INFO)
@@ -289,10 +288,10 @@ if __name__ == '__main__':
                         format='%(levelname)-8s %(message)s')
 
     xmpp = HostbotComponent()
-    xmpp.registerPlugin('xep_0030') # Service Discovery
+    xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0050') # Adhoc Commands
-    xmpp.registerPlugin('xep_0199') # XMPP Ping
+    xmpp.register_plugin('xep_0199') # XMPP Ping
     
     if xmpp.connect(constants.server):
         xmpp.process(block=True)

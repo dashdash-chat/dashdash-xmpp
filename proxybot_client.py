@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+import daemon
 import getpass
 from optparse import OptionParser
 import sleekxmpp
@@ -49,7 +50,7 @@ def participants_and_observers_only(fn):
     return wrapped
 
 
-class ProxyBot(sleekxmpp.ClientXMPP):
+class Proxybot(sleekxmpp.ClientXMPP):
     def __init__(self, username, participant1, participant2):
         if not username.startswith(constants.proxybot_prefix):
             logging.error("Proxybot JID %s does not start with %s" % (username, constants.proxybot_prefix))
@@ -71,7 +72,7 @@ class ProxyBot(sleekxmpp.ClientXMPP):
         for participant in self.participants.union(self._get_observers()):
             participant.delete_from_rosters()
         kwargs['wait'] = True
-        super(ProxyBot, self).disconnect(*args, **kwargs)        
+        super(Proxybot, self).disconnect(*args, **kwargs)        
     
     def _handle_start(self, event):
         for participant in self.participants:
@@ -303,9 +304,6 @@ if __name__ == '__main__':
     optp.add_option('-q', '--quiet', help='set logging to ERROR',
                     action='store_const', dest='loglevel',
                     const=logging.ERROR, default=logging.INFO)
-    optp.add_option('-d', '--debug', help='set logging to DEBUG',
-                    action='store_const', dest='loglevel',
-                    const=logging.DEBUG, default=logging.INFO)
     optp.add_option('-v', '--verbose', help='set logging to COMM',
                     action='store_const', dest='loglevel',
                     const=5, default=logging.INFO)
@@ -314,7 +312,10 @@ if __name__ == '__main__':
     optp.add_option("-1", "--participant1", dest="participant1",
                     help="first participant's username")
     optp.add_option("-2", "--participant2", dest="participant2",
-                    help="second participant's username")
+                    help="second participant's username")     
+    optp.add_option('-d', '--daemon', help='run as daemon',
+                    action='store_const', dest='daemon',
+                    const=True, default=False)
     opts, args = optp.parse_args()
 
     logging.basicConfig(level=opts.loglevel,
@@ -326,16 +327,24 @@ if __name__ == '__main__':
         opts.participant1 = raw_input("First participant for this proxybot: ")
     if opts.participant2 is None:
         opts.participant2 = getpass.getpass("Second participant for this proxybot: ")
-
-    xmpp = ProxyBot(opts.username, opts.participant1, opts.participant2)
+    
+    xmpp = Proxybot(opts.username, opts.participant1, opts.participant2)
     xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0050') # Adhoc Commands
     xmpp.register_plugin('xep_0085') # Chat State Notifications
     xmpp.register_plugin('xep_0199') # XMPP Ping
-
-    if xmpp.connect():
-        xmpp.process(block=True)
-        print("Done")
+    
+    if opts.daemon:
+        with daemon.DaemonContext():
+            if xmpp.connect():
+                xmpp.process(block=True)
+                print("Done")
+            else:
+                print("Unable to connect.")
     else:
-        print("Unable to connect.")
+        if xmpp.connect():
+            xmpp.process(block=True)
+            print("Done")
+        else:
+            print("Unable to connect.")
