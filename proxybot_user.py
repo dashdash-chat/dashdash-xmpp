@@ -139,3 +139,8 @@ class Participant(User):
         observer = Observer(user, proxybot)
         observer.add_to_rosters(nick)
         self._observers.add(observer)
+    
+    def remove_observer(self, user, proxybot):
+        observer = Observer(user, proxybot)  # we only need this object so we can make the appropriate xmlrpc calls, it isn't saved
+        observer.delete_from_rosters()
+        self._observers.remove(user)

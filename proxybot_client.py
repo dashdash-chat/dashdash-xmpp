@@ -111,6 +111,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                      name='Add an observer to this proxybot',
                                      handler=self._cmd_receive_add_observer,
                                      jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=HostbotCommand.remove_observer,
+                                     name='Remove an observer from this proxybot',
+                                     handler=self._cmd_receive_remove_observer,
+                                     jid=self.boundjid.full)
         # Set up rosters and visibility
         for participant in self.participants:
             participant.add_to_rosters(self._get_nick(participant))
@@ -321,6 +325,20 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['next'] = self._cmd_complete_add_observer
         session['has_next'] = False
         return session
+    @hostbot_only
+    def _cmd_receive_remove_observer(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Remove observer')
+        form['instructions'] = 'Remove an observer who could see this proxybot in their conversations list.'
+        form.addField(var='participant',
+                      ftype='text-single',
+                      label='The participant for whom this is an observer')
+        form.addField(var='observer',
+                    ftype='text-single',
+                    label='The observer to remove')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_remove_observer
+        session['has_next'] = False
+        return session
     def _cmd_complete_delete_proxybot(self, payload, session):
         self.disconnect()
         session['has_next'] = False
@@ -347,7 +365,19 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = None
         session['next'] = None
         return session
-    
+    def _cmd_complete_remove_observer(self, payload, session):
+        form = payload
+        participant_to_match = form['values']['participant']
+        observer = form['values']['observer']
+        # see note in _cmd_complete_add_observer about how this works
+        for participant in self.participants:
+            if participant == participant_to_match:
+                participant.remove_observer(observer, self.boundjid.user)
+                logging.info("Removed observer %s for participant %s on stage %s proxybot %s" % (observer, participant, self.stage, self.boundjid.full))
+        session['payload'] = None
+        session['next'] = None
+        return session
+
     # Adhoc commands for which the proxybot is the user and the hostbot is the provider
     @hostbot_only
     def _cmd_send_activate(self, iq, session):
