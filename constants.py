@@ -44,3 +44,4 @@ class ProxybotCommand:
 class HostbotCommand:
     delete_proxybot = 'delete_proxybot'
     participant_deleted = 'participant_deleted'
+    add_observer = 'add_observer'

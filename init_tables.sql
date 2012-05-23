@@ -18,7 +18,7 @@ CREATE TABLE proxybots (
 DROP TABLE IF EXISTS proxybot_participants;
 CREATE TABLE proxybot_participants (
     proxybot_id CHAR(36) NOT NULL,
-    FOREIGN KEY (proxybot_id) REFERENCES cur_proxybots(id),
+    FOREIGN KEY (proxybot_id) REFERENCES proxybots(id),
     user VARCHAR(15),
     created TIMESTAMP DEFAULT NOW()
 );

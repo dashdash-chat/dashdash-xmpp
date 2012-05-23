@@ -192,10 +192,27 @@ class HostbotComponent(ComponentXMPP):
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
                 '--daemon',
-                #'-v',
                 '-u', new_jid,
                 '-1', user1,
                 '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            # now, find active proxybots with each user as a participant but *not* the other, and add the other as an observer
+            for participant, observer in [(user1, user2), (user2, user1)]:
+                self.cursor.execute("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
+                    proxybots.id = proxybot_participants.proxybot_id AND
+                    proxybots.state = 'active' AND
+                    proxybot_participants.user = %(participant)s AND
+                	proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
+                	{'participant': participant, 'observer': observer}, )
+                proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
+                for proxybot_id in proxybot_ids:
+                    session = {'participant': participant,
+                               'observer': observer,
+                               'next': self._cmd_send_add_observer,
+                               'error': self._cmd_error}
+                    self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
+                                                   node=HostbotCommand.add_observer,
+                                                   session=session,
+                                                   ifrom=constants.hostbot_jid)
             logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
         except MySQLdb.Error, e:
             logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
@@ -204,6 +221,7 @@ class HostbotComponent(ComponentXMPP):
         return new_jid
 
     def _delete_friendship(self, user1, user2):
+        #TODO remove each user from the other's observer lists
         if not (self._user_exists(user1) and self._user_exists(user2)):
             return None
         proxybot_id = self._find_idle_proxybot(user1, user2)
@@ -256,6 +274,16 @@ class HostbotComponent(ComponentXMPP):
         form = self['xep_0004'].makeForm(ftype='submit')
         form.addField(var='user',
                       value=session['user'])
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+    @proxybot_only
+    def _cmd_send_add_observer(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='participant',
+                      value=session['participant'])
+        form.addField(var='observer',
+                      value=session['observer'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
@@ -353,7 +381,7 @@ class HostbotComponent(ComponentXMPP):
         form = payload
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        self.cursor.execute("DELETE FROM cur_proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
+        self.cursor.execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
             {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None

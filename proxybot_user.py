@@ -134,3 +134,8 @@ class Participant(User):
             print "Error %d: %s" % (e.args[0], e.args[1])
             db.close()
             sys.exit(1)
+    
+    def add_observer(self, user, proxybot, nick):
+        observer = Observer(user, proxybot)
+        observer.add_to_rosters(nick)
+        self._observers.add(observer)

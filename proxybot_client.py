@@ -6,6 +6,7 @@ import daemon
 import getpass
 from optparse import OptionParser
 import sleekxmpp
+from sleekxmpp.exceptions import IqTimeout
 import xmlrpclib
 import constants
 from constants import Stage, ProxybotCommand, HostbotCommand
@@ -105,6 +106,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self['xep_0050'].add_command(node=HostbotCommand.participant_deleted,
                                      name='Remove a participant from this proxybot',
                                      handler=self._cmd_receive_participant_deleted,
+                                     jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=HostbotCommand.add_observer,
+                                     name='Add an observer to this proxybot',
+                                     handler=self._cmd_receive_add_observer,
                                      jid=self.boundjid.full)
         # Set up rosters and visibility
         for participant in self.participants:
@@ -273,6 +278,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 new_msg.send()
 
     def _set_invisiblity(self, invisibility):
+        init_invisible = self.invisible
         self.invisible = invisibility  # the object needs to keep this as state so that it doesn't get stuck in a presence available/unavailable loop
         self.send_presence(ptype='unavailable')
         iq = self.Iq()
@@ -282,21 +288,16 @@ class Proxybot(sleekxmpp.ClientXMPP):
             iq['proxybot_invisibility'].make_active('invisible-to-participants')
         else:
             iq['proxybot_invisibility'].make_active()
-        print iq
-        iq.send()
+        try:
+            iq.send()
+        except IqTimeout, e:
+            logging.error('Failed to set invisibility for %s to %s with error: %s' % (self.boundjid.full, invisibility, e))
+            self.invisible = init_invisible  #NOTE this may just trigger a retry, due to the aforementioned loop.
         self.send_presence()
 
     # Adhoc commands for which the proxybot is the provider and the hostbot is the user
-    def _cmd_complete_delete_proxybot(self, payload, session):
-        self.disconnect()
-        session['has_next'] = False
-        session['next'] = None
-        return session
     @hostbot_only
     def _cmd_receive_participant_deleted(self, iq, session):
-        logging.error('___')
-        logging.error(iq)
-        logging.error('___')
         form = self['xep_0004'].makeForm('form', 'Participant deleted')
         form['instructions'] = 'Remove a just-deleted user from this proxybot\'s participants.'
         form.addField(var='user',
@@ -306,6 +307,25 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['next'] = self._cmd_complete_participant_deleted
         session['has_next'] = False
         return session
+    @hostbot_only
+    def _cmd_receive_add_observer(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Add observer')
+        form['instructions'] = 'Add an observer who can see this proxybot in their conversations list.'
+        form.addField(var='participant',
+                      ftype='text-single',
+                      label='The participant for whom this is an observer')
+        form.addField(var='observer',
+                    ftype='text-single',
+                    label='The observer to add')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_add_observer
+        session['has_next'] = False
+        return session
+    def _cmd_complete_delete_proxybot(self, payload, session):
+        self.disconnect()
+        session['has_next'] = False
+        session['next'] = None
+        return session
     def _cmd_complete_participant_deleted(self, payload, session):
         form = payload
         user = form['values']['user']
@@ -313,13 +333,24 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = None
         session['next'] = None
         return session
+    def _cmd_complete_add_observer(self, payload, session):
+        form = payload
+        participant_to_match = form['values']['participant']
+        observer = form['values']['observer']
+        # Add an observer on the proxybot's participant object that matches the participant name from the form.
+        # I can't use a fancy set intersection here, because I can't enforce which will be returned of the
+        # proxybot's participant object or the string that is seen as equal to it.
+        for participant in self.participants:
+            if participant == participant_to_match:
+                participant.add_observer(observer, self.boundjid.user, self._get_nick(observer))
+                logging.info("Added observer %s for participant %s on stage %s proxybot %s" % (observer, participant, self.stage, self.boundjid.full))
+        session['payload'] = None
+        session['next'] = None
+        return session
     
     # Adhoc commands for which the proxybot is the user and the hostbot is the provider
     @hostbot_only
     def _cmd_send_activate(self, iq, session):
-        logging.error('___')
-        logging.error(iq)
-        logging.error('___')
         form = self['xep_0004'].makeForm(ftype='submit')
         form.addField(var='proxybot',
                       value=self.boundjid.user)
