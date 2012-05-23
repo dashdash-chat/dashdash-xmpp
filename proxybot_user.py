@@ -109,9 +109,6 @@ class Participant(User):
         super(Participant, self).__init__(*args, **kwargs)
         self._observers = set([])
         self.fetch_observers()
-        #TODO fetch observers from DB
-        #TODO instantiate objects
-        #TODO add to set
     
     def add_to_rosters(self, nick):
         super(Participant, self).add_to_rosters(nick, constants.idle_group)
@@ -125,11 +122,15 @@ class Participant(User):
         try:
             db = MySQLdb.connect(constants.server, constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
             cursor = db.cursor()
-            cursor.execute("SELECT recipient FROM convo_starts WHERE sender = %(sender)s ORDER BY count DESC", {'sender': self.user()})
+            cursor.execute("""SELECT proxybot_participants_2.user FROM proxybots, 
+                proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
+                proxybots.state = 'idle' AND
+                proxybots.id = proxybot_participants_1.proxybot_id AND
+                proxybots.id = proxybot_participants_2.proxybot_id AND
+                proxybot_participants_1.user = %(user)s""", {'user': self.user()})
             self._observers = set([Observer(contact[0], self.proxybot()) for contact in cursor.fetchall()]) 
             db.close()  # no need to keep the DB connection open!
         except MySQLdb.Error, e:
             print "Error %d: %s" % (e.args[0], e.args[1])
             db.close()
             sys.exit(1)
-        

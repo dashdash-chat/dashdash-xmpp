@@ -5,13 +5,17 @@ xmlrpc_port = 4560
 proxybot_prefix = 'proxybot_'
 proxybot_resource = 'python_client'
 proxybot_password = 'ow4coirm5oc5coc9folv'
-hostbot_jid = 'bot.localhost/python_component'
+hostbot_server = 'bot.localhost'
+hostbot_jid = '%s/python_component' % hostbot_server
+hostbot_nick = 'Hostbot'
 hostbot_secret = 'is3joic8vorn8uf4ge4o'
 hostbot_port = 5237
 default_user_password = 'password'
 
 hostbot_xmlrpc_jid = '_hostbot'
 hostbot_xmlrpc_password = 'wraf7marj7og4e7ob4je'
+proxybot_xmlrpc_jid = '_proxybot'
+proxybot_xmlrpc_password = 'floif8ef7ceut5yek4da'
 rosterbot_xmlrpc_jid = '_rosterbot'
 rosterbot_xmlrpc_password = 'nal4rey2hun5ewv4ud6p'
 
@@ -36,3 +40,7 @@ class ProxybotCommand:
     retire = 'retire'
     add_participant = 'add_participant'
     remove_participant = 'remove_participant'
+
+class HostbotCommand:
+    delete_proxybot = 'delete_proxybot'
+    participant_deleted = 'participant_deleted'

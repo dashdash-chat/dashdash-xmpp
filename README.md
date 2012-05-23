@@ -5,6 +5,7 @@ useful commands:
 ----------------
 
     erlc -I /lib/ejabberd/include -pa /vagrant/ejabberd/src -o /lib/ejabberd/ebin /vagrant/ejabberd/src/mod_register.erl
+    
     cp /vagrant/chatidea/ejabberd.cfg /etc/ejabberd && ejabberdctl restart
 
     sudo tail -f /var/log/ejabberd/ejabberd.log
@@ -17,7 +18,7 @@ useful commands:
     tail -f /var/log/ejabberd/ejabberd.log
 
     mysql -u root -pos6juc8ik4if6jiev3co < /vagrant/chatidea/init_users.sql
-    mysql -u root -pos6juc8ik4if6jiev3co
+    mysql -u root -pos6juc8ik4if6jiev3co --database chatidea
 
     python /vagrant/chatidea/hostbot_component.py -v
 
