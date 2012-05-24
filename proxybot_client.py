@@ -101,8 +101,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
         })
     def bounce(self, event):
         subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-            '--daemon',
-            '-u', self.boundjid.user,
+            #'--daemon',
+            '--username', self.boundjid.user,
             '--bounced'], shell=False)
         self.disconnect(wait=True)
 
@@ -137,10 +137,19 @@ class Proxybot(sleekxmpp.ClientXMPP):
             iq['proxybot_invisibility'].add_item(itype='group', ivalue='contacts', iaction='deny', iorder=1)
             iq['proxybot_invisibility'].add_item(iaction='allow', iorder=2)
             iq.send()
-        self.get_roster()
-        # Check to see if everyone is online, and also send the initial presence
-        self._set_invisiblity(not reduce(lambda a, b: a.is_online() and b.is_online(), self.participants))
- 
+            self.get_roster()
+            # Check to see if everyone is online, and also send the initial presence
+            self._set_invisibility(not reduce(lambda a, b: a.is_online() and b.is_online(), self.participants))
+        else:    
+            self.get_roster() #LATER test to see if I need to do get_roster in a particular order with the other things
+            # if anyone is offline, remove them from the conversation, although they'll (hopefully?) see it later as an observer
+            for participant in self.participants:
+                if not participant.is_online():
+                    self._remove_participant(participant)
+            # if we're still not retired, we know at least two users are still online, so we should be visible
+            if self.stage != Stage.RETIRED:
+                self._set_invisibility(False)
+
     def _get_observers(self):
         observers = set([])
         for participant in self.participants:
@@ -219,7 +228,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                  logging.error("In Stage.IDLE with %d extra participants! %s" %  (len(self.participants) - 2, str(list(self.participants)).strip('[]')))
             other_participant = self.participants.difference([presence['from'].user]).pop()
             if self.invisible and other_participant and other_participant.is_online():
-                self._set_invisiblity(False)
+                self._set_invisibility(False)
 
     @participants_only
     def _handle_presence_unavailable(self, presence):
@@ -227,7 +236,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             if len(self.participants) != 2:
                  logging.error("In Stage.IDLE with %d extra participants! %s" %  (len(self.participants) - 2, str(list(self.participants)).strip('[]')))
             # if either participant goes offline, we definitely want to be invisible until both are online again
-            self._set_invisiblity(True)
+            self._set_invisibility(True)
         elif self.stage is Stage.ACTIVE:
             self._remove_participant(presence['from'].user)
 
@@ -300,7 +309,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 new_msg['to'] = "%s@%s" % (participant.user(), constants.server)
                 new_msg.send()
 
-    def _set_invisiblity(self, invisibility):
+    def _set_invisibility(self, invisibility):
         init_invisible = self.invisible
         self.invisible = invisibility  # the object needs to keep this as state so that it doesn't get stuck in a presence available/unavailable loop
         self.send_presence(ptype='unavailable')

@@ -1,6 +1,9 @@
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
+daemons = '--daemon'
+# daemons = ''
+
 server = 'localhost'
 xmlrpc_port = 4560
 

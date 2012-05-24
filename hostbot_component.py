@@ -123,6 +123,31 @@ class HostbotComponent(ComponentXMPP):
                         msg.reply("Friendship for %s and %s successfully deleted as %s." % (user1, user2, proxybot_jid)).send()
                     else:
                         msg.reply("Something went wrong - are you sure both %s and %s exist and are friends?" % (user1, user2)).send()
+                elif cmd == 'restore_proxybot' and msg['from'].user.startswith('admin'):
+                    proxybot = body.split(' ')[0]
+                    if proxybot:
+                        if proxybot.startswith(constants.proxybot_prefix):
+                            proxybot_jid = proxybot
+                            proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
+                        else:    
+                            proxybot_jid = shortuuid.encode(uuid.UUID(proxybot))
+                            proxybot_uuid = proxybot
+                        try:
+                            self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
+                                id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
+                            num_proxybots = self.cursor.fetchall()
+                            if num_proxybots and int(num_proxybots[0][0]) > 0:
+                                subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
+                                    constants.daemons,
+                                    '--bounced',
+                                    '--username', proxybot_jid], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                msg.reply("Proxybot %s has been restarted - look for it online!" % proxybot_jid).send()
+                            else:
+                                msg.reply("%d proxybots found in the database for %s, %s." % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)).send()
+                        except Exception, e:
+                            msg.reply("Error: %s\nAre you sure %s, %s is registered and in the database?" % (e, proxybot_jid, proxybot_uuid)).send()
+                    else:
+                        msg.reply("Please include a JID username for the proxybot.").send()
                 else:
                     msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
             else:
@@ -190,10 +215,10 @@ class HostbotComponent(ComponentXMPP):
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                '--daemon',
-                '-u', new_jid,
-                '-1', user1,
-                '-2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                constants.daemon,
+                '-iusername', new_jid,
+                '--participant1', user1,
+                '--participant2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             self._add_or_remove_observers(user1, user2, HostbotCommand.add_observer)
             logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
         except MySQLdb.Error, e:
@@ -263,7 +288,7 @@ class HostbotComponent(ComponentXMPP):
             return None
 
     def _user_exists(self, user):
-        self.cursor.execute("SELECT COUNT(*) FROM users WHERE user=%(user)s", {'user': user})
+        self.cursor.execute("SELECT COUNT(*) FROM users WHERE user = %(user)s", {'user': user})
         num_users = self.cursor.fetchall()
         if num_users and int(num_users[0][0]) == 0:
             return False
