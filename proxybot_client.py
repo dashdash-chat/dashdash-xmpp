@@ -99,6 +99,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             'user': self.boundjid.user,
             'host': constants.server,
         })
+
     def bounce(self, event):
         subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
             #'--daemon',
@@ -259,6 +260,9 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 if msg['body'].startswith('/bounce'):
                     msg.reply("Bouncing! Be right back...").send()
                     self.event('bounce', {})
+                if msg['body'].startswith('/kill'):
+                    msg.reply("Goodbye!").send()
+                    self.event('disconnect_and_unregister', {})
                 else:
                     msg.reply("Sorry admin, I didn't understand that command.").send()
                 return

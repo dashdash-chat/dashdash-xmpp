@@ -2,6 +2,7 @@ import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 daemons = '--daemon'
+# daemons = '--verbose'
 # daemons = ''
 
 server = 'localhost'

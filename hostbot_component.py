@@ -130,7 +130,7 @@ class HostbotComponent(ComponentXMPP):
                             proxybot_jid = proxybot
                             proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
                         else:    
-                            proxybot_jid = shortuuid.encode(uuid.UUID(proxybot))
+                            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot)))
                             proxybot_uuid = proxybot
                         try:
                             self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
@@ -215,8 +215,8 @@ class HostbotComponent(ComponentXMPP):
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
             subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                constants.daemon,
-                '-iusername', new_jid,
+                constants.daemons,
+                '--username', new_jid,
                 '--participant1', user1,
                 '--participant2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             self._add_or_remove_observers(user1, user2, HostbotCommand.add_observer)
