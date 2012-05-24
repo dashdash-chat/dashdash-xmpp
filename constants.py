@@ -1,3 +1,5 @@
+import shortuuid
+shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 server = 'localhost'
 xmlrpc_port = 4560
@@ -11,6 +13,8 @@ hostbot_nick = 'Hostbot'
 hostbot_secret = 'is3joic8vorn8uf4ge4o'
 hostbot_port = 5237
 default_user_password = 'password'
+
+admin_users = ['admin1@localhost']
 
 hostbot_xmlrpc_jid = '_hostbot'
 hostbot_xmlrpc_password = 'wraf7marj7og4e7ob4je'
@@ -26,6 +30,8 @@ idle_group = 'Chatidea Contacts'
 db_name = 'chatidea'
 hostbot_mysql_user = 'hostbot'
 hostbot_mysql_password = 'ish9gen8ob8hap7ac9hy'
+proxybotinfo_mysql_user = 'proxybotinfo'
+proxybotinfo_mysql_password = 'oin9yef4aim9nott8if9'
 userinfo_mysql_user = 'userinfo'
 userinfo_mysql_password = 'me6oth8ig3tot7as2ash'
 

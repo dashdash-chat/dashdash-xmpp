@@ -35,7 +35,6 @@ def proxybot_only(fn):
 class HostbotComponent(ComponentXMPP):
     def __init__(self):
         ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
-        shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
         self.boundjid.regenerate()
         self.auto_authorize = True
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -158,7 +157,7 @@ class HostbotComponent(ComponentXMPP):
         # tell the non-retired proxybots to remove this participant - they should then be able to take care of themselves as appropriate
         self.cursor.execute("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
             proxybots.id = proxybot_participants.proxybot_id AND
-            (proxybots.state = 'idle' OR proxybots.state = 'active') AND
+            (proxybots.stage = 'idle' OR proxybots.stage = 'active') AND
             proxybot_participants.user = %(user)s""", {'user': user})
         proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
         for proxybot_id in proxybot_ids:
@@ -225,7 +224,7 @@ class HostbotComponent(ComponentXMPP):
         for participant, observer in [(user1, user2), (user2, user1)]:
             self.cursor.execute("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
                 proxybots.id = proxybot_participants.proxybot_id AND
-                proxybots.state = 'active' AND
+                proxybots.stage = 'active' AND
                 proxybot_participants.user = %(participant)s AND
             	proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
             	{'participant': participant, 'observer': observer}, )
@@ -249,7 +248,7 @@ class HostbotComponent(ComponentXMPP):
     def _find_idle_proxybot(self, user1, user2):
         self.cursor.execute("""SELECT proxybots.id FROM proxybots, 
             proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
-            proxybots.state = 'idle' AND
+            proxybots.stage = 'idle' AND
             proxybots.id = proxybot_participants_1.proxybot_id AND
             proxybots.id = proxybot_participants_2.proxybot_id AND
             proxybot_participants_1.user = %(user1)s AND
@@ -356,7 +355,7 @@ class HostbotComponent(ComponentXMPP):
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user1 = form['values']['user1']
         user2 = form['values']['user2']
-        self.cursor.execute("UPDATE proxybots SET state = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self.cursor.execute("UPDATE proxybots SET stage = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
         self._create_friendship(user1, user2)  #NOTE activate before creating the new proxybot, so the idle-does-not-exist check passes
         session['payload'] = None
         session['next'] = None
@@ -365,7 +364,7 @@ class HostbotComponent(ComponentXMPP):
         form = payload
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        self.cursor.execute("UPDATE proxybots SET state = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self.cursor.execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
         self.cursor.execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
             {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None

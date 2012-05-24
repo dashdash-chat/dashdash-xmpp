@@ -124,7 +124,7 @@ class Participant(User):
             cursor = db.cursor()
             cursor.execute("""SELECT proxybot_participants_2.user FROM proxybots, 
                 proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
-                proxybots.state = 'idle' AND
+                proxybots.stage = 'idle' AND
                 proxybots.id = proxybot_participants_1.proxybot_id AND
                 proxybots.id = proxybot_participants_2.proxybot_id AND
                 proxybot_participants_1.user = %(user)s""", {'user': self.user()})
