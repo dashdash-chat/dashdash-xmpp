@@ -33,7 +33,7 @@ def proxybot_only(fn):
 
 
 class HostbotComponent(ComponentXMPP):
-    def __init__(self):
+    def __init__(self, restore_proxybots):
         ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
         self.boundjid.regenerate()
         self.auto_authorize = True
@@ -47,6 +47,17 @@ class HostbotComponent(ComponentXMPP):
         except MySQLdb.Error, e:
             logging.error("Failed to connect to database and creat cursor, %d: %s" % (e.args[0], e.args[1]))
             self.cleanup()
+        if restore_proxybots:
+            self.cursor.execute("SELECT id FROM proxybots WHERE stage != 'retired'")
+            proxybot_uuids = [proxybot_uuid[0] for proxybot_uuid in self.cursor.fetchall()]
+            for proxybot_uuid in proxybot_uuids:
+                proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
+                if not self._proxybot_is_online(proxybot_jid):
+                    subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
+                        constants.daemons,
+                        '--bounced',
+                        '--username', proxybot_jid], shell=False)
+                    logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         # Add event handlers
         self.add_event_handler("session_start", self.start)
         self.add_event_handler('message', self.message)
@@ -136,11 +147,11 @@ class HostbotComponent(ComponentXMPP):
                             self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
                                 id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
                             num_proxybots = self.cursor.fetchall()
-                            if num_proxybots and int(num_proxybots[0][0]) > 0:
+                            if num_proxybots and int(num_proxybots[0][0]) > 0 and not self._proxybot_is_online(proxybot_jid):
                                 subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
                                     constants.daemons,
                                     '--bounced',
-                                    '--username', proxybot_jid], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                                    '--username', proxybot_jid], shell=False)
                                 msg.reply("Proxybot %s has been restarted - look for it online!" % proxybot_jid).send()
                             else:
                                 msg.reply("%d proxybots found in the database for %s, %s." % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)).send()
@@ -397,6 +408,16 @@ class HostbotComponent(ComponentXMPP):
                                           iq['error']['text']))
         self['xep_0050'].terminate_command(session)
 
+    def _proxybot_is_online(self, proxybot_jid):
+        try:              
+            res = self._xmlrpc_command('user_sessions_info', {
+                'user': proxybot_jid,
+                'host': constants.server
+            })
+            return len(res['sessions_info']) > 0
+        except xmlrpclib.ProtocolError, e:
+            logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (self._user, str(e)))
+            return False
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
         return fn({
@@ -414,20 +435,15 @@ if __name__ == '__main__':
     optp.add_option('-v', '--verbose', help='set logging to COMM',
                     action='store_const', dest='loglevel',
                     const=5, default=logging.INFO)
-    optp.add_option("-j", "--jid", dest="jid",
-                    help="JID to use")
-    optp.add_option("-p", "--password", dest="password",
-                    help="password to use")
-    optp.add_option("-s", "--server", dest="server",
-                    help="server to connect to")
-    optp.add_option("-P", "--port", dest="port",
-                    help="port to connect to")
+    optp.add_option('-r', '--restore', help='restore inactive proxybots from the db',
+                    action='store_const', dest='restore',
+                    const=True, default=False)
     opts, args = optp.parse_args()
 
     logging.basicConfig(level=opts.loglevel,
                         format='%(levelname)-8s %(message)s')
 
-    xmpp = HostbotComponent()
+    xmpp = HostbotComponent(opts.restore)
     xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0050') # Adhoc Commands
