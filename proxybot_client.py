@@ -91,7 +91,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self._handle_chatstate)
 
-    def disconnect_and_unregister(self, event):
+    def disconnect_and_unregister(self, event={}):
         for participant in self.participants.union(self._get_observers()):
             participant.delete_from_rosters()
         self.disconnect(wait=True)
@@ -100,7 +100,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             'host': constants.server,
         })
 
-    def bounce(self, event):
+    def bounce(self, event={}):
         subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
             #'--daemon',
             '--username', self.boundjid.user,
@@ -335,10 +335,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @hostbot_only
     def _cmd_receive_participant_deleted(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Participant deleted')
-        form['instructions'] = 'Remove a just-deleted user from this proxybot\'s participants.'
-        form.addField(var='user',
-                      ftype='text-single',
-                      label='The user that was deleted')
+        form.addField(ftype='text-single', var='user')
         session['payload'] = form
         session['next'] = self._cmd_complete_participant_deleted
         session['has_next'] = False
@@ -346,13 +343,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @hostbot_only
     def _cmd_receive_add_observer(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Add observer')
-        form['instructions'] = 'Add an observer who can see this proxybot in their conversations list.'
-        form.addField(var='participant',
-                      ftype='text-single',
-                      label='The participant for whom this is an observer')
-        form.addField(var='observer',
-                    ftype='text-single',
-                    label='The observer to add')
+        form.addField(ftype='text-single', var='participant')
+        form.addField(ftype='text-single', var='observer')
         session['payload'] = form
         session['next'] = self._cmd_complete_add_observer
         session['has_next'] = False
@@ -360,13 +352,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @hostbot_only
     def _cmd_receive_remove_observer(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Remove observer')
-        form['instructions'] = 'Remove an observer who could see this proxybot in their conversations list.'
-        form.addField(var='participant',
-                      ftype='text-single',
-                      label='The participant for whom this is an observer')
-        form.addField(var='observer',
-                    ftype='text-single',
-                    label='The observer to remove')
+        form.addField(ftype='text-single', var='participant')
+        form.addField(ftype='text-single', var='observer')
         session['payload'] = form
         session['next'] = self._cmd_complete_remove_observer
         session['has_next'] = False
@@ -414,42 +401,33 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @hostbot_only
     def _cmd_send_activate(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='proxybot',
-                      value=self.boundjid.user)
-        form.addField(var='user1',
-                      value=session['user1'])
-        form.addField(var='user2',
-                      value=session['user2'])
+        form.addField(var='proxybot', value=self.boundjid.user)
+        form.addField(var='user1', value=session['user1'])
+        form.addField(var='user2', value=session['user2'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
     @hostbot_only
     def _cmd_send_retire(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='proxybot',
-                      value=self.boundjid.user)
-        form.addField(var='user',
-                      value=session['user'])
+        form.addField(var='proxybot', value=self.boundjid.user)
+        form.addField(var='user', value=session['user'])
         session['payload'] = form
         session['next'] = self._cmd_finish_retire
         self['xep_0050'].complete_command(session)
     @hostbot_only
     def _cmd_send_add_participant(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='proxybot',
-                      value=self.boundjid.user)
-        form.addField(var='user',
-                      value=session['user'])
+        form.addField(var='proxybot', value=self.boundjid.user)
+        form.addField(var='user', value=session['user'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
     @hostbot_only
     def _cmd_send_remove_participant(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='proxybot',
-                      value=self.boundjid.user)
-        form.addField(var='user',
-                      value=session['user'])
+        form.addField(var='proxybot', value=self.boundjid.user)
+        form.addField(var='user', value=session['user'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)

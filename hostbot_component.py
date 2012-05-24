@@ -299,18 +299,15 @@ class HostbotComponent(ComponentXMPP):
     @proxybot_only
     def _cmd_send_participant_deleted(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='user',
-                      value=session['user'])
+        form.addField(var='user', value=session['user'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
     @proxybot_only
     def _cmd_send_addremove_observer(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='participant',
-                      value=session['participant'])
-        form.addField(var='observer',
-                      value=session['observer'])
+        form.addField(var='participant', value=session['participant'])
+        form.addField(var='observer', value=session['observer'])
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
@@ -319,16 +316,9 @@ class HostbotComponent(ComponentXMPP):
     @proxybot_only
     def _cmd_receive_activate(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Activate proxybot')
-        form['instructions'] = 'Record the activation of a proxybot in the database.'
-        form.addField(var='proxybot',
-                      ftype='text-single',
-                      label='The user of the proxybot')
-        form.addField(var='user1',
-                      ftype='text-single',
-                      label='The first of the two users in the conversation')
-        form.addField(var='user2',
-                      ftype='text-single',
-                      label='The second of the two users in the conversation')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user1')
+        form.addField(ftype='text-single', var='user2')
         session['payload'] = form
         session['next'] = self._cmd_complete_activate
         session['has_next'] = False
@@ -336,13 +326,8 @@ class HostbotComponent(ComponentXMPP):
     @proxybot_only
     def _cmd_receive_retire(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Retire proxybot')
-        form['instructions'] = 'Record the retirement of a proxybot in the database.'
-        form.addField(var='proxybot',
-                      ftype='text-single',
-                      label='The user of the proxybot')
-        form.addField(var='user',
-                      ftype='text-single',
-                      label='The last user to leave the conversation')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
         session['payload'] = form
         session['next'] = self._cmd_complete_retire
         session['has_next'] = False
@@ -350,13 +335,8 @@ class HostbotComponent(ComponentXMPP):
     @proxybot_only
     def _cmd_receive_add_participant(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Add a participant')
-        form['instructions'] = 'Record the addition of a participant to an active proxybot in the database.'
-        form.addField(var='proxybot',
-                      ftype='text-single',
-                      label='The user of the proxybot')
-        form.addField(var='user',
-                      ftype='text-single',
-                      label='The user to add')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
         session['payload'] = form
         session['next'] = self._cmd_complete_add_participant
         session['has_next'] = False
@@ -364,13 +344,8 @@ class HostbotComponent(ComponentXMPP):
     @proxybot_only
     def _cmd_receive_remove_participant(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Remove a participant')
-        form['instructions'] = 'Record the removal of a participant from an active proxybot in the database.'
-        form.addField(var='proxybot',
-                      ftype='text-single',
-                      label='The user of the proxybot')
-        form.addField(var='user',
-                      ftype='text-single',
-                      label='The user to remove')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
         session['payload'] = form
         session['next'] = self._cmd_complete_remove_participant
         session['has_next'] = False
