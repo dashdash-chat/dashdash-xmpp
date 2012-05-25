@@ -104,7 +104,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
             constants.daemons,
             '--username', self.boundjid.user,
-            '--bounced'], shell=False, stdout=constants.proxybot_logfile, stderr=subprocess.STDOUT)
+            '--bounced'], shell=False, stdout=open(constants.proxybot_logfile, 'a'), stderr=subprocess.STDOUT)
         self.disconnect(wait=True)
 
     def _handle_start(self, event):
@@ -112,6 +112,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self['xep_0050'].add_command(node=HostbotCommand.delete_proxybot,
                                      name='Disconnect and unregister proxybot',
                                      handler=self._cmd_complete_delete_proxybot,
+                                     jid=self.boundjid.full)
+        self['xep_0050'].add_command(node=HostbotCommand.bounce_proxybot,
+                                     name='Disconnect and restart the proxybot',
+                                     handler=self._cmd_complete_bounce_proxybot,
                                      jid=self.boundjid.full)
         self['xep_0050'].add_command(node=HostbotCommand.participant_deleted,
                                      name='Remove a participant from this proxybot',
@@ -126,7 +130,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                      handler=self._cmd_receive_remove_observer,
                                      jid=self.boundjid.full)
         # Set up rosters and visibility
-        if self.stage == Stage.IDLE:
+        if self.stage is Stage.IDLE:
             # Don't add itself to the rosters or re-send invisibility IQ if this proxybot is already
             # active, otherwise it will move back to the idle group in the participants' rosters.
             for participant in self.participants:
@@ -148,7 +152,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 if not participant.is_online():
                     self._remove_participant(participant)
             # if we're still not retired, we know at least two users are still online, so we should be visible
-            if self.stage != Stage.RETIRED:
+            if self.stage is not Stage.RETIRED:
                 self._set_invisibility(False)
 
     def _get_observers(self):
@@ -363,6 +367,11 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['has_next'] = False
         session['next'] = None
         return session
+    def _cmd_complete_bounce_proxybot(self, payload, session):
+        self.bounce()
+        session['has_next'] = False
+        session['next'] = None
+        return session
     def _cmd_complete_participant_deleted(self, payload, session):
         form = payload
         user = form['values']['user']
@@ -486,13 +495,19 @@ if __name__ == '__main__':
             cursor = db.cursor()
             cursor.execute("""SELECT proxybots.stage, proxybot_participants.user FROM 
                 proxybots, proxybot_participants WHERE
+                proxybots.id = proxybot_participants.proxybot_id AND
                 proxybots.id = %(proxybot_id)s""", {'proxybot_id': shortuuid.decode(proxybot_id)})
             result = cursor.fetchall()
-            stage = result[0][0]
-            participants = set([item[1] for item in result]) 
+            if result[0][0] == 'idle':
+                stage = Stage.IDLE
+            elif result[0][0] == 'active':
+                stage = Stage.ACTIVE
+            else:
+                stage = Stage.RETIRED
+            participants = set([item[1] for item in result])
             db.close()
         except MySQLdb.Error, e:
-            print "%(proxybot_id)-34s Error %(number)d: %(string)s" % {'proxybot_id': opts.username, 'number': e.args[0], 'string': e.args[1]}
+            print "%(proxybot_jid)-34s Error %(number)d: %(string)s" % {'proxybot_jid': opts.username, 'number': e.args[0], 'string': e.args[1]}
             db.close()
             sys.exit(1)
         xmpp = Proxybot(opts.username, participants, stage)
@@ -507,17 +522,16 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0050') # Adhoc Commands
     xmpp.register_plugin('xep_0085') # Chat State Notifications
     xmpp.register_plugin('xep_0199') # XMPP Ping
-    
-    if opts.daemon:
-        with daemon.DaemonContext():
-            if xmpp.connect():
-                xmpp.process(block=True)
-                print('%(proxybot_id)-34s Done' % {'proxybot_id': opts.username})
-            else:
-                print('%(proxybot_id)-34s Unable to connect' % {'proxybot_id': opts.username})
-    else:
+
+    def run_proxybot(xmpp, proxybot_jid):
         if xmpp.connect():
             xmpp.process(block=True)
-            print('%(proxybot_id)-34s Done' % {'proxybot_id': opts.username})
-        else:    
-            print('%(proxybot_id)-34s Unable to connect' % {'proxybot_id': opts.username})
+            print('%(proxybot_jid)-34s Done' % {'proxybot_jid': proxybot_jid})
+        else:
+            print('%(proxybot_jid)-34s Unable to connect' % {'proxybot_jid': proxybot_jid})
+
+    if opts.daemon:    
+        with daemon.DaemonContext(stdout=sys.stdout, stderr=sys.stderr):
+            run_proxybot(xmpp, opts.username)
+    else:
+        run_proxybot(xmpp, opts.username)

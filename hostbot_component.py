@@ -33,11 +33,15 @@ def proxybot_only(fn):
 
 
 class HostbotComponent(ComponentXMPP):
-    def __init__(self, restore_proxybots):
+    def __init__(self, restore_proxybots, bounce_proxybots):
         ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
         self.boundjid.regenerate()
         self.auto_authorize = True
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
+        self.register_plugin('xep_0030') # Service Discovery
+        self.register_plugin('xep_0004') # Data Forms
+        self.register_plugin('xep_0050') # Adhoc Commands
+        self.register_plugin('xep_0199') # XMPP Ping
         # Connect to the database
         self.db = None
         self.cursor = None
@@ -55,6 +59,19 @@ class HostbotComponent(ComponentXMPP):
                 if not self._proxybot_is_online(proxybot_jid):
                     self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
                     logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
+        if bounce_proxybots:
+            self.cursor.execute("SELECT id FROM proxybots WHERE stage != 'retired'")
+            proxybot_uuids = [proxybot_uuid[0] for proxybot_uuid in self.cursor.fetchall()]
+            for proxybot_uuid in proxybot_uuids:
+                proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
+                if self._proxybot_is_online(proxybot_jid):
+                    session = {'next': self._cmd_complete,
+                               'error': self._cmd_error}
+                    self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_uuid),
+                                                   node=HostbotCommand.bounce_proxybot,
+                                                   session=session,
+                                                   ifrom=constants.hostbot_jid)
+                    logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         # Add event handlers
         self.add_event_handler("session_start", self.start)
         self.add_event_handler('message', self.message)
@@ -161,12 +178,16 @@ class HostbotComponent(ComponentXMPP):
             resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
 
     def handle_probe(self, presence):
-        self.sendPresence(pfrom=self.fulljid_with_user(), pnick=constants.hostbot_nick, pstatus="Who do you want to chat with?", pshow="available", pto=presence['from'])
+        self.sendPresence(pfrom=self.fulljid_with_user(),
+                          pnick=constants.hostbot_nick,
+                          pstatus="Who do you want to chat with?",
+                          pshow="available",
+                          pto=presence['from'])
 
     def _launch_proxybot(self, proxybot_args):
         process_args = [sys.executable, "/vagrant/chatidea/proxybot_client.py", constants.daemons]
         process_args.extend(proxybot_args)
-        subprocess.Popen(process_args, shell=False, stdout=constants.proxybot_logfile, stderr=subprocess.STDOUT)
+        subprocess.Popen(process_args, shell=False, stdout=open(constants.proxybot_logfile, 'a'), stderr=subprocess.STDOUT)
 
     def _create_user(self, user, password):
         #LATER validate that user does not start with admin or any of the other reserverd names
@@ -270,9 +291,9 @@ class HostbotComponent(ComponentXMPP):
                                                session=session,
                                                ifrom=constants.hostbot_jid)
 
-    def _get_jid_for_proxybot(self, proxybot_id):
+    def _get_jid_for_proxybot(self, proxybot_uuid):
         return '%s%s@%s/%s' % (constants.proxybot_prefix,
-                               shortuuid.encode(uuid.UUID(proxybot_id)),
+                               shortuuid.encode(uuid.UUID(proxybot_uuid)),
                                constants.server,
                                constants.proxybot_resource)
 
@@ -411,7 +432,7 @@ class HostbotComponent(ComponentXMPP):
             })
             return len(res['sessions_info']) > 0
         except xmlrpclib.ProtocolError, e:
-            logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (self._user, str(e)))
+            logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (proxybot_jid, str(e)))
             return False
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
@@ -433,20 +454,19 @@ if __name__ == '__main__':
     optp.add_option('-r', '--restore', help='restore inactive proxybots from the db',
                     action='store_const', dest='restore',
                     const=True, default=False)
+    optp.add_option('-b', '--bounce', help='bounce all of the online proxybots',
+                    action='store_const', dest='bounce',
+                    const=True, default=False)
     opts, args = optp.parse_args()
 
     logging.basicConfig(level=opts.loglevel,
-                        format='%(levelname)-8s %(message)s')
+                        format='Hostbot  %(levelname)-8s %(message)s')
 
-    xmpp = HostbotComponent(opts.restore)
-    xmpp.register_plugin('xep_0030') # Service Discovery
-    xmpp.register_plugin('xep_0004') # Data Forms
-    xmpp.register_plugin('xep_0050') # Adhoc Commands
-    xmpp.register_plugin('xep_0199') # XMPP Ping
+    xmpp = HostbotComponent(opts.restore, opts.bounce)
     
     if xmpp.connect(constants.server):
         xmpp.process(block=True)
         xmpp.cleanup()
-        print("Done")
+        print("Hostbot done")
     else:
-        print("Unable to connect.")
+        print("Hostbot unable to connect.")

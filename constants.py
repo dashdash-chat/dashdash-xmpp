@@ -39,7 +39,7 @@ proxybotinfo_mysql_password = 'oin9yef4aim9nott8if9'
 userinfo_mysql_user = 'userinfo'
 userinfo_mysql_password = 'me6oth8ig3tot7as2ash'
 
-proxybot_logfile = open('/var/log/chatidea/proxybots.log', 'a')
+proxybot_logfile = '/var/log/chatidea/proxybots.log'
 
 class Stage:
     IDLE = 1
@@ -54,6 +54,7 @@ class ProxybotCommand:
 
 class HostbotCommand:
     delete_proxybot = 'delete_proxybot'
+    bounce_proxybot = 'bounce_proxybot'
     participant_deleted = 'participant_deleted'
     add_observer = 'add_observer'
     remove_observer = 'remove_observer'

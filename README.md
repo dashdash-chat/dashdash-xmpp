@@ -38,5 +38,3 @@ passwords:
     hostbot component secret and host@localhost password: yeij9bik9fard3ij4bai
     proxybot password: ow4coirm5oc5coc9folv
 
-TODO:
-    double-check ejabberd_xmlrpc access restrictions, think about encryption
