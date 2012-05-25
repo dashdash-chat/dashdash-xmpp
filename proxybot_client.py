@@ -102,9 +102,9 @@ class Proxybot(sleekxmpp.ClientXMPP):
 
     def bounce(self, event={}):
         subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-            #'--daemon',
+            constants.daemons,
             '--username', self.boundjid.user,
-            '--bounced'], shell=False)
+            '--bounced'], shell=False, stdout=constants.proxybot_logfile, stderr=subprocess.STDOUT)
         self.disconnect(wait=True)
 
     def _handle_start(self, event):
@@ -472,11 +472,11 @@ if __name__ == '__main__':
                     const=True, default=False)
     opts, args = optp.parse_args()
 
-    logging.basicConfig(level=opts.loglevel,
-                        format='%(levelname)-8s %(message)s')
-
     if opts.username is None:
         opts.username = raw_input("Proxybot username: ")
+    logging.basicConfig(level=opts.loglevel,
+                        format='%(proxybot_id)-36s %%(levelname)-8s %%(message)s' % {'proxybot_id': opts.username})
+
     if opts.bounced:
         proxybot_id = opts.username.split(constants.proxybot_prefix)[1]
         db = None
@@ -492,7 +492,7 @@ if __name__ == '__main__':
             participants = set([item[1] for item in result]) 
             db.close()
         except MySQLdb.Error, e:
-            print "Error %d: %s" % (e.args[0], e.args[1])
+            print "%(proxybot_id)-34s Error %(number)d: %(string)s" % {'proxybot_id': opts.username, 'number': e.args[0], 'string': e.args[1]}
             db.close()
             sys.exit(1)
         xmpp = Proxybot(opts.username, participants, stage)
@@ -512,12 +512,12 @@ if __name__ == '__main__':
         with daemon.DaemonContext():
             if xmpp.connect():
                 xmpp.process(block=True)
-                print("Done")
+                print('%(proxybot_id)-34s Done' % {'proxybot_id': opts.username})
             else:
-                print("Unable to connect.")
+                print('%(proxybot_id)-34s Unable to connect' % {'proxybot_id': opts.username})
     else:
         if xmpp.connect():
             xmpp.process(block=True)
-            print("Done")
-        else:
-            print("Unable to connect.")
+            print('%(proxybot_id)-34s Done' % {'proxybot_id': opts.username})
+        else:    
+            print('%(proxybot_id)-34s Unable to connect' % {'proxybot_id': opts.username})

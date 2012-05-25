@@ -39,11 +39,12 @@ proxybotinfo_mysql_password = 'oin9yef4aim9nott8if9'
 userinfo_mysql_user = 'userinfo'
 userinfo_mysql_password = 'me6oth8ig3tot7as2ash'
 
+proxybot_logfile = open('/var/log/chatidea/proxybots.log', 'a')
+
 class Stage:
     IDLE = 1
     ACTIVE = 2
     RETIRED = 3
-
 
 class ProxybotCommand:
     activate = 'activate'

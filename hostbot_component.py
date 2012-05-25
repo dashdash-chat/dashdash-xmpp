@@ -53,10 +53,7 @@ class HostbotComponent(ComponentXMPP):
             for proxybot_uuid in proxybot_uuids:
                 proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
                 if not self._proxybot_is_online(proxybot_jid):
-                    subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                        constants.daemons,
-                        '--bounced',
-                        '--username', proxybot_jid], shell=False)
+                    self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
                     logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         # Add event handlers
         self.add_event_handler("session_start", self.start)
@@ -148,14 +145,11 @@ class HostbotComponent(ComponentXMPP):
                                 id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
                             num_proxybots = self.cursor.fetchall()
                             if num_proxybots and int(num_proxybots[0][0]) > 0 and not self._proxybot_is_online(proxybot_jid):
-                                subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                                    constants.daemons,
-                                    '--bounced',
-                                    '--username', proxybot_jid], shell=False)
+                                self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
                                 msg.reply("Proxybot %s has been restarted - look for it online!" % proxybot_jid).send()
                             else:
                                 msg.reply("%d proxybots found in the database for %s, %s." % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)).send()
-                        except Exception, e:
+                        except ValueError, e:
                             msg.reply("Error: %s\nAre you sure %s, %s is registered and in the database?" % (e, proxybot_jid, proxybot_uuid)).send()
                     else:
                         msg.reply("Please include a JID username for the proxybot.").send()
@@ -168,6 +162,11 @@ class HostbotComponent(ComponentXMPP):
 
     def handle_probe(self, presence):
         self.sendPresence(pfrom=self.fulljid_with_user(), pnick=constants.hostbot_nick, pstatus="Who do you want to chat with?", pshow="available", pto=presence['from'])
+
+    def _launch_proxybot(self, proxybot_args):
+        process_args = [sys.executable, "/vagrant/chatidea/proxybot_client.py", constants.daemons]
+        process_args.extend(proxybot_args)
+        subprocess.Popen(process_args, shell=False, stdout=constants.proxybot_logfile, stderr=subprocess.STDOUT)
 
     def _create_user(self, user, password):
         #LATER validate that user does not start with admin or any of the other reserverd names
@@ -225,11 +224,7 @@ class HostbotComponent(ComponentXMPP):
             self.cursor.execute("""INSERT INTO proxybot_participants (proxybot_id, user) VALUES 
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
-            subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-                constants.daemons,
-                '--username', new_jid,
-                '--participant1', user1,
-                '--participant2', user2], shell=False)#, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self._launch_proxybot(['--username', new_jid, '--participant1', user1, '--participant2', user2])
             self._add_or_remove_observers(user1, user2, HostbotCommand.add_observer)
             logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
         except MySQLdb.Error, e:

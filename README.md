@@ -10,7 +10,7 @@ useful commands:
 
     sudo tail -f /var/log/ejabberd/ejabberd.log
 
-    sudo kill -15 `ps faux | grep proxybot | awk '{print $2}'`
+    sudo kill -15 `ps faux | grep proxybot | grep python | awk '{print $2}'`
     
     sudo ejabberdctl restart
 
