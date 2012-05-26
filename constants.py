@@ -11,14 +11,17 @@ xmlrpc_port = 4560
 proxybot_prefix = 'proxybot_'
 proxybot_resource = 'python_client'
 proxybot_password = 'ow4coirm5oc5coc9folv'
+hostbot_user = 'host'
 hostbot_server = 'bot.localhost'
-hostbot_jid = '%s/python_component' % hostbot_server
+hostbot_user_jid = '%s@%s' % (hostbot_user, hostbot_server)
+hostbot_component_jid = '%s/python_component' % hostbot_server
 hostbot_nick = 'Hostbot'
 hostbot_secret = 'is3joic8vorn8uf4ge4o'
 hostbot_port = 5237
 default_user_password = 'password'
 
 admin_users = ['admin1@localhost']
+admin_password = 'FgT5bk3'
 
 hostbot_xmlrpc_jid = '_hostbot'
 hostbot_xmlrpc_password = 'wraf7marj7og4e7ob4je'

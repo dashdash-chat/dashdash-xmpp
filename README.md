@@ -29,12 +29,3 @@ useful commands:
     python /vagrant/chatidea/proxybot_client.py -u proxybot262522004685566022765104720483704520632 -s localhost -1 alice -2 dormouse
 
     PROXYBOT='proxybot_12345' && ejabberdctl unregister $PROXYBOT localhost && ejabberdctl register $PROXYBOT localhost ow4coirm5oc5coc9folv && python /vagrant/chatidea/proxybot_client.py -u $PROXYBOT -1 alice -2 dormouse
-
-passwords:
-----------
-    admin password: FgT5bk3
-    sql root password: os6juc8ik4if6jiev3co
-    sql python-helper password: vap4yirck8irg4od4lo6
-    hostbot component secret and host@localhost password: yeij9bik9fard3ij4bai
-    proxybot password: ow4coirm5oc5coc9folv
-

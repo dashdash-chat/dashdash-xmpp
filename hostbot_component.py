@@ -34,7 +34,7 @@ def proxybot_only(fn):
 
 class HostbotComponent(ComponentXMPP):
     def __init__(self, restore_proxybots, bounce_proxybots):
-        ComponentXMPP.__init__(self, constants.hostbot_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
+        ComponentXMPP.__init__(self, constants.hostbot_component_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
         self.boundjid.regenerate()
         self.auto_authorize = True
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -70,7 +70,7 @@ class HostbotComponent(ComponentXMPP):
                     self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_uuid),
                                                    node=HostbotCommand.bounce_proxybot,
                                                    session=session,
-                                                   ifrom=constants.hostbot_jid)
+                                                   ifrom=constants.hostbot_component_jid)
                     logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         # Add event handlers
         self.add_event_handler("session_start", self.start)
@@ -107,7 +107,7 @@ class HostbotComponent(ComponentXMPP):
 
     def message(self, msg):
         if msg['type'] in ['groupchat', 'error']: return
-        if msg['to'].user == 'host':
+        if msg['to'].user == constants.hostbot_user:
             if msg['body'].startswith('/') and msg['from'].user.startswith('admin'):
                 cmd, space, body = msg['body'].lstrip('/').partition(' ')
                 if cmd == 'create_user':
@@ -168,7 +168,7 @@ class HostbotComponent(ComponentXMPP):
             else:
                 msg.reply("I'm sorry, but I only understand /commands from admins.").send()
         else:
-            resp = msg.reply("You've got the wrong bot!\nPlease send messages to host@%s." % msg['to'].domain).send()
+            resp = msg.reply("You've got the wrong bot!\nPlease send messages to %s@%s." % (constants.hostbot_user, constants.hostbot_server)).send()
 
     def handle_probe(self, presence):
         self.sendPresence(pfrom=self.fulljid_with_user(),
@@ -216,7 +216,7 @@ class HostbotComponent(ComponentXMPP):
             self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
                                            node=HostbotCommand.participant_deleted,
                                            session=session,
-                                           ifrom=constants.hostbot_jid)
+                                           ifrom=constants.hostbot_component_jid)
         return user
      
     def _create_friendship(self, user1, user2):
@@ -224,7 +224,7 @@ class HostbotComponent(ComponentXMPP):
             return None
         proxybot_id = self._find_idle_proxybot(user1, user2)
         if proxybot_id:
-            logging.error("Idle proxybots %s arleady exists for %s and %s!" % (proxybot_id, user1, user2))
+            logging.warning("Idle proxybot %s arleady exists for %s and %s!" % (proxybot_id, user1, user2))
             return None
         proxybot_id = uuid.uuid4()
         new_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
@@ -257,7 +257,7 @@ class HostbotComponent(ComponentXMPP):
             self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
                                            node=HostbotCommand.delete_proxybot,
                                            session=session,
-                                           ifrom=constants.hostbot_jid)
+                                           ifrom=constants.hostbot_component_jid)
             self.cursor.execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_id})
             self.cursor.execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_id})
             self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
@@ -282,7 +282,7 @@ class HostbotComponent(ComponentXMPP):
                 self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
                                                node=command,  # they can use the same adhoc send function!
                                                session=session,
-                                               ifrom=constants.hostbot_jid)
+                                               ifrom=constants.hostbot_component_jid)
 
     def _get_jid_for_proxybot(self, proxybot_uuid):
         return '%s%s@%s/%s' % (constants.proxybot_prefix,
