@@ -108,16 +108,9 @@ class HostbotComponent(ComponentXMPP):
     def message(self, msg):
         if msg['type'] in ['groupchat', 'error']: return
         if msg['to'].user == 'host':
-            if msg['body'].startswith('/'):
+            if msg['body'].startswith('/') and msg['from'].user.startswith('admin'):
                 cmd, space, body = msg['body'].lstrip('/').partition(' ')
-                if cmd == 'help':
-                    msg.reply("The available commands are:"
-                        + "\n    /help - print a list of commands"
-                        + "\n    /echo - echo back the message you sent"
-                        + "\n(All commands should be followed by a space, and then the text on which you want the command to operate.)").send()
-                elif cmd == 'echo':
-                    msg.reply("Echo:\n%(body)s" % {'body': body}).send()
-                elif cmd == 'create_user' and msg['from'].user.startswith('admin'):
+                if cmd == 'create_user':
                     try:
                         user, password = body.split(' ')
                         new_user = self._create_user(user, password)
@@ -127,28 +120,28 @@ class HostbotComponent(ComponentXMPP):
                             msg.reply("Something went wrong - perhaps %s already exists?" % new_user).send()
                     except ValueError, e:
                         msg.reply("Please include a password after the username.").send()
-                elif cmd == 'delete_user' and msg['from'].user.startswith('admin'):
+                elif cmd == 'delete_user':
                     user = body.split(' ')[0]
                     old_user = self._delete_user(user)
                     if old_user:
                         msg.reply("User %s successfully deleted." % user).send()
                     else:
                         msg.reply("Something went wrong - perhaps %s does not exist?" % user).send()
-                elif cmd == 'create_friendship' and msg['from'].user.startswith('admin'):
+                elif cmd == 'create_friendship':
                     user1, user2 = body.split(' ')
                     proxybot_jid = self._create_friendship(user1, user2)
                     if proxybot_jid:
                         msg.reply("Friendship for %s and %s successfully created as %s." % (user1, user2, proxybot_jid)).send()
                     else:
                         msg.reply("Something went wrong - are you sure both %s and %s exist and are not friends?" % (user1, user2)).send()
-                elif cmd == 'delete_friendship' and msg['from'].user.startswith('admin'):
+                elif cmd == 'delete_friendship':
                     user1, user2 = body.split(' ')
                     proxybot_jid = self._delete_friendship(user1, user2)
                     if proxybot_jid:
                         msg.reply("Friendship for %s and %s successfully deleted as %s." % (user1, user2, proxybot_jid)).send()
                     else:
                         msg.reply("Something went wrong - are you sure both %s and %s exist and are friends?" % (user1, user2)).send()
-                elif cmd == 'restore_proxybot' and msg['from'].user.startswith('admin'):
+                elif cmd == 'restore_proxybot':
                     proxybot = body.split(' ')[0]
                     if proxybot:
                         if proxybot.startswith(constants.proxybot_prefix):
@@ -173,9 +166,9 @@ class HostbotComponent(ComponentXMPP):
                 else:
                     msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
             else:
-                msg.reply("Hi, welcome to Chatidea.im!\nType /help for a list of commands.").send()
+                msg.reply("I'm sorry, but I only understand /commands from admins.").send()
         else:
-            resp = msg.reply("You've got the wrong bot!\nPlease contact host@%s for assistance." % msg['to'].domain).send()
+            resp = msg.reply("You've got the wrong bot!\nPlease send messages to host@%s." % msg['to'].domain).send()
 
     def handle_probe(self, presence):
         self.sendPresence(pfrom=self.fulljid_with_user(),
