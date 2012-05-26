@@ -161,14 +161,15 @@ class Proxybot(sleekxmpp.ClientXMPP):
             observers = observers.union(participant.observers())
         return observers.difference(self.participants)
 
-    def _get_nick(self, viewer=None):
-        #NOTE observers all see the same nick and are never a participant, so if the viewer is an observer the .difference() won't ever matter
-        others = [participant.user() for participant in self.participants.difference([viewer] if viewer else [])]
-        if len(others) == 1:
+    def _get_nick(self, viewing_participant=None):  # observers all see the same nickname, so this is None for them
+        others = [participant.user() for participant in self.participants.difference([viewing_participant] if viewing_participant else [])]
+        if self.stage is Stage.IDLE:
             return others[0]
-        elif len(others) > 1:
-            comma_sep = ''.join(['%s, ' % other for other in others[:-2]])
-            return '%s%s and %s' % (comma_sep, others[-2], others[-1])
+        elif self.stage is Stage.ACTIVE:
+            if viewing_participant: 
+                others.insert(0, 'you')
+            comma_sep = ''.join([', %s' % other for other in others[1:-1]])
+            return '%s%s & %s' % (others[0], comma_sep, others[-1])
         else:
             return self.boundjid.user
     
@@ -279,7 +280,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                     participant.update_roster(self._get_nick(participant))  # this will be the same nickname as before, but it still needs to be defined
                 self.send_presence()
                 session = {'user1': msg['from'].user,
-                           'user2': self.participants.difference([msg['from'].user]).pop().user(),  # ugh verbose
+                           'user2': self.participants.difference([msg['from'].user]).pop().user(),  # ugh, verbose
                            'next': self._cmd_send_activate,
                            'error': self._cmd_error}
                 self['xep_0050'].start_command(jid=constants.hostbot_jid,
