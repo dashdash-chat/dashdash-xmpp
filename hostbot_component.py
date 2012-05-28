@@ -73,24 +73,21 @@ class HostbotComponent(ComponentXMPP):
                                                    session=session,
                                                    ifrom=constants.hostbot_component_jid)
                     logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
-        # Set up slash commands to be handled by the message handler
+        # Set up slash commands to be handled by the hostbot's SlashCommandRegistry
         self.commands = SlashCommandRegistry()
-        def validate_sender_is_admin(sender):
+        def is_admin(sender):
             return sender.startswith('admin')  
-        def validate_args_one_string(arg_string):
-            arg_list = arg_string.split(' ')
-            if len(arg_list) == 1:
-                return arg_list
+        def has_one_string(sender, args):
+            if len(args) == 1:
+                return args
             return False
-        def validate_args_two_strings(arg_string):
-            arg_list = arg_string.split(' ')
-            if len(arg_list) == 2:
-                return arg_list
+        def has_two_strings(sender, args):
+            if len(args) == 2:
+                return args
             return False
-        def validate_args_proxybot_id(arg_string):
-            arg_list = arg_string.split(' ')
-            if len(arg_list) == 1:
-                proxybot = arg_list[0]
+        def has_proxybot_id(sender, args):
+            if len(args) == 1:
+                proxybot = args[0]
                 if proxybot.startswith(constants.proxybot_prefix):
                     proxybot_jid = proxybot
                     proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
@@ -99,36 +96,36 @@ class HostbotComponent(ComponentXMPP):
                     proxybot_uuid = proxybot
                 return [proxybot_jid, proxybot_uuid]
             return False
-        self.commands.add(SlashCommand(command_name='create_user',
-                                       text_arg_formatting='username password',
-                                       text_description='Create a new user in both ejabberd and the Chatidea database.',
-                                       validate_sender=validate_sender_is_admin,
-                                       validate_args=validate_args_two_strings,
-                                       action=self._create_user))
-        self.commands.add(SlashCommand(command_name='delete_user',
-                                       text_arg_formatting='username',
-                                       text_description='Unregister a user in ejabberd and remove her from the Chatidea database and applicable proxybots.',
-                                       validate_sender=validate_sender_is_admin,
-                                       validate_args=validate_args_one_string,
-                                       action=self._delete_user))
-        self.commands.add(SlashCommand(command_name='create_friendship',
-                                       text_arg_formatting='arg1 arg2',
-                                       text_description='test description',
-                                       validate_sender=validate_sender_is_admin,
-                                       validate_args=validate_args_two_strings,
-                                       action=self._create_friendship))
-        self.commands.add(SlashCommand(command_name='delete_friendship',
-                                       text_arg_formatting='username1 username2',
-                                       text_description='test description',
-                                       validate_sender=validate_sender_is_admin,
-                                       validate_args=validate_args_two_strings,
-                                       action=self._delete_friendship))
-        self.commands.add(SlashCommand(command_name='restore_proxybot',
-                                       text_arg_formatting='proxybot_jid OR proxybot_uuid',
-                                       text_description='Restore an idle or active proxybot from the database',
-                                       validate_sender=validate_sender_is_admin,
-                                       validate_args=validate_args_proxybot_id,
-                                       action=self._restore_proxybot))
+        self.commands.add(SlashCommand(command_name     = 'create_user',
+                                       text_arg_format  = 'username password',
+                                       text_description = 'Create a new user in both ejabberd and the Chatidea database.',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_two_strings,
+                                       action           = self._create_user))
+        self.commands.add(SlashCommand(command_name     = 'delete_user',
+                                       text_arg_format  = 'username',
+                                       text_description = 'Unregister a user in ejabberd and remove her from the Chatidea database and applicable proxybots.',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_one_string,
+                                       action           = self._delete_user))
+        self.commands.add(SlashCommand(command_name     = 'create_friendship',
+                                       text_arg_format  = 'arg1 arg2',
+                                       text_description = 'test description',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_two_strings,
+                                       action           = self._create_friendship))
+        self.commands.add(SlashCommand(command_name     = 'delete_friendship',
+                                       text_arg_format  = 'username1 username2',
+                                       text_description = 'test description',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_two_strings,
+                                       action           = self._delete_friendship))
+        self.commands.add(SlashCommand(command_name     = 'restore_proxybot',
+                                       text_arg_format  = 'proxybot_jid OR proxybot_uuid',
+                                       text_description = 'Restore an idle or active proxybot from the database',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_proxybot_id,
+                                       action           = self._restore_proxybot))
         # Add event handlers
         self.add_event_handler("session_start", self._handle_start)
         self.add_event_handler('message', self._handle_message)
@@ -286,7 +283,7 @@ class HostbotComponent(ComponentXMPP):
         num_proxybots = self.cursor.fetchall()
         if not num_proxybots:
             raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
-        if int(num_proxybots[0][0]) == 1:
+        if int(num_proxybots[0][0]) != 1:
             raise ExecutionError, '%d proxybots found in the database for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
         if self._proxybot_is_online(proxybot_jid):
             raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)

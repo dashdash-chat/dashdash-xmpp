@@ -15,6 +15,7 @@ import constants
 from constants import Stage, ProxybotCommand, HostbotCommand
 from proxybot_invisibility import ProxybotInvisibility
 from proxybot_user import Participant
+from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -81,6 +82,47 @@ class Proxybot(sleekxmpp.ClientXMPP):
             'nick': constants.hostbot_nick,
             'subs': 'both'
         })
+        # Set up slash commands to be handled by the hostbot's SlashCommandRegistry
+        self.commands = SlashCommandRegistry()
+        def is_admin(sender):
+            return sender.startswith('admin')  
+        def is_participant(sender):
+            return sender in self.participants
+        def has_none(sender, args):
+            if len(args) == 0:
+                return []
+            return False
+        def has_one_string(sender, args):
+            if len(args) == 1:
+                return args
+            return False
+        def has_two_strings(sender, args):
+            if len(args) == 2:
+                return args
+            return False
+        def sender_as_arg(sender, args):
+            if has_none(sender, args) is not False:
+                return [sender]
+            return False
+        self.commands.add(SlashCommand(command_name     = 'leave',
+                                       text_arg_format  = '',
+                                       text_description = 'Leave this conversation.',
+                                       validate_sender  = is_participant,
+                                       validate_args    = sender_as_arg,
+                                       action           = self._remove_participant))
+        self.commands.add(SlashCommand(command_name     = 'bounce',
+                                       text_arg_format  = '',
+                                       text_description = 'Disconnect this proxybot and restart it in a new process, reloading the script.',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_none,
+                                       action           = lambda: self.event('bounce', {})))
+        self.commands.add(SlashCommand(command_name     = 'kill',
+                                       text_arg_format  = '',
+                                       text_description = 'Disconnect and unregister this proxybot.',
+                                       validate_sender  = is_admin,
+                                       validate_args    = has_none,
+                                       action           = lambda: self.event('disconnect_and_unregister', {})))
+        # Add event handlers
         self.add_event_handler('session_start', self._handle_start)
         self.add_event_handler('presence_probe', self._handle_presence_probe)
         self.add_event_handler('presence_available', self._handle_presence_available)
@@ -172,7 +214,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             return '%s%s & %s' % (users[0], comma_sep, users[-1])
         else:
             return self.boundjid.user
-    
+
     def _update_nick_in_rosters(self):
         observer_nick = self._get_nick()
         for observer in self._get_observers():
@@ -208,6 +250,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                            node=ProxybotCommand.remove_participant,
                                            session=session)
             logging.info('Removing user %s from the conversation' % user)
+        return "Goodbye, %s!" % user
 
     @active_only
     def _add_participant(self, user):
@@ -250,10 +293,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @participants_only
     def _handle_chatstate(self, msg):
         #LATER try this without new_msg
-        #LATER do i need to duplicate complex _handle_message logic here?
-        new_msg = msg.__copy__()
-        del new_msg['body']
-        self._broadcast_message(new_msg, new_msg['from'].user)
+        if msg['from'].user in self.participants:
+            new_msg = msg.__copy__()
+            del new_msg['body']
+            self._broadcast_message(new_msg, new_msg['from'].user)
 
     @participants_and_observers_only
     def _handle_presence_probe(self, presence):
@@ -262,17 +305,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
     @participants_and_observers_only
     def _handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            if msg['from'].bare in constants.admin_users:
-                if msg['body'].startswith('/bounce'):
-                    msg.reply("Bouncing! Be right back...").send()
-                    self.event('bounce', {})
-                if msg['body'].startswith('/kill'):
-                    msg.reply("Goodbye!").send()
-                    self.event('disconnect_and_unregister', {})
-                else:
-                    msg.reply("Sorry admin, I didn't understand that command.").send()
+            if self.commands.is_command(msg['body']):
+                msg.reply(self.commands.handle_command(msg['from'].user, msg['body'])).send()
                 return
-            if self.stage is Stage.IDLE:
+            elif msg['body'].startswith('/'):  # don't send mis-typed /commands to the other participants
+                msg.reply(self.commands.handle_command(msg['from'].user, '/help')).send()
+                return
+            elif self.stage is Stage.IDLE:  # idle proxybots can receive /commands, but the commands don't activate them
                 self.stage = Stage.ACTIVE
                 observers = self._get_observers()
                 observer_nick = self._get_nick()
@@ -290,15 +329,9 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                                session=session)
                 logging.info('Activating the proxybot')
             # now we know we're in an active stage, and can proceed with the message broadcast
-            if msg['body'].startswith('/') and msg['from'].user in self.participants:
-                if msg['body'].startswith('/leave'):
-                    self._remove_participant(msg['from'].user)
-                else:
-                    msg.reply("LATER: handle other slash commands").send()
-            else:
-                if msg['from'].user not in self.participants:
-                    self._add_participant(msg['from'].user)
-                self._broadcast_message(msg, msg['from'].user)
+            if msg['from'].user not in self.participants:
+                self._add_participant(msg['from'].user)
+            self._broadcast_message(msg, msg['from'].user)
 
     def _broadcast_alert(self, body):
         msg = self.Message()

@@ -21,27 +21,29 @@ class ArgFormatError(Exception):
 
 
 class SlashCommand(object):
-    def __init__(self, command_name, text_arg_formatting, text_description, validate_sender, validate_args, action):
+    def __init__(self, command_name, text_arg_format, text_description, validate_sender, validate_args, action):
         self._command_name = command_name
-        self._text_arg_formatting = text_arg_formatting
+        self._text_arg_format = text_arg_format
         self._text_description = text_description
         self.validate_sender = validate_sender
-        self.validate_args = validate_args  # should return the args as a list if they are valid
+        self.validate_args = validate_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
         self._action = action
 
-    def execute(self, sender, args):
+    def execute(self, sender, arg_string):
         if not self.validate_sender(sender):
             raise PermissionError
-        args = self.validate_args(args)
-        if not args:
+        # pass the sender to validate_args in case the args depend on it or in case it *should* be an arg
+        # also note that .split(' ') returns arrays with the empty string as an element, so filter those out
+        args = self.validate_args(sender, filter(lambda arg: arg != '', arg_string.split(' ')))
+        if args is False:
             raise ArgFormatError
-        return self._action(*args)  # the action method should raise ExecutionErrors with error text as appropriate
+        return self._action(*args)
 
     def __getattr__(self, name):
         if name == 'name':
             return self._command_name
-        elif name == 'arg_formatting':
-            return self._text_arg_formatting
+        elif name == 'arg_format':
+            return self._text_arg_format
         elif name == 'description':
             return self._text_description
             
@@ -62,30 +64,27 @@ class SlashCommandRegistry(object):
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
-                result = slash_command.execute(sender, args)
-                if result:
-                    return 'Your /%s command was successful:\n\t%s' % (slash_command.name, result)
-                else:
-                    return 'Your /%s command was successful.' % slash_command.name
+                result_message = slash_command.execute(sender, args)
+                return result_message or 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
                 return 'Sorry, but there was an error executing this command:\n\t%s' % error
             except PermissionError:
                 return 'Sorry, but you do not have permission to use this command.'
             except ArgFormatError:
                 return 'The arguments were not formatted properly. Please use:\n\t/%s %s' % \
-                    (slash_command.name, slash_command.arg_formatting)
+                    (slash_command.name, slash_command.arg_format)
         elif command_name == 'help':
             command_string = ''
             for slash_command in self.slash_commands.values():
                 if slash_command.validate_sender(sender):
-                    command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_formatting, slash_command.description)
+                    command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
                 return 'You do not have permission to execute any commands with this bot.'
             else:
                 return 'The available commands are:\n' + command_string
                 
         else:
-            return 'Sorry, %s is not a registerd command' % command_name
+            return 'Sorry, %s is not a registered command. Type /help to see a full list.' % command_name
    
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
