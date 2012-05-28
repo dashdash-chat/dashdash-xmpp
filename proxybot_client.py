@@ -112,6 +112,12 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        validate_sender  = is_participant,
                                        transform_args   = sender_and_one_arg,
                                        action           = self._invite_participant))
+        self.commands.add(SlashCommand(command_name     = 'kick',
+                                       text_arg_format  = '',
+                                       text_description = 'Kick a user out of this conversation.',
+                                       validate_sender  = is_participant,
+                                       transform_args   = sender_and_one_arg,
+                                       action           = self._kick_participant))
         self.commands.add(SlashCommand(command_name     = 'bounce',
                                        text_arg_format  = '',
                                        text_description = 'Disconnect this proxybot and restart it in a new process, reloading the script.',
@@ -277,6 +283,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
         logging.info('Adding user %s to the conversation' % user)
 
     def _invite_participant(self, sender, invitee):
+        if invitee in self.participants:
+            raise ExecutionError, '%s is already participating in this conversation!' % invitee
         temp_user = User(invitee, self.boundjid.user)
         if temp_user.is_online():
             self._broadcast_alert('%s has invited %s into the conversation.' % (sender, invitee))
@@ -285,6 +293,14 @@ class Proxybot(sleekxmpp.ClientXMPP):
         else:
             raise ExecutionError, 'You can only invite users who are currently online.'
         return 'Invitation sent!'
+
+    def _kick_participant(self, sender, kickee):
+        if kickee not in self.participants:
+            raise ExecutionError, '%s is not participating in this conversation, so can\'t be kicked.' % kickee
+        self.send_message(mto="%s@%s" % (kickee, constants.server), mbody= '%s has kicked you from the conversation.' % sender)
+        self._remove_participant(kickee)    
+        self._broadcast_alert('%s has kicked %s from the conversation.' % (sender, kickee))
+        return '%s has been kicked!' % kickee
 
     @participants_only
     def _handle_presence_available(self, presence):
