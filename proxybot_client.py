@@ -106,6 +106,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        validate_sender  = is_participant,
                                        transform_args   = sender_as_only_arg,
                                        action           = self._remove_participant))
+        self.commands.add(SlashCommand(command_name     = 'list',
+                                       text_arg_format  = '',
+                                       text_description = 'List the participants in this conversation',
+                                       validate_sender  = is_participant,
+                                       transform_args   = has_none,
+                                       action           = lambda: 'The current participants are:\n' + \
+                                           ''.join(['\t%s\n' % user for user in self.participants]).strip('\n')))
         self.commands.add(SlashCommand(command_name     = 'invite',
                                        text_arg_format  = '',
                                        text_description = 'Invite another user to this conversation.',
