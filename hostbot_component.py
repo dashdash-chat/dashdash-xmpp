@@ -12,6 +12,7 @@ import xmlrpclib
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
+from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
 import constants
 from constants import Stage, ProxybotCommand, HostbotCommand
 
@@ -72,12 +73,78 @@ class HostbotComponent(ComponentXMPP):
                                                    session=session,
                                                    ifrom=constants.hostbot_component_jid)
                     logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
+        # Set up slash commands to be handled by the message handler
+        self.commands = SlashCommandRegistry()
+        def validate_sender_is_admin(sender):
+            return sender.startswith('admin')  
+        def validate_args_one_string(arg_string):
+            arg_list = arg_string.split(' ')
+            if len(arg_list) == 1:
+                return arg_list
+            return False
+        def validate_args_two_strings(arg_string):
+            arg_list = arg_string.split(' ')
+            if len(arg_list) == 2:
+                return arg_list
+            return False
+        def validate_args_proxybot_id(arg_string):
+            arg_list = arg_string.split(' ')
+            if len(arg_list) == 1:
+                proxybot = arg_list[0]
+                if proxybot.startswith(constants.proxybot_prefix):
+                    proxybot_jid = proxybot
+                    proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
+                else:    
+                    proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot)))
+                    proxybot_uuid = proxybot
+                return [proxybot_jid, proxybot_uuid]
+            return False
+        self.commands.add(SlashCommand(command_name='create_user',
+                                       text_arg_formatting='username password',
+                                       text_description='Create a new user in both ejabberd and the Chatidea database.',
+                                       validate_sender=validate_sender_is_admin,
+                                       validate_args=validate_args_two_strings,
+                                       action=self._create_user))
+        self.commands.add(SlashCommand(command_name='delete_user',
+                                       text_arg_formatting='username',
+                                       text_description='Unregister a user in ejabberd and remove her from the Chatidea database and applicable proxybots.',
+                                       validate_sender=validate_sender_is_admin,
+                                       validate_args=validate_args_one_string,
+                                       action=self._delete_user))
+        self.commands.add(SlashCommand(command_name='create_friendship',
+                                       text_arg_formatting='arg1 arg2',
+                                       text_description='test description',
+                                       validate_sender=validate_sender_is_admin,
+                                       validate_args=validate_args_two_strings,
+                                       action=self._create_friendship))
+        self.commands.add(SlashCommand(command_name='delete_friendship',
+                                       text_arg_formatting='username1 username2',
+                                       text_description='test description',
+                                       validate_sender=validate_sender_is_admin,
+                                       validate_args=validate_args_two_strings,
+                                       action=self._delete_friendship))
+        self.commands.add(SlashCommand(command_name='restore_proxybot',
+                                       text_arg_formatting='proxybot_jid OR proxybot_uuid',
+                                       text_description='Restore an idle or active proxybot from the database',
+                                       validate_sender=validate_sender_is_admin,
+                                       validate_args=validate_args_proxybot_id,
+                                       action=self._restore_proxybot))
         # Add event handlers
-        self.add_event_handler("session_start", self.start)
-        self.add_event_handler('message', self.message)
-        self.add_event_handler('presence_probe', self.handle_probe)
+        self.add_event_handler("session_start", self._handle_start)
+        self.add_event_handler('message', self._handle_message)
+        self.add_event_handler('presence_probe', self._handle_probe)
 
-    def start(self, event):
+    def _test_slash_command(self, string, number):
+        logging.warning('%s, %s' % (string, number))
+        number = int(number)
+        res = ''
+        if number != 2:
+            raise ExecutionError, 'testing the error string'
+        for _ in range(number):
+            res += string
+        logging.warning(res)
+
+    def _handle_start(self, event):
         # Register these commands *after* session_start
         self['xep_0050'].add_command(node=ProxybotCommand.activate,
                                      name='Activate proxybot',
@@ -105,72 +172,18 @@ class HostbotComponent(ComponentXMPP):
     def fulljid_with_user(self):
         return 'host' + '@' + self.boundjid.full
 
-    def message(self, msg):
-        if msg['type'] in ['groupchat', 'error']: return
+    def _handle_message(self, msg):
+        if msg['type'] in ['groupchat', 'error']:
+            return
         if msg['to'].user == constants.hostbot_user:
-            if msg['body'].startswith('/') and msg['from'].user.startswith('admin'):
-                cmd, space, body = msg['body'].lstrip('/').partition(' ')
-                if cmd == 'create_user':
-                    try:
-                        user, password = body.split(' ')
-                        new_user = self._create_user(user, password)
-                        if new_user:
-                            msg.reply("User %s successfully created." % new_user).send()
-                        else:
-                            msg.reply("Something went wrong - perhaps %s already exists?" % new_user).send()
-                    except ValueError, e:
-                        msg.reply("Please include a password after the username.").send()
-                elif cmd == 'delete_user':
-                    user = body.split(' ')[0]
-                    old_user = self._delete_user(user)
-                    if old_user:
-                        msg.reply("User %s successfully deleted." % user).send()
-                    else:
-                        msg.reply("Something went wrong - perhaps %s does not exist?" % user).send()
-                elif cmd == 'create_friendship':
-                    user1, user2 = body.split(' ')
-                    proxybot_jid = self._create_friendship(user1, user2)
-                    if proxybot_jid:
-                        msg.reply("Friendship for %s and %s successfully created as %s." % (user1, user2, proxybot_jid)).send()
-                    else:
-                        msg.reply("Something went wrong - are you sure both %s and %s exist and are not friends?" % (user1, user2)).send()
-                elif cmd == 'delete_friendship':
-                    user1, user2 = body.split(' ')
-                    proxybot_jid = self._delete_friendship(user1, user2)
-                    if proxybot_jid:
-                        msg.reply("Friendship for %s and %s successfully deleted as %s." % (user1, user2, proxybot_jid)).send()
-                    else:
-                        msg.reply("Something went wrong - are you sure both %s and %s exist and are friends?" % (user1, user2)).send()
-                elif cmd == 'restore_proxybot':
-                    proxybot = body.split(' ')[0]
-                    if proxybot:
-                        if proxybot.startswith(constants.proxybot_prefix):
-                            proxybot_jid = proxybot
-                            proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
-                        else:    
-                            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot)))
-                            proxybot_uuid = proxybot
-                        try:
-                            self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
-                                id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
-                            num_proxybots = self.cursor.fetchall()
-                            if num_proxybots and int(num_proxybots[0][0]) > 0 and not self._proxybot_is_online(proxybot_jid):
-                                self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
-                                msg.reply("Proxybot %s has been restarted - look for it online!" % proxybot_jid).send()
-                            else:
-                                msg.reply("%d proxybots found in the database for %s, %s." % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)).send()
-                        except ValueError, e:
-                            msg.reply("Error: %s\nAre you sure %s, %s is registered and in the database?" % (e, proxybot_jid, proxybot_uuid)).send()
-                    else:
-                        msg.reply("Please include a JID username for the proxybot.").send()
-                else:
-                    msg.reply("I'm sorry, I didn't understand that command.\nType /help for a full list.").send()
+            if self.commands.is_command(msg['body']):
+                msg.reply(self.commands.handle_command(msg['from'].user, msg['body'])).send()
             else:
-                msg.reply("I'm sorry, but I only understand /commands from admins.").send()
+                msg.reply(self.commands.handle_command(msg['from'].user, '/help')).send()
         else:
             resp = msg.reply("You've got the wrong bot!\nPlease send messages to %s@%s." % (constants.hostbot_user, constants.hostbot_server)).send()
 
-    def handle_probe(self, presence):
+    def _handle_probe(self, presence):
         self.sendPresence(pfrom=self.fulljid_with_user(),
                           pnick=constants.hostbot_nick,
                           pstatus="Who do you want to chat with?",
@@ -186,18 +199,17 @@ class HostbotComponent(ComponentXMPP):
         #LATER validate that user does not start with admin or any of the other reserverd names
         user = user.lower()
         if self._user_exists(user):
-            return None
+            raise ExecutionError, 'User %s already exists in the Chatidea database' % user
         self._xmlrpc_command('register', {
             'user': user,
             'host': constants.server,
             'password': password
         })
         self.cursor.execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
-        return user
 
     def _delete_user(self, user):
         if not self._user_exists(user):
-            return None
+            raise ExecutionError, 'User %s does not exist in the Chatidea database' % user
         self._xmlrpc_command('unregister', {
             'user': user,
             'host': constants.server,
@@ -217,20 +229,20 @@ class HostbotComponent(ComponentXMPP):
                                            node=HostbotCommand.participant_deleted,
                                            session=session,
                                            ifrom=constants.hostbot_component_jid)
-        return user
      
     def _create_friendship(self, user1, user2):
-        if not (self._user_exists(user1) and self._user_exists(user2)):
-            return None
+        if not self._user_exists(user1):
+            raise ExecutionError, 'User1 %s does not exist in the Chatidea database' % user1
+        if not self._user_exists(user2):
+            raise ExecutionError, 'User2 %s does not exist in the Chatidea database' % user2
         proxybot_id = self._find_idle_proxybot(user1, user2)
         if proxybot_id:
-            logging.warning("Idle proxybot %s arleady exists for %s and %s!" % (proxybot_id, user1, user2))
-            return None
+            raise ExecutionError, 'Idle proxybot %s arleady exists for %s and %s!' % (proxybot_id, user1, user2)
         proxybot_id = uuid.uuid4()
-        new_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
+        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
         try:
             self._xmlrpc_command('register', {
-                'user': new_jid,
+                'user': proxybot_jid,
                 'host': constants.server,
                 'password': constants.proxybot_password
             })
@@ -238,32 +250,49 @@ class HostbotComponent(ComponentXMPP):
             self.cursor.execute("""INSERT INTO proxybot_participants (proxybot_id, user) VALUES 
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
-            self._launch_proxybot(['--username', new_jid, '--participant1', user1, '--participant2', user2])
+            self._launch_proxybot(['--username', proxybot_jid, '--participant1', user1, '--participant2', user2])
             self._add_or_remove_observers(user1, user2, HostbotCommand.add_observer)
-            logging.info("Proxybot %s created for %s and %s" % (new_jid, user1, user2))
+            logging.info('Proxybot %s created for %s and %s' % (proxybot_jid, user1, user2))
         except MySQLdb.Error, e:
-            logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (new_jid, user1, user2, e))
+            logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (proxybot_jid, user1, user2, e))
+            raise ExecutionError
         except xmlrpclib.Fault as e:
-            logging.error("Could not register account: %s" % e)
-        return new_jid
+            logging.error('Could not register account: %s' % e)
+            raise ExecutionError
+        return 'Friendship for %s and %s successfully created as %s.' % (user1, user2, proxybot_jid)
 
     def _delete_friendship(self, user1, user2):
-        if not (self._user_exists(user1) and self._user_exists(user2)):
-            return None
-        proxybot_id = self._find_idle_proxybot(user1, user2)
-        if proxybot_id:
-            session = {'next': self._cmd_complete,
-                       'error': self._cmd_error}
-            self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
-                                           node=HostbotCommand.delete_proxybot,
-                                           session=session,
-                                           ifrom=constants.hostbot_component_jid)
-            self.cursor.execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_id})
-            self.cursor.execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_id})
-            self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
-            return proxybot_id
-        return None
-    
+        if not self._user_exists(user1):
+            raise ExecutionError, 'User1 %s does not exist in the Chatidea database' % user1
+        if not self._user_exists(user2):
+            raise ExecutionError, 'User2 %s does not exist in the Chatidea database' % user2
+        proxybot_uuid = self._find_idle_proxybot(user1, user2)
+        if not proxybot_uuid:
+            raise ExecutionError, 'Idle proxybot not found %s and %s.' % (user1, user2)
+        session = {'next': self._cmd_complete,
+                   'error': self._cmd_error}
+        self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_uuid),
+                                       node=HostbotCommand.delete_proxybot,
+                                       session=session,
+                                       ifrom=constants.hostbot_component_jid)
+        self.cursor.execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        self.cursor.execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
+        return 'Friendship for %s and %s successfully deleted as %s.' % (user1, user2, proxybot_uuid)
+
+    def _restore_proxybot(self, proxybot_jid, proxybot_uuid):
+        self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
+            id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
+        num_proxybots = self.cursor.fetchall()
+        if not num_proxybots:
+            raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
+        if int(num_proxybots[0][0]) == 1:
+            raise ExecutionError, '%d proxybots found in the database for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
+        if self._proxybot_is_online(proxybot_jid):
+            raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
+        self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
+        return 'Proxybot %s has been restarted - look for it online!' % proxybot_jid
+
     def _add_or_remove_observers(self, user1, user2, command):    
         # find active proxybots with each user as a participant but *not* the other, and add/remove the other as an observer
         for participant, observer in [(user1, user2), (user2, user1)]:
