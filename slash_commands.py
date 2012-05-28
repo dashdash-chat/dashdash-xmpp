@@ -66,7 +66,10 @@ class SlashCommandRegistry(object):
             slash_command = self.slash_commands[command_name]
             try: 
                 result_message = slash_command.execute(sender, args)
-                return result_message or 'Your /%s command was successful.' % slash_command.name
+                if result_message is not None:  # this way we can return an empty string to send no response
+                    return result_message
+                else:
+                    return 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
                 return 'Sorry, but there was an error executing this command:\n\t%s' % error
             except PermissionError:

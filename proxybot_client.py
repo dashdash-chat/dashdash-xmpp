@@ -100,6 +100,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
             if len(arg_tokens) == 1:
                 return [sender, arg_tokens[0]]
             return False
+        def one_arg_and_string(sender, arg_string, arg_tokens):
+            if len(arg_tokens) >= 2:
+                return [sender, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
+            return False
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
@@ -125,6 +129,12 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        validate_sender  = is_participant,
                                        transform_args   = sender_and_one_arg,
                                        action           = self._kick_participant))
+        self.commands.add(SlashCommand(command_name     = 'whisper',
+                                       text_arg_format  = 'username ',
+                                       text_description = 'Whisper a quick message to only one other participant',
+                                       validate_sender  = is_participant,
+                                       transform_args   = one_arg_and_string,
+                                       action           = self._whisper_message))
         self.commands.add(SlashCommand(command_name     = 'bounce',
                                        text_arg_format  = '',
                                        text_description = 'Disconnect this proxybot and restart it in a new process, reloading the script.',
@@ -290,7 +300,9 @@ class Proxybot(sleekxmpp.ClientXMPP):
         logging.info('Adding user %s to the conversation' % user)
 
     def _invite_participant(self, sender, invitee):
-        if invitee in self.participants:
+        if invitee == sender:
+            raise ExecutionError, 'You\'re already participating in this conversation!'
+        elif invitee in self.participants:
             raise ExecutionError, '%s is already participating in this conversation!' % invitee
         temp_user = User(invitee, self.boundjid.user)
         if temp_user.is_online():
@@ -299,15 +311,17 @@ class Proxybot(sleekxmpp.ClientXMPP):
             self.send_message(mto="%s@%s" % (invitee, constants.server), mbody= '%s has invited you to the conversation.' % sender)
         else:
             raise ExecutionError, 'You can only invite users who are currently online.'
-        return 'Invitation sent!'
+        return ''
 
     def _kick_participant(self, sender, kickee):
         if kickee not in self.participants:
             raise ExecutionError, '%s is not participating in this conversation, so can\'t be kicked.' % kickee
+        elif kickee == sender:
+            raise ExecutionError, 'You can\'t kick yourself! Type /leave to leave the conversation.'
         self.send_message(mto="%s@%s" % (kickee, constants.server), mbody= '%s has kicked you from the conversation.' % sender)
         self._remove_participant(kickee)    
         self._broadcast_alert('%s has kicked %s from the conversation.' % (sender, kickee))
-        return '%s has been kicked!' % kickee
+        return ''
 
     @participants_only
     def _handle_presence_available(self, presence):
@@ -391,6 +405,14 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 new_msg = msg.__copy__()
                 new_msg['to'] = "%s@%s" % (participant.user(), constants.server)
                 new_msg.send()
+
+    def _whisper_message(self, sender, recipient, body):
+        if recipient == sender:
+            raise ExecutionError, 'You can\'t whisper to youerself.'
+        if recipient not in self.participants:
+            raise ExecutionError, 'You can\'t whisper to someone who isn\'t a participant in this conversation.'
+        self.send_message(mto="%s@%s" % (recipient, constants.server), mbody='(whispering)[%s] %s' % (sender, body))
+        return ''
 
     def _set_invisibility(self, invisibility):
         init_invisible = self.invisible
