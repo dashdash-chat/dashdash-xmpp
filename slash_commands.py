@@ -21,20 +21,21 @@ class ArgFormatError(Exception):
 
 
 class SlashCommand(object):
-    def __init__(self, command_name, text_arg_format, text_description, validate_sender, validate_args, action):
+    def __init__(self, command_name, text_arg_format, text_description, validate_sender, transform_args, action):
         self._command_name = command_name
         self._text_arg_format = text_arg_format
         self._text_description = text_description
         self.validate_sender = validate_sender
-        self.validate_args = validate_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
+        self.transform_args = transform_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
         self._action = action
 
     def execute(self, sender, arg_string):
         if not self.validate_sender(sender):
             raise PermissionError
-        # pass the sender to validate_args in case the args depend on it or in case it *should* be an arg
+        # pass the sender to transform_args in case the args depend on it or in case it *should* be an arg
+        # pass the original string in case not all of the tokens in the list should be treated as individual arguments
         # also note that .split(' ') returns arrays with the empty string as an element, so filter those out
-        args = self.validate_args(sender, filter(lambda arg: arg != '', arg_string.split(' ')))
+        args = self.transform_args(sender, arg_string, filter(lambda arg: arg != '', arg_string.split(' ')))
         if args is False:
             raise ArgFormatError
         return self._action(*args)
@@ -69,7 +70,7 @@ class SlashCommandRegistry(object):
             except ExecutionError, error:
                 return 'Sorry, but there was an error executing this command:\n\t%s' % error
             except PermissionError:
-                return 'Sorry, but you do not have permission to use this command.'
+                return 'Sorry, but you don\'t have permission to use this command.'
             except ArgFormatError:
                 return 'The arguments were not formatted properly. Please use:\n\t/%s %s' % \
                     (slash_command.name, slash_command.arg_format)
@@ -84,11 +85,11 @@ class SlashCommandRegistry(object):
                 return 'The available commands are:\n' + command_string
                 
         else:
-            return 'Sorry, %s is not a registered command. Type /help to see a full list.' % command_name
+            return 'Sorry, /%s is not a registered command. Type /help to see a full list.' % command_name
    
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
-            logging.error('%s is already a registered command.' % slash_command.name)
+            logging.error('/%s is already a registered command.' % slash_command.name)
         elif slash_command.name == 'help':
             logging.error('The /help command is built in and can not be added.' % slash_command.name)
         else:

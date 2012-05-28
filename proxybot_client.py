@@ -14,7 +14,7 @@ import xmlrpclib
 import constants
 from constants import Stage, ProxybotCommand, HostbotCommand
 from proxybot_invisibility import ProxybotInvisibility
-from proxybot_user import Participant
+from proxybot_user import Participant, User
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
 
 if sys.version_info < (3, 0):
@@ -50,7 +50,7 @@ def participants_and_observers_only(fn):
         if args[1]['from'].user in args[0].participants.union(observers) or args[1]['from'].bare in constants.admin_users:
             return fn(*args, **kwargs)
         else:
-            args[1].reply("You cannot send messages with this proxybot.").send()
+            args[1].reply("You cannot send messages to this proxybot.").send()
             logging.debug("This stanza from %s is only handled for conversation participants and observers." % args[1]['from'].user)
             return
     return wrapped
@@ -87,40 +87,42 @@ class Proxybot(sleekxmpp.ClientXMPP):
         def is_admin(sender):
             return sender.startswith('admin')  
         def is_participant(sender):
-            return sender in self.participants
-        def has_none(sender, args):
-            if len(args) == 0:
+            return self.stage is Stage.ACTIVE and sender in self.participants
+        def has_none(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 0:
                 return []
             return False
-        def has_one_string(sender, args):
-            if len(args) == 1:
-                return args
-            return False
-        def has_two_strings(sender, args):
-            if len(args) == 2:
-                return args
-            return False
-        def sender_as_arg(sender, args):
-            if has_none(sender, args) is not False:
+        def sender_as_only_arg(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 0:
                 return [sender]
+            return False
+        def sender_and_one_arg(sender, arg_string, arg_tokens):            
+            if len(arg_tokens) == 1:
+                return [sender, arg_tokens[0]]
             return False
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
                                        validate_sender  = is_participant,
-                                       validate_args    = sender_as_arg,
+                                       transform_args   = sender_as_only_arg,
                                        action           = self._remove_participant))
+        self.commands.add(SlashCommand(command_name     = 'invite',
+                                       text_arg_format  = '',
+                                       text_description = 'Invite another user to this conversation.',
+                                       validate_sender  = is_participant,
+                                       transform_args   = sender_and_one_arg,
+                                       action           = self._invite_participant))
         self.commands.add(SlashCommand(command_name     = 'bounce',
                                        text_arg_format  = '',
                                        text_description = 'Disconnect this proxybot and restart it in a new process, reloading the script.',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_none,
+                                       transform_args   = has_none,
                                        action           = lambda: self.event('bounce', {})))
         self.commands.add(SlashCommand(command_name     = 'kill',
                                        text_arg_format  = '',
                                        text_description = 'Disconnect and unregister this proxybot.',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_none,
+                                       transform_args   = has_none,
                                        action           = lambda: self.event('disconnect_and_unregister', {})))
         # Add event handlers
         self.add_event_handler('session_start', self._handle_start)
@@ -235,10 +237,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                            session=session)
             logging.info('Removing user %s from the conversation and retiring the proxybot' % user)
         else:
-            old_observers = self._get_observers()
+            participant_for_user = [participant for participant in self.participants if participant == user][0]  # ugh, verbose...
+            old_observers = self._get_observers().union([participant_for_user])  # ...but I need a real user object here, so oh well
             self.participants.remove(user)
             new_observers = self._get_observers()
+            logging.info('new_observers: %s' % [o.user() for o in new_observers])
             observers_to_remove = old_observers.difference(new_observers)
+            logging.info('observers_to_remove: %s' % observers_to_remove)
             for observer in observers_to_remove:
                 observer.delete_from_rosters()
             self._update_nick_in_rosters()
@@ -254,7 +259,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
 
     @active_only
     def _add_participant(self, user):
-        self._broadcast_alert('%s has joined the conversation' % user)  # broadcast before the user is in the conversation, to prevent offline message queueing
+        # broadcast a join message before this happens, to prevent offline message queueing
         new_participant = Participant(user, self.boundjid.user)
         old_observers = self._get_observers().union(self.participants)  # don't re-add to current participants
         self.participants.add(new_participant)
@@ -270,6 +275,16 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        node=ProxybotCommand.add_participant,
                                        session=session)
         logging.info('Adding user %s to the conversation' % user)
+
+    def _invite_participant(self, sender, invitee):
+        temp_user = User(invitee, self.boundjid.user)
+        if temp_user.is_online():
+            self._broadcast_alert('%s has invited %s into the conversation.' % (sender, invitee))
+            self._add_participant(invitee)
+            self.send_message(mto="%s@%s" % (invitee, constants.server), mbody= '%s has invited you to the conversation.' % sender)
+        else:
+            raise ExecutionError, 'You can only invite users who are currently online.'
+        return 'Invitation sent!'
 
     @participants_only
     def _handle_presence_available(self, presence):
@@ -330,6 +345,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 logging.info('Activating the proxybot')
             # now we know we're in an active stage, and can proceed with the message broadcast
             if msg['from'].user not in self.participants:
+                self._broadcast_alert('%s has joined the conversation' % user)
                 self._add_participant(msg['from'].user)
             self._broadcast_message(msg, msg['from'].user)
 

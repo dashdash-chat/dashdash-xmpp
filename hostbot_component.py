@@ -77,17 +77,17 @@ class HostbotComponent(ComponentXMPP):
         self.commands = SlashCommandRegistry()
         def is_admin(sender):
             return sender.startswith('admin')  
-        def has_one_string(sender, args):
-            if len(args) == 1:
-                return args
+        def has_one_string(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 1:
+                return arg_tokens
             return False
-        def has_two_strings(sender, args):
-            if len(args) == 2:
-                return args
+        def has_two_strings(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 2:
+                return arg_tokens
             return False
-        def has_proxybot_id(sender, args):
-            if len(args) == 1:
-                proxybot = args[0]
+        def has_proxybot_id(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 1:
+                proxybot = arg_tokens[0]
                 if proxybot.startswith(constants.proxybot_prefix):
                     proxybot_jid = proxybot
                     proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
@@ -100,31 +100,31 @@ class HostbotComponent(ComponentXMPP):
                                        text_arg_format  = 'username password',
                                        text_description = 'Create a new user in both ejabberd and the Chatidea database.',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_two_strings,
+                                       transform_args   = has_two_strings,
                                        action           = self._create_user))
         self.commands.add(SlashCommand(command_name     = 'delete_user',
                                        text_arg_format  = 'username',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Chatidea database and applicable proxybots.',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_one_string,
+                                       transform_args   = has_one_string,
                                        action           = self._delete_user))
         self.commands.add(SlashCommand(command_name     = 'create_friendship',
                                        text_arg_format  = 'arg1 arg2',
                                        text_description = 'test description',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_two_strings,
+                                       transform_args   = has_two_strings,
                                        action           = self._create_friendship))
         self.commands.add(SlashCommand(command_name     = 'delete_friendship',
                                        text_arg_format  = 'username1 username2',
                                        text_description = 'test description',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_two_strings,
+                                       transform_args   = has_two_strings,
                                        action           = self._delete_friendship))
         self.commands.add(SlashCommand(command_name     = 'restore_proxybot',
                                        text_arg_format  = 'proxybot_jid OR proxybot_uuid',
                                        text_description = 'Restore an idle or active proxybot from the database',
                                        validate_sender  = is_admin,
-                                       validate_args    = has_proxybot_id,
+                                       transform_args   = has_proxybot_id,
                                        action           = self._restore_proxybot))
         # Add event handlers
         self.add_event_handler("session_start", self._handle_start)
