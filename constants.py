@@ -6,6 +6,9 @@ daemons = '--daemon'
 # daemons = ''
 
 server = 'localhost'
+server_ip = '127.0.0.1'
+component_port = 5237
+client_port = 5222
 xmlrpc_port = 4560
 
 proxybot_prefix = 'proxybot_'

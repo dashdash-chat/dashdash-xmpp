@@ -89,11 +89,17 @@ class HostbotComponent(ComponentXMPP):
             if len(arg_tokens) == 1:
                 proxybot = arg_tokens[0]
                 if proxybot.startswith(constants.proxybot_prefix):
-                    proxybot_jid = proxybot
-                    proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
-                else:    
-                    proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot)))
-                    proxybot_uuid = proxybot
+                    try:
+                        proxybot_jid = proxybot
+                        proxybot_uuid = shortuuid.decode(proxybot.split(constants.proxybot_prefix)[1])
+                    except ValueError, e:
+                        return False
+                else:
+                    try:
+                        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot)))
+                        proxybot_uuid = uuid.UUID(proxybot)
+                    except ValueError, e:
+                        return False
                 return [proxybot_jid, proxybot_uuid]
             return False
         self.commands.add(SlashCommand(command_name     = 'create_user',
@@ -126,6 +132,12 @@ class HostbotComponent(ComponentXMPP):
                                        validate_sender  = is_admin,
                                        transform_args   = has_proxybot_id,
                                        action           = self._restore_proxybot))
+        self.commands.add(SlashCommand(command_name     = 'proxybot_status',
+                                       text_arg_format  = 'proxybot_jid OR proxybot_uuid',
+                                       text_description = 'Check the status of a proxybot',
+                                       validate_sender  = is_admin,
+                                       transform_args   = has_proxybot_id,
+                                       action           = self._proxybot_status))
         # Add event handlers
         self.add_event_handler("session_start", self._handle_start)
         self.add_event_handler('message', self._handle_message)
@@ -443,6 +455,45 @@ class HostbotComponent(ComponentXMPP):
                                           iq['error']['text']))
         self['xep_0050'].terminate_command(session)
 
+    def _proxybot_status(self, proxybot_jid, proxybot_uuid):
+        try:
+            self.cursor.execute("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+            stage = self.cursor.fetchall()[0][0]
+        except Exception, e:
+            raise ExecutionError, 'This proxybot was not found in the database: %s' % e
+        try:
+            self.cursor.execute("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+            participants = [participant[0] for participant in self.cursor.fetchall()]
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding the participants for this proxybot: %s' % e
+        try:
+            #LATER this code is copied from proxybot_user.py, but I'm not sure where best to put it
+            observers = set([])
+            for participant in participants:
+                self.cursor.execute("""SELECT proxybot_participants_2.user FROM proxybots, 
+                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
+                    proxybots.stage = 'idle' AND
+                    proxybots.id = proxybot_participants_1.proxybot_id AND
+                    proxybots.id = proxybot_participants_2.proxybot_id AND
+                    proxybot_participants_1.user = %(user)s""", {'user': participant})
+                observers = observers.union([observer[0] for observer in self.cursor.fetchall()])
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding the observers for this proxybot: %s' % e
+        #LATER add commands to get data from the live process for this proxybot, probably using adhoc commands.
+        output = "%(proxybot_jid)s\n%(proxybot_uuid)s" + \
+                "\n\t%(online)s" + \
+                "\n\t%(stage)s" + \
+                "\n\tParticipants:%(participants)s" + \
+                "\n\tObservers:%(observers)s"
+        return output % {
+                'proxybot_jid': proxybot_jid,
+                'proxybot_uuid': proxybot_uuid,
+                'online': 'online' if self._proxybot_is_online(proxybot_jid) else 'offline',
+                'stage': stage,
+                'participants': ''.join(['\n\t\t%s' % user for user in participants]),
+                'observers': ''.join(['\n\t\t%s' % user for user in observers.difference(participants)])
+             }
+
     def _proxybot_is_online(self, proxybot_jid):
         try:              
             res = self._xmlrpc_command('user_sessions_info', {
@@ -483,7 +534,7 @@ if __name__ == '__main__':
 
     xmpp = HostbotComponent(opts.restore, opts.bounce)
     
-    if xmpp.connect(constants.server):
+    if xmpp.connect(constants.server_ip, constants.component_port):
         xmpp.process(block=True)
         xmpp.cleanup()
         print("Hostbot done")

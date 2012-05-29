@@ -118,19 +118,19 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        action           = lambda: 'The current participants are:\n' + \
                                            ''.join(['\t%s\n' % user for user in self.participants]).strip('\n')))
         self.commands.add(SlashCommand(command_name     = 'invite',
-                                       text_arg_format  = '',
+                                       text_arg_format  = 'username',
                                        text_description = 'Invite another user to this conversation.',
                                        validate_sender  = is_participant,
                                        transform_args   = sender_and_one_arg,
                                        action           = self._invite_participant))
         self.commands.add(SlashCommand(command_name     = 'kick',
-                                       text_arg_format  = '',
+                                       text_arg_format  = 'username',
                                        text_description = 'Kick a user out of this conversation.',
                                        validate_sender  = is_participant,
                                        transform_args   = sender_and_one_arg,
                                        action           = self._kick_participant))
         self.commands.add(SlashCommand(command_name     = 'whisper',
-                                       text_arg_format  = 'username ',
+                                       text_arg_format  = 'username message to be sent to that user',
                                        text_description = 'Whisper a quick message to only one other participant',
                                        validate_sender  = is_participant,
                                        transform_args   = one_arg_and_string,
@@ -621,7 +621,7 @@ if __name__ == '__main__':
     xmpp.register_plugin('xep_0199') # XMPP Ping
 
     def run_proxybot(xmpp, proxybot_jid):
-        if xmpp.connect():
+        if xmpp.connect((constants.server_ip, constants.client_port)):
             xmpp.process(block=True)
             print('%(proxybot_jid)-34s Done' % {'proxybot_jid': proxybot_jid})
         else:
