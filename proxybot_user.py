@@ -5,6 +5,7 @@ import MySQLdb
 import logging
 import xmlrpclib
 import constants
+from constants import Stage
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -18,6 +19,7 @@ class User(object):
     def __init__(self, user, proxybot):
         self._user = user
         self._proxybot = proxybot
+        self.on_proxy_roster = False
         self.current_nick = None
         self.current_group = None
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -28,17 +30,17 @@ class User(object):
     def proxybot(self):
         return self._proxybot
     
-    def add_to_rosters(self, nick, group):
-        self._add_proxy_rosteritem()
-        self._add_user_rosteritem(nick, group)
+    def add_to_rosters(self, nick, stage):
+        if not self.on_proxy_roster:
+            self._add_proxy_rosteritem()
+        if stage is Stage.IDLE:
+            self._add_user_rosteritem(nick, constants.idle_group)
+        elif stage is Stage.ACTIVE:
+            self._add_user_rosteritem(nick, constants.active_group)
         
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
         self._delete_user_rosteritem()
-        
-    def update_roster(self, nick):
-        if nick != self.current_nick or constants.active_group != self.current_group:  # only update if there's a change
-            self._add_user_rosteritem(nick, constants.active_group)  # roster items only change for active proxybots
 
     def _xmlrpc_command(self, command, data):
             fn = getattr(self.xmlrpc_server, command)
@@ -55,6 +57,7 @@ class User(object):
             'nick': self._user,
             'subs': 'both'
         })
+        self.on_proxy_roster = True
     def _delete_proxy_rosteritem(self):
         self._xmlrpc_command('delete_rosteritem', { 'localserver': constants.server, 'server': constants.server,
            'localuser': self._proxybot,
@@ -101,17 +104,13 @@ class User(object):
         return hash(self.user())
 
 class Observer(User):
-    def add_to_rosters(self, nick):
-        super(Observer, self).add_to_rosters(nick, constants.active_group)
+    pass
             
 class Participant(User):
     def __init__(self, *args, **kwargs):
         super(Participant, self).__init__(*args, **kwargs)
         self._observers = set([])
         self.fetch_observers()
-    
-    def add_to_rosters(self, nick):
-        super(Participant, self).add_to_rosters(nick, constants.idle_group)
 
     def observers(self):
         return self._observers
@@ -137,10 +136,10 @@ class Participant(User):
     
     def add_observer(self, user, proxybot, nick):
         observer = Observer(user, proxybot)
-        observer.add_to_rosters(nick)
+        observer.add_to_rosters(nick, Stage.ACTIVE)
         self._observers.add(observer)
     
     def remove_observer(self, user, proxybot):
-        observer = Observer(user, proxybot)  # we only need this object so we can make the appropriate xmlrpc calls, it isn't saved
+        observer = Observer(user, proxybot)  # we only need this Observer object so we can make the appropriate xmlrpc calls, it isn't saved
         observer.delete_from_rosters()
         self._observers.remove(user)
