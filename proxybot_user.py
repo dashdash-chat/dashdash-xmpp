@@ -19,7 +19,6 @@ class User(object):
     def __init__(self, user, proxybot_jid):
         self._user = user
         self._proxybot_jid = proxybot_jid
-        self.on_proxy_roster = False
         self.current_nick = None
         self.current_group = None
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -31,8 +30,7 @@ class User(object):
         return self._proxybot_jid
     
     def add_to_rosters(self, nick, stage):
-        if not self.on_proxy_roster:
-            self._add_proxy_rosteritem()
+        self._add_proxy_rosteritem()
         if stage is Stage.IDLE:
             self._add_user_rosteritem(nick, constants.idle_group)
         elif stage is Stage.ACTIVE:
@@ -40,16 +38,15 @@ class User(object):
         
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
-        self.on_proxy_roster = False
         self._delete_user_rosteritem()
 
     def _xmlrpc_command(self, command, data):
-            fn = getattr(self.xmlrpc_server, command)
-            return fn({
-                'user': constants.rosterbot_xmlrpc_jid,
-                'server': constants.server,
-                'password': constants.rosterbot_xmlrpc_password
-            }, data)
+        fn = getattr(self.xmlrpc_server, command)
+        return fn({
+            'user': constants.rosterbot_xmlrpc_jid,
+            'server': constants.server,
+            'password': constants.rosterbot_xmlrpc_password
+        }, data)
     def _add_proxy_rosteritem(self):
         self._xmlrpc_command('add_rosteritem', { 'localserver': constants.server, 'server': constants.server,
             'group': constants.proxybot_group,
@@ -58,7 +55,6 @@ class User(object):
             'nick': self._user,
             'subs': 'both'
         })
-        self.on_proxy_roster = True
     def _delete_proxy_rosteritem(self):
         self._xmlrpc_command('delete_rosteritem', { 'localserver': constants.server, 'server': constants.server,
            'localuser': self._proxybot_jid,
