@@ -137,13 +137,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        text_arg_format  = '',
                                        text_description = 'Hide this conversation from everyone who isn\'t already a participant',
                                        validate_sender  = is_participant,
-                                       transform_args   = has_none,
+                                       transform_args   = sender_as_only_arg,
                                        action           = self._hide_from_observers))
         self.commands.add(SlashCommand(command_name     = 'visible',
                                        text_arg_format  = '',
                                        text_description = 'Let this conversation be found by friends of participants',
                                        validate_sender  = is_participant,
-                                       transform_args   = has_none,
+                                       transform_args   = sender_as_only_arg,
                                        action           = self._show_to_observers))
         self.commands.add(SlashCommand(command_name     = 'bounce',
                                        text_arg_format  = '',
@@ -331,18 +331,20 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self._broadcast_alert('%s has kicked %s from the conversation.' % (sender, kickee))
         return ''
 
-    def _show_to_observers(self):
+    def _show_to_observers(self, sender):
         if not self.hidden_from_observers:
             raise ExecutionError, "This conversation is already visible to everyone, including friends of the participants."
         self.hidden_from_observers = False
         self._update_rosters([], self.participants)
-        return "This conversation is now visible to friends of the participants."
-    def _hide_from_observers(self):
+        self._broadcast_alert('%s has made this conversation visible to friends of the participants.' % sender)
+        return ''
+    def _hide_from_observers(self, sender):
         if self.hidden_from_observers:
             raise ExecutionError, "This conversation is already invisible and hidden from friends."
         self.hidden_from_observers = True
         self._update_rosters(self.participants, [])
-        return "This conversation is now invible to everyone, including friends of the participants."
+        self._broadcast_alert('%s has made this conversation invisible to everyone, including friends of the participants.' % sender)
+        return ''
 
     @participants_only
     def _handle_presence_available(self, presence):
