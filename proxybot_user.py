@@ -22,7 +22,7 @@ class User(object):
         self.current_nick = None
         self.current_group = None
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
-    
+
     def user(self):
         return self._user
     
