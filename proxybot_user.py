@@ -40,6 +40,7 @@ class User(object):
         
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
+        self.on_proxy_roster = False
         self._delete_user_rosteritem()
 
     def _xmlrpc_command(self, command, data):
