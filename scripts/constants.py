@@ -3,7 +3,7 @@ import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 
-server = 'localhost'
+server = 'ec2-107-21-87-153.compute-1.amazonaws.com'
 server_ip = '127.0.0.1'
 component_port = secrets.component_port
 client_port = secrets.client_port
@@ -14,7 +14,7 @@ proxybot_prefix = 'proxybot_'
 proxybot_resource = 'python_client'
 proxybot_password = secrets.proxybot_password
 hostbot_user = 'host'
-hostbot_server = 'bot.localhost'
+hostbot_server = 'bot.ec2-107-21-87-153.compute-1.amazonaws.com'
 hostbot_user_jid = '%s@%s' % (hostbot_user, hostbot_server)
 hostbot_component_jid = '%s/python_component' % hostbot_server
 hostbot_nick = 'Hostbot'
