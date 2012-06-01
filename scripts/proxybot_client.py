@@ -168,8 +168,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self._handle_chatstate)
 
-    def disconnect_and_unregister(self, event={}):        
-        self._update_rosters(self.participants, [])
+    def disconnect_and_unregister(self, event={}):
+        self._update_rosters(self.participants, set([]))
         self.disconnect(wait=True)
         self._xmlrpc_command('unregister', {
             'user': self.boundjid.user,
@@ -231,30 +231,28 @@ class Proxybot(sleekxmpp.ClientXMPP):
             if self.stage is not Stage.RETIRED:
                 self._set_invisibility(False)
 
-    def _update_rosters(self, old_participants, cur_participants):
+    def _update_rosters(self, old_participants, new_participants, participants_changed=True):
         observer_nick = self._get_nick()
-        old_observers = set([]) # or set(old_participants)? idk...
-        cur_observers = set([]) # or set(cur_participants)? idk...
-        # First, update our entry on the roster of each participant
-        for participant in self.participants:
-            participant.add_to_rosters(self._get_nick(participant), self.stage)
-        # Figure out which observers we had before, and which ones we have now
+        # First, create the old and new lists of observers
+        old_observers = set([])
+        new_observers = set([])
         for old_participant in old_participants:
-            old_observers.update(old_participant.observers())            
-        if not self.hidden_from_observers:
-            # We only care about cur_observers if we are not invisible, so put this in an if statement
-            # so that we don't inadvertently preserve some observers from deletion below
-            for cur_participant in cur_participants:
-                cur_observers.update(cur_participant.observers())
-        # Remove ourselves from the rosters of old observers, but be careful to exclude users we still care about
-        for old_observer in old_observers.difference(cur_observers).difference(self.participants):
-            old_observer.delete_from_rosters()       
-        if not self.hidden_from_observers:
-            # Then add ourselves to the rosters of everyone we care about, excluding the participants which have special nicks
-            # (Some of these users might already have an entry for us, but we need to update the nickname/group anyway)
-            for cur_observer in cur_observers.difference(self.participants):
-                cur_observer.add_to_rosters(observer_nick, self.stage)
-        # Finally, make sure we appear online to removed participants)
+            old_observers.update(old_participant.observers())
+        if not self.hidden_from_observers:  # only add to observers if we're not hidden
+            for new_participant in new_participants:
+                new_observers.update(new_participant.observers())
+        # Then, update the participants
+        if participants_changed:
+            for participant in old_participants.difference(new_observers).difference(new_participants):
+                participant.delete_from_rosters()
+            for participant in new_participants:
+                participant.add_to_rosters(self._get_nick(participant), self.stage)
+        # Next, update the observers
+        for old_observer in old_observers.difference(self.participants).difference(new_observers):
+            old_observer.delete_from_rosters()
+        for new_observer in new_observers.difference(self.participants):
+            new_observer.add_to_rosters(observer_nick, self.stage)
+        # Finally, broadcast updated presence
         self.send_presence()
 
     def _get_nick(self, viewing_participant=None):  # observers all see the same nickname, so this is None for them
@@ -335,14 +333,14 @@ class Proxybot(sleekxmpp.ClientXMPP):
         if not self.hidden_from_observers:
             raise ExecutionError, "This conversation is already visible to everyone, including friends of the participants."
         self.hidden_from_observers = False
-        self._update_rosters([], self.participants)
+        self._update_rosters(set([]), self.participants, participants_changed=False)
         self._broadcast_alert('%s has made this conversation visible to friends of the participants.' % sender)
         return ''
     def _hide_from_observers(self, sender):
         if self.hidden_from_observers:
             raise ExecutionError, "This conversation is already invisible and hidden from friends."
         self.hidden_from_observers = True
-        self._update_rosters(self.participants, [])
+        self._update_rosters(self.participants, set([]), participants_changed=False)
         self._broadcast_alert('%s has made this conversation invisible to everyone, including friends of the participants.' % sender)
         return ''
 
@@ -390,7 +388,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 return
             elif self.stage is Stage.IDLE:  # idle proxybots can receive /commands, but the commands don't activate them
                 self.stage = Stage.ACTIVE
-                self._update_rosters([], self.participants)
+                self._update_rosters(set([]), self.participants)
                 session = {'user1': msg['from'].user,
                            'user2': self.participants.difference([msg['from'].user]).pop().user(),  # ugh, verbose
                            'next': self._cmd_send_activate,
