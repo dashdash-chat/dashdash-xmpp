@@ -1,0 +1,3 @@
+[submodule "scripts/config"]
+	path = scripts/config
+	url = git@github.com:lehrblogger/chatidea-config.git
