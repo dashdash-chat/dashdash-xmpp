@@ -177,8 +177,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
         })
 
     def bounce(self, event={}):
-        subprocess.Popen([sys.executable, "/vagrant/chatidea/proxybot_client.py",
-            constants.daemons,
+        subprocess.Popen([sys.executable, constants.proxybot_script,
+            '--daemon',
             '--username', self.boundjid.user,
             '--bounced'], shell=False, stdout=open(constants.proxybot_logfile, 'a'), stderr=subprocess.STDOUT)
         self.disconnect(wait=True)

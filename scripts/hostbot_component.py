@@ -35,7 +35,7 @@ def proxybot_only(fn):
 
 class HostbotComponent(ComponentXMPP):
     def __init__(self, restore_proxybots, bounce_proxybots):
-        ComponentXMPP.__init__(self, constants.hostbot_component_jid, constants.hostbot_secret, constants.server, constants.hostbot_port)
+        ComponentXMPP.__init__(self, constants.hostbot_component_jid, constants.hostbot_secret, constants.server, constants.component_port)
         self.boundjid.regenerate()
         self.auto_authorize = True
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -200,7 +200,7 @@ class HostbotComponent(ComponentXMPP):
                           pto=presence['from'])
 
     def _launch_proxybot(self, proxybot_args):
-        process_args = [sys.executable, "/vagrant/chatidea/proxybot_client.py", constants.daemons]
+        process_args = [sys.executable, constants.proxybot_script, '--daemon']
         process_args.extend(proxybot_args)
         subprocess.Popen(process_args, shell=False, stdout=open(constants.proxybot_logfile, 'a'), stderr=subprocess.STDOUT)
 
