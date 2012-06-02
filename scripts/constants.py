@@ -1,35 +1,38 @@
-from config import secrets as secrets
+try:
+   from config import env_vars as env_vars
+except ImportError, e:
+   from config-dev import env_vars as env_vars  
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 
-server = 'ec2-107-21-87-153.compute-1.amazonaws.com'
+server = env_vars.server
 server_ip = '127.0.0.1'
-component_port = secrets.component_port
-client_port = secrets.client_port
-xmlrpc_port = secrets.xmlrpc_port
+component_port = env_vars.component_port
+client_port = env_vars.client_port
+xmlrpc_port = env_vars.xmlrpc_port
 
-proxybot_script = '/vagrant/chatidea/scripts/proxybot_client.py'
+proxybot_script = '%sscripts/proxybot_client.py' % env_vars.repo_dir
 proxybot_prefix = 'proxybot_'
 proxybot_resource = 'python_client'
-proxybot_password = secrets.proxybot_password
+proxybot_password = env_vars.proxybot_password
 hostbot_user = 'host'
-hostbot_server = 'bot.ec2-107-21-87-153.compute-1.amazonaws.com'
+hostbot_server = 'bot%s' % server
 hostbot_user_jid = '%s@%s' % (hostbot_user, hostbot_server)
 hostbot_component_jid = '%s/python_component' % hostbot_server
 hostbot_nick = 'Hostbot'
-hostbot_secret = secrets.hostbot_secret
-default_user_password = secrets.default_user_password
+hostbot_secret = env_vars.hostbot_secret
+default_user_password = env_vars.default_user_password
 
-admin_users = secrets.admin_users
-admin_password = secrets.admin_password
+admin_users = env_vars.admin_users
+admin_password = env_vars.admin_password
 
 hostbot_xmlrpc_jid = '_hostbot'
-hostbot_xmlrpc_password = secrets.hostbot_xmlrpc_password
+hostbot_xmlrpc_password = env_vars.hostbot_xmlrpc_password
 proxybot_xmlrpc_jid = '_proxybot'
-proxybot_xmlrpc_password = secrets.proxybot_xmlrpc_password
+proxybot_xmlrpc_password = env_vars.proxybot_xmlrpc_password
 rosterbot_xmlrpc_jid = '_rosterbot'
-rosterbot_xmlrpc_password = secrets.rosterbot_xmlrpc_password
+rosterbot_xmlrpc_password = env_vars.rosterbot_xmlrpc_password
 
 proxybot_group = 'contacts'
 active_group = 'Chatidea Conversations'
@@ -37,13 +40,13 @@ idle_group = 'Chatidea Contacts'
 
 db_name = 'chatidea'
 hostbot_mysql_user = 'hostbot'
-hostbot_mysql_password = secrets.hostbot_mysql_password
+hostbot_mysql_password = env_vars.hostbot_mysql_password
 proxybotinfo_mysql_user = 'proxybotinfo'
-proxybotinfo_mysql_password = secrets.proxybotinfo_mysql_password
+proxybotinfo_mysql_password = env_vars.proxybotinfo_mysql_password
 userinfo_mysql_user = 'userinfo'
-userinfo_mysql_password = secrets.userinfo_mysql_password
+userinfo_mysql_password = env_vars.userinfo_mysql_password
 
-proxybot_logfile = '/var/log/chatidea/proxybots.log'
+proxybot_logfile = '%sproxybots.log' % env_vars.log_dir
 
 class Stage:
     IDLE = 1

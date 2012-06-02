@@ -21,6 +21,8 @@ useful commands:
     mysql -u root -pos6juc8ik4if6jiev3co < /vagrant/chatidea/scripts/config/init_tables.sql
     mysql -u root -pos6juc8ik4if6jiev3co --database chatidea
 
+    nohup python ~/chatidea/scripts/hostbot_component.py > /var/log/chatidea/hostbot.log &
+
     python /vagrant/chatidea/scripts/hostbot_component.py -v
 
     python /vagrant/sleekxmpp/examples/register_account_for_other.py -v -j 'admin1@localhost' -p 'FgT5bk3' -n 'temp0' -w 'FgT5bk3'
