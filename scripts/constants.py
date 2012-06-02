@@ -1,7 +1,7 @@
 try:
    from config import env_vars as env_vars
 except ImportError, e:
-   from config-dev import env_vars as env_vars  
+   from config_dev import env_vars as env_vars  
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
