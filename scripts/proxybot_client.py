@@ -75,7 +75,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
         self._xmlrpc_command('add_rosteritem', { 'localserver': constants.server, 'server': constants.hostbot_server,
             'group': 'bots',
-            'localuser': self.boundjid.bare,
+            'localuser': self.boundjid.user,
             'user': '',
             'nick': constants.hostbot_nick,
             'subs': 'both'
