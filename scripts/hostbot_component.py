@@ -47,10 +47,11 @@ class HostbotComponent(ComponentXMPP):
         self.db = None
         self.cursor = None
         try:
-            self.db = MySQLdb.connect(constants.server, constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
+            self.db = MySQLdb.connect('localhost', constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
+            self.db.autocommit(True)
             self.cursor = self.db.cursor()
         except MySQLdb.Error, e:
-            logging.error("Failed to connect to database and creat cursor, %d: %s" % (e.args[0], e.args[1]))
+            logging.error("Failed to connect to database and create cursor, %d: %s" % (e.args[0], e.args[1]))
             self.cleanup()
         if restore_proxybots:
             self.cursor.execute("SELECT id FROM proxybots WHERE stage != 'retired'")

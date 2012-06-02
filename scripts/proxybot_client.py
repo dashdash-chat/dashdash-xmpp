@@ -605,7 +605,7 @@ if __name__ == '__main__':
         db = None
         cursor = None
         try:
-            db = MySQLdb.connect(constants.server, constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
+            db = MySQLdb.connect('localhost', constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
             cursor = db.cursor()
             cursor.execute("""SELECT proxybots.stage, proxybot_participants.user FROM 
                 proxybots, proxybot_participants WHERE
@@ -622,7 +622,8 @@ if __name__ == '__main__':
             db.close()
         except MySQLdb.Error, e:
             print "%(proxybot_jid)-34s Error %(number)d: %(string)s" % {'proxybot_jid': opts.username, 'number': e.args[0], 'string': e.args[1]}
-            db.close()
+            if db:
+                db.close()
             sys.exit(1)
         xmpp = Proxybot(opts.username, participants, stage)
     else:

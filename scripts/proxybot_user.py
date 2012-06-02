@@ -116,7 +116,7 @@ class Participant(User):
         db = None
         cursor = None
         try:
-            db = MySQLdb.connect(constants.server, constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
+            db = MySQLdb.connect('localhost', constants.userinfo_mysql_user, constants.userinfo_mysql_password, constants.db_name)
             cursor = db.cursor()
             cursor.execute("""SELECT proxybot_participants_2.user FROM proxybots, 
                 proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
