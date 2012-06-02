@@ -38,32 +38,22 @@ class HostbotComponent(ComponentXMPP):
         ComponentXMPP.__init__(self, constants.hostbot_component_jid, constants.hostbot_secret, constants.server, constants.component_port)
         self.boundjid.regenerate()
         self.auto_authorize = True
+        self.db = None
+        self.cursor = None
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
         self.register_plugin('xep_0030') # Service Discovery
         self.register_plugin('xep_0004') # Data Forms
         self.register_plugin('xep_0050') # Adhoc Commands
         self.register_plugin('xep_0199') # XMPP Ping
-        # Connect to the database
-        self.db = None
-        self.cursor = None
-        try:
-            self.db = MySQLdb.connect('localhost', constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
-            self.db.autocommit(True)
-            self.cursor = self.db.cursor()
-        except MySQLdb.Error, e:
-            logging.error("Failed to connect to database and create cursor, %d: %s" % (e.args[0], e.args[1]))
-            self.cleanup()
         if restore_proxybots:
-            self.cursor.execute("SELECT id FROM proxybots WHERE stage != 'retired'")
-            proxybot_uuids = [proxybot_uuid[0] for proxybot_uuid in self.cursor.fetchall()]
+            proxybot_uuids = self._db_execute_and_fetchall("SELECT id FROM proxybots WHERE stage != 'retired'")
             for proxybot_uuid in proxybot_uuids:
                 proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
                 if not self._proxybot_is_online(proxybot_jid):
                     self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
                     logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         if bounce_proxybots:
-            self.cursor.execute("SELECT id FROM proxybots WHERE stage != 'retired'")
-            proxybot_uuids = [proxybot_uuid[0] for proxybot_uuid in self.cursor.fetchall()]
+            proxybot_uuids = self._db_execute_and_fetchall("SELECT id FROM proxybots WHERE stage != 'retired'")
             for proxybot_uuid in proxybot_uuids:
                 proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
                 if self._proxybot_is_online(proxybot_jid):
@@ -172,12 +162,7 @@ class HostbotComponent(ComponentXMPP):
                                      name='Remove a participant',
                                      handler=self._cmd_receive_remove_participant,
                                      jid=self.boundjid.full)
-        self.send_presence(pfrom=self.fulljid_with_user(), pnick=constants.hostbot_nick, pstatus="Who do you want to chat with?", pshow="available")
-
-    def cleanup(self):
-        if self.db:
-            self.db.close()
-        sys.exit(1)
+        self.send_presence(pfrom=self.fulljid_with_user(), pnick=constants.hostbot_nick, pshow="available")
     
     def fulljid_with_user(self):
         return 'host' + '@' + self.boundjid.full
@@ -215,7 +200,7 @@ class HostbotComponent(ComponentXMPP):
             'host': constants.server,
             'password': password
         })
-        self.cursor.execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
+        self._db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
 
     def _delete_user(self, user):
         if not self._user_exists(user):
@@ -224,13 +209,12 @@ class HostbotComponent(ComponentXMPP):
             'user': user,
             'host': constants.server,
         })
-        self.cursor.execute("DELETE FROM users WHERE user = %(user)s", {'user': user})
+        self._db_execute("DELETE FROM users WHERE user = %(user)s", {'user': user})
         # tell the non-retired proxybots to remove this participant - they should then be able to take care of themselves as appropriate
-        self.cursor.execute("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
+        proxybot_ids = self._db_execute_and_fetchall("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
             proxybots.id = proxybot_participants.proxybot_id AND
             (proxybots.stage = 'idle' OR proxybots.stage = 'active') AND
             proxybot_participants.user = %(user)s""", {'user': user})
-        proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
         for proxybot_id in proxybot_ids:
             session = {'user': user,
                        'next': self._cmd_send_participant_deleted,
@@ -256,8 +240,8 @@ class HostbotComponent(ComponentXMPP):
                 'host': constants.server,
                 'password': constants.proxybot_password
             })
-            self.cursor.execute("INSERT INTO proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
-            self.cursor.execute("""INSERT INTO proxybot_participants (proxybot_id, user) VALUES 
+            self._db_execute("INSERT INTO proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
+            self._db_execute("""INSERT INTO proxybot_participants (proxybot_id, user) VALUES 
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
                 {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
             self._launch_proxybot(['--username', proxybot_jid, '--participant1', user1, '--participant2', user2])
@@ -285,18 +269,17 @@ class HostbotComponent(ComponentXMPP):
                                        node=HostbotCommand.delete_proxybot,
                                        session=session,
                                        ifrom=constants.hostbot_component_jid)
-        self.cursor.execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
-        self.cursor.execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        self._db_execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
         return 'Friendship for %s and %s successfully deleted as %s.' % (user1, user2, proxybot_uuid)
 
     def _restore_proxybot(self, proxybot_jid, proxybot_uuid):
-        self.cursor.execute("""SELECT COUNT(*) FROM proxybots WHERE 
+        num_proxybots = self._db_execute_and_fetchall("""SELECT COUNT(*) FROM proxybots WHERE 
             id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
-        num_proxybots = self.cursor.fetchall()
         if not num_proxybots:
             raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
-        if int(num_proxybots[0][0]) != 1:
+        if int(num_proxybots[0]) != 1:
             raise ExecutionError, '%d proxybots found in the database for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
         if self._proxybot_is_online(proxybot_jid):
             raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
@@ -306,13 +289,12 @@ class HostbotComponent(ComponentXMPP):
     def _add_or_remove_observers(self, user1, user2, command):    
         # find active proxybots with each user as a participant but *not* the other, and add/remove the other as an observer
         for participant, observer in [(user1, user2), (user2, user1)]:
-            self.cursor.execute("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
+            proxybot_ids = self._db_execute_and_fetchall("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
                 proxybots.id = proxybot_participants.proxybot_id AND
                 proxybots.stage = 'active' AND
                 proxybot_participants.user = %(participant)s AND
             	proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
             	{'participant': participant, 'observer': observer}, )
-            proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
             for proxybot_id in proxybot_ids:
                 session = {'participant': participant,
                            'observer': observer,
@@ -330,14 +312,13 @@ class HostbotComponent(ComponentXMPP):
                                constants.proxybot_resource)
 
     def _find_idle_proxybot(self, user1, user2):
-        self.cursor.execute("""SELECT proxybots.id FROM proxybots, 
+        proxybot_ids = self._db_execute_and_fetchall("""SELECT proxybots.id FROM proxybots, 
             proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
             proxybots.stage = 'idle' AND
             proxybots.id = proxybot_participants_1.proxybot_id AND
             proxybots.id = proxybot_participants_2.proxybot_id AND
             proxybot_participants_1.user = %(user1)s AND
             proxybot_participants_2.user = %(user2)s""", {'user1': user1, 'user2': user2})
-        proxybot_ids = [proxybot_id[0] for proxybot_id in self.cursor.fetchall()]
         if len(proxybot_ids) == 0:
             return None
         elif len(proxybot_ids) == 1:
@@ -347,9 +328,8 @@ class HostbotComponent(ComponentXMPP):
             return None
 
     def _user_exists(self, user):
-        self.cursor.execute("SELECT COUNT(*) FROM users WHERE user = %(user)s", {'user': user})
-        num_users = self.cursor.fetchall()
-        if num_users and int(num_users[0][0]) == 0:
+        num_users = self._db_execute_and_fetchall("SELECT COUNT(*) FROM users WHERE user = %(user)s", {'user': user})
+        if num_users and int(num_users[0]) == 0:
             return False
         else:
             return True
@@ -414,7 +394,7 @@ class HostbotComponent(ComponentXMPP):
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user1 = form['values']['user1']
         user2 = form['values']['user2']
-        self.cursor.execute("UPDATE proxybots SET stage = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self._db_execute("UPDATE proxybots SET stage = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
         self._create_friendship(user1, user2)  #NOTE activate before creating the new proxybot, so the idle-does-not-exist check passes
         session['payload'] = None
         session['next'] = None
@@ -423,8 +403,8 @@ class HostbotComponent(ComponentXMPP):
         form = payload
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        self.cursor.execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
-        self.cursor.execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
+        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
             {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None
@@ -433,7 +413,7 @@ class HostbotComponent(ComponentXMPP):
         form = payload
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        self.cursor.execute("INSERT INTO proxybot_participants (proxybot_id, user) VALUES (%(proxybot_id)s, %(user)s)",
+        self._db_execute("INSERT INTO proxybot_participants (proxybot_id, user) VALUES (%(proxybot_id)s, %(user)s)",
             {'proxybot_id': shortuuid.decode(proxybot_id), 'user': user})
         session['payload'] = None
         session['next'] = None
@@ -442,7 +422,7 @@ class HostbotComponent(ComponentXMPP):
         form = payload
         proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
         user = form['values']['user']
-        self.cursor.execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
+        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
             {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
         session['payload'] = None
         session['next'] = None
@@ -458,26 +438,23 @@ class HostbotComponent(ComponentXMPP):
 
     def _proxybot_status(self, proxybot_jid, proxybot_uuid):
         try:
-            self.cursor.execute("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
-            stage = self.cursor.fetchall()[0][0]
+            stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
         except Exception, e:
             raise ExecutionError, 'This proxybot was not found in the database: %s' % e
         try:
-            self.cursor.execute("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
-            participants = [participant[0] for participant in self.cursor.fetchall()]
+            participants = self._db_execute_and_fetchall("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         except Exception, e:
             raise ExecutionError, 'There was an error finding the participants for this proxybot: %s' % e
         try:
             #LATER this code is copied from proxybot_user.py, but I'm not sure where best to put it
             observers = set([])
             for participant in participants:
-                self.cursor.execute("""SELECT proxybot_participants_2.user FROM proxybots, 
+                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots, 
                     proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
                     proxybots.stage = 'idle' AND
                     proxybots.id = proxybot_participants_1.proxybot_id AND
                     proxybots.id = proxybot_participants_2.proxybot_id AND
-                    proxybot_participants_1.user = %(user)s""", {'user': participant})
-                observers = observers.union([observer[0] for observer in self.cursor.fetchall()])
+                    proxybot_participants_1.user = %(user)s""", {'user': participant}))
         except Exception, e:
             raise ExecutionError, 'There was an error finding the observers for this proxybot: %s' % e
         #LATER add commands to get data from the live process for this proxybot, probably using adhoc commands.
@@ -512,6 +489,34 @@ class HostbotComponent(ComponentXMPP):
             'server': constants.server,
             'password': constants.hostbot_xmlrpc_password
         }, data)
+
+    def _db_execute_and_fetchall(self, query, data={}):
+        self._db_execute(query, data)
+        fetched = self.cursor.fetchall()
+        if fetched and len(fetched) > 0:
+            return [result[0] for result in fetched]
+        return []
+    def _db_execute(self, query, data={}):
+        if not self.db or not self.cursor:
+            self._db_connect()
+        try:
+            self.cursor.execute(query, data)
+        except MySQLdb.OperationalError, e:
+            logging.info("Database OperationalError: %s\n\t for query: %s", (e, query % data))
+            self._db_connect()  # Try again, but only once
+            self.cursor.execute(query, data)
+    def _db_connect(self):
+        try:
+            self.db = MySQLdb.connect('localhost', constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
+            self.db.autocommit(True)
+            self.cursor = self.db.cursor()
+        except MySQLdb.Error, e:
+            logging.error("Failed to connect to database and create cursor, %d: %s" % (e.args[0], e.args[1]))
+            self.cleanup()
+    def cleanup(self):
+        if self.db:
+            self.db.close()
+        sys.exit(1)
 
 
 if __name__ == '__main__':
