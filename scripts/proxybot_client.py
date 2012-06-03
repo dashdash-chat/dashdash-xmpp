@@ -83,24 +83,30 @@ class Proxybot(sleekxmpp.ClientXMPP):
         # Set up slash commands to be handled by the hostbot's SlashCommandRegistry
         self.commands = SlashCommandRegistry()
         def is_admin(sender):
-            return sender.startswith('admin')  
+            return sender.bare in constants.admin_users
         def is_participant(sender):
-            return self.stage is Stage.ACTIVE and sender in self.participants
+            return self.stage is Stage.ACTIVE and sender.user in self.participants
+        def is_admin_or_participant(sender):
+            return is_admin(sender) or is_participant(sender)
         def has_none(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
                 return []
             return False
         def sender_as_only_arg(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
-                return [sender]
+                return [sender.user]
             return False
         def sender_and_one_arg(sender, arg_string, arg_tokens):            
             if len(arg_tokens) == 1:
-                return [sender, arg_tokens[0]]
+                return [sender.user, arg_tokens[0]]
+            return False
+        def only_string(sender, arg_string, arg_tokens):
+            if len(arg_string.strip()) > 0:
+                return [sender.user, arg_string]
             return False
         def one_arg_and_string(sender, arg_string, arg_tokens):
             if len(arg_tokens) >= 2:
-                return [sender, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
+                return [sender.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
             return False
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
@@ -111,7 +117,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
                                        text_description = 'List the participants in this conversation',
-                                       validate_sender  = is_participant,
+                                       validate_sender  = is_admin_or_participant,
                                        transform_args   = has_none,
                                        action           = lambda: 'The current participants are:\n' + \
                                            ''.join(['\t%s\n' % user for user in self.participants]).strip('\n')))
@@ -130,7 +136,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self.commands.add(SlashCommand(command_name     = 'whisper',
                                        text_arg_format  = 'username message to be sent to that user',
                                        text_description = 'Whisper a quick message to only one other participant',
-                                       validate_sender  = is_participant,
+                                       validate_sender  = is_admin_or_participant,
                                        transform_args   = one_arg_and_string,
                                        action           = self._whisper_message))
         self.commands.add(SlashCommand(command_name     = 'invisible',
@@ -145,6 +151,12 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        validate_sender  = is_participant,
                                        transform_args   = sender_as_only_arg,
                                        action           = self._show_to_observers))
+        self.commands.add(SlashCommand(command_name     = 'notify',
+                                       text_arg_format  = 'message to be sent to that conversation',
+                                       text_description = 'Send a message to the participants for an active proxybot',
+                                       validate_sender  = is_admin,
+                                       transform_args   = only_string,
+                                       action           = self._notify))
         self.commands.add(SlashCommand(command_name     = 'bounce',
                                        text_arg_format  = '',
                                        text_description = 'Disconnect this proxybot and restart it in a new process, reloading the script.',
@@ -175,7 +187,6 @@ class Proxybot(sleekxmpp.ClientXMPP):
             'user': self.boundjid.user,
             'host': constants.server,
         })
-
     def bounce(self, event={}):
         subprocess.Popen([sys.executable, constants.proxybot_script,
             '--daemon',
@@ -381,10 +392,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
     def _handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
             if self.commands.is_command(msg['body']):
-                msg.reply(self.commands.handle_command(msg['from'].user, msg['body'])).send()
+                msg.reply(self.commands.handle_command(msg['from'], msg['body'])).send()
                 return
-            elif msg['body'].startswith('/'):  # don't send mis-typed /commands to the other participants
-                msg.reply(self.commands.handle_command(msg['from'].user, '/help')).send()
+            elif msg['body'].strip().startswith('/'):  # don't send mis-typed /commands to the other participants
+                msg.reply(self.commands.handle_command(msg['from'], '/help')).send()
+                return
+            elif msg['from'].bare in constants.admin_users:
+                msg.reply("Admins cannot send normal messages to proxybots, please use the /notify command.").send()
                 return
             elif self.stage is Stage.IDLE:  # idle proxybots can receive /commands, but the commands don't activate them
                 self.stage = Stage.ACTIVE
@@ -403,11 +417,6 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 self._add_participant(msg['from'].user)
             self._broadcast_message(msg, msg['from'].user)
 
-    def _broadcast_alert(self, body):
-        msg = self.Message()
-        msg['body'] = body
-        self._broadcast_message(msg)
-
     def _broadcast_message(self, msg, sender=None):
         del msg['id']
         del msg['from']
@@ -422,13 +431,24 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 new_msg = msg.__copy__()
                 new_msg['to'] = "%s@%s" % (participant.user(), constants.server)
                 new_msg.send()
-
+    def _broadcast_alert(self, body):
+        msg = self.Message()
+        msg['body'] = body
+        self._broadcast_message(msg)
     def _whisper_message(self, sender, recipient, body):
+        recipient_jid = '%s@%s' % (recipient, constants.server)
         if recipient == sender:
             raise ExecutionError, 'You can\'t whisper to youerself.'
-        if recipient not in self.participants:
+        if recipient not in self.participants and recipient_jid not in constants.admin_users:
             raise ExecutionError, 'You can\'t whisper to someone who isn\'t a participant in this conversation.'
-        self.send_message(mto="%s@%s" % (recipient, constants.server), mbody='(whispering)[%s] %s' % (sender, body))
+        self.send_message(mto=recipient_jid, mbody='(whispering)[%s] %s' % (sender, body))
+        return ''
+    def _notify(self, sender, body):
+        if self.stage != Stage.ACTIVE:
+            raise ExecutionError, 'This proxybot is %s, and you can only send a message to an %s conversation.' % (self.stage, Stage.ACTIVE)
+        msg = self.Message()
+        msg['body'] = body
+        self._broadcast_message(msg, sender)
         return ''
 
     def _set_invisibility(self, invisibility):
