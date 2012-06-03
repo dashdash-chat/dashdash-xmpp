@@ -288,18 +288,19 @@ class Proxybot(sleekxmpp.ClientXMPP):
             self['xep_0050'].start_command(jid=constants.hostbot_component_jid,
                                            node=ProxybotCommand.retire,
                                            session=session)
+            self._broadcast_alert('%s has left the conversation.' % user)
             logging.info('Removing user %s from the conversation and retiring the proxybot' % user)
         else:
             old_participants = self.participants.copy()
             self.participants.remove(user)
             self._update_rosters(old_participants, self.participants)
-            self._broadcast_alert('%s has left the conversation' % user)
             session = {'user': user,
                        'next': self._cmd_send_remove_participant,
                        'error': self._cmd_error}
             self['xep_0050'].start_command(jid=constants.hostbot_component_jid,
                                            node=ProxybotCommand.remove_participant,
                                            session=session)
+            self._broadcast_alert('%s has left the conversation.' % user)
             logging.info('Removing user %s from the conversation' % user)
         return "Goodbye, %s!" % user
 
