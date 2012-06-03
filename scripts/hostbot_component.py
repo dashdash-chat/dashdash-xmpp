@@ -28,7 +28,7 @@ def proxybot_only(fn):
         if args[1]['from'].user.startswith(constants.proxybot_prefix):
             return fn(*args, **kwargs)
         else:
-            logging.error("This command can only be invoked by a proxybot, but the IQ stanza was from %s." % args[1]['from'])
+            logging.error('This command can only be invoked by a proxybot, but the IQ stanza was from %s.' % args[1]['from'])
             return
     return wrapped
 
@@ -68,6 +68,10 @@ class HostbotComponent(ComponentXMPP):
         self.commands = SlashCommandRegistry()
         def is_admin(sender):
             return sender.bare in constants.admin_users
+        def has_none(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 0:
+                return []
+            return False
         def has_one_string(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 return arg_tokens
@@ -118,6 +122,12 @@ class HostbotComponent(ComponentXMPP):
                                        validate_sender  = is_admin,
                                        transform_args   = has_two_strings,
                                        action           = self._delete_friendship))
+        self.commands.add(SlashCommand(command_name     = 'friendships',
+                                      text_arg_format  = '',
+                                      text_description = 'List all current friendships (i.e., all idle proxybots).',
+                                      validate_sender  = is_admin,
+                                      transform_args   = has_none,
+                                      action           = self._list_friendships))
         self.commands.add(SlashCommand(command_name     = 'restore',
                                        text_arg_format  = 'proxybot_jid OR proxybot_uuid',
                                        text_description = 'Restore an idle or active proxybot from the database.',
@@ -202,7 +212,6 @@ class HostbotComponent(ComponentXMPP):
             'password': password
         })
         self._db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
-
     def _delete_user(self, user):
         if not self._user_exists(user):
             raise ExecutionError, 'User %s does not exist in the Chatidea database' % user
@@ -255,7 +264,6 @@ class HostbotComponent(ComponentXMPP):
             logging.error('Could not register account: %s' % e)
             raise ExecutionError
         return 'Friendship for %s and %s successfully created as %s.' % (user1, user2, proxybot_jid)
-
     def _delete_friendship(self, user1, user2):
         if not self._user_exists(user1):
             raise ExecutionError, 'User1 %s does not exist in the Chatidea database' % user1
@@ -274,6 +282,25 @@ class HostbotComponent(ComponentXMPP):
         self._db_execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
         return 'Friendship for %s and %s successfully deleted as %s.' % (user1, user2, proxybot_uuid)
+    def _list_friendships(self):
+        try:
+            friendships = self._db_execute_and_fetchall("""SELECT GROUP_CONCAT(proxybot_participants.user SEPARATOR ' '), proxybots.id FROM
+                proxybots, proxybot_participants WHERE proxybots.stage = 'idle' AND
+                proxybots.id = proxybot_participants.proxybot_id GROUP BY proxybots.id""", strip_pairs=False)
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding idle proxybots in the database: %s' % e
+        if len(friendships) <= 0:
+            return 'No idle proxybots found. Use /new_friendship to create an idle proxybot for two users.'    
+        output = 'The current friendships (i.e. idle proxybots) are:'
+        for friendship in friendships:
+            try:
+                user1, user2 = friendship[0].split(' ')
+            except ValueError:
+                raise ExecutionError, 'There were not two users found for %s, %s in this string: %s' % (proxbot_uuid, proxybot_jid, friendship[0])
+            proxbot_uuid = friendship[1]
+            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(friendship[1])))
+            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s\n\t\t\t\t\t%s' % (user1, user2, proxbot_uuid, proxybot_jid)
+        return output
 
     def _restore_proxybot(self, proxybot_jid, proxybot_uuid):
         num_proxybots = self._db_execute_and_fetchall("""SELECT COUNT(*) FROM proxybots WHERE 
@@ -325,7 +352,7 @@ class HostbotComponent(ComponentXMPP):
         elif len(proxybot_ids) == 1:
             return proxybot_ids[0]
         else:
-            logging.error("There are %d idle proxybots for %s and %s! There should only be 1." % (len(proxybot_ids), user1, user2))
+            logging.error('There are %d idle proxybots for %s and %s! There should only be 1.' % (len(proxybot_ids), user1, user2))
             return None
 
     def _user_exists(self, user):
@@ -459,11 +486,11 @@ class HostbotComponent(ComponentXMPP):
         except Exception, e:
             raise ExecutionError, 'There was an error finding the observers for this proxybot: %s' % e
         #LATER add commands to get data from the live process for this proxybot, probably using adhoc commands.
-        output = "%(proxybot_jid)s\n%(proxybot_uuid)s" + \
-                "\n\t%(online)s" + \
-                "\n\t%(stage)s" + \
-                "\n\tParticipants:%(participants)s" + \
-                "\n\tObservers:%(observers)s"
+        output = '%(proxybot_jid)s\n%(proxybot_uuid)s' + \
+                '\n\t%(online)s' + \
+                '\n\t%(stage)s' + \
+                '\n\tParticipants:%(participants)s' + \
+                '\n\tObservers:%(observers)s'
         return output % {
                 'proxybot_jid': proxybot_jid,
                 'proxybot_uuid': proxybot_uuid,
@@ -491,11 +518,14 @@ class HostbotComponent(ComponentXMPP):
             'password': constants.hostbot_xmlrpc_password
         }, data)
 
-    def _db_execute_and_fetchall(self, query, data={}):
+    def _db_execute_and_fetchall(self, query, data={}, strip_pairs=True):
         self._db_execute(query, data)
         fetched = self.cursor.fetchall()
         if fetched and len(fetched) > 0:
-            return [result[0] for result in fetched]
+            if strip_pairs:
+                return [result[0] for result in fetched]
+            else:
+                return fetched
         return []
     def _db_execute(self, query, data={}):
         if not self.db or not self.cursor:
@@ -503,7 +533,7 @@ class HostbotComponent(ComponentXMPP):
         try:
             self.cursor.execute(query, data)
         except MySQLdb.OperationalError, e:
-            logging.info("Database OperationalError: %s\n\t for query: %s", (e, query % data))
+            logging.info('Database OperationalError: %s\n\t for query: %s', (e, query % data))
             self._db_connect()  # Try again, but only once
             self.cursor.execute(query, data)
     def _db_connect(self):
@@ -512,7 +542,7 @@ class HostbotComponent(ComponentXMPP):
             self.db.autocommit(True)
             self.cursor = self.db.cursor()
         except MySQLdb.Error, e:
-            logging.error("Failed to connect to database and create cursor, %d: %s" % (e.args[0], e.args[1]))
+            logging.error('Failed to connect to database and create cursor, %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
     def cleanup(self):
         if self.db:
@@ -544,6 +574,6 @@ if __name__ == '__main__':
     if xmpp.connect(constants.server_ip, constants.component_port):
         xmpp.process(block=True)
         xmpp.cleanup()
-        print("Hostbot done")
+        print('Hostbot done')
     else:
-        print("Hostbot unable to connect.")
+        print('Hostbot unable to connect.')
