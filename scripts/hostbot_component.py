@@ -100,13 +100,13 @@ class HostbotComponent(ComponentXMPP):
             return False
         self.commands.add(SlashCommand(command_name     = 'new_user',
                                        text_arg_format  = 'username password',
-                                       text_description = 'Create a new user in both ejabberd and the Chatidea database.',
+                                       text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = is_admin,
                                        transform_args   = has_two_strings,
                                        action           = self._create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = 'username',
-                                       text_description = 'Unregister a user in ejabberd and remove her from the Chatidea database and applicable proxybots.',
+                                       text_description = 'Unregister a user in ejabberd and remove her from the Vine database and applicable proxybots.',
                                        validate_sender  = is_admin,
                                        transform_args   = has_one_string,
                                        action           = self._delete_user))
@@ -205,7 +205,7 @@ class HostbotComponent(ComponentXMPP):
         #LATER validate that user does not start with admin or any of the other reserverd names
         user = user.lower()
         if self._user_exists(user):
-            raise ExecutionError, 'User %s already exists in the Chatidea database' % user
+            raise ExecutionError, 'User %s already exists in the Vine database' % user
         self._xmlrpc_command('register', {
             'user': user,
             'host': constants.server,
@@ -214,7 +214,7 @@ class HostbotComponent(ComponentXMPP):
         self._db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
     def _delete_user(self, user):
         if not self._user_exists(user):
-            raise ExecutionError, 'User %s does not exist in the Chatidea database' % user
+            raise ExecutionError, 'User %s does not exist in the Vine database' % user
         self._xmlrpc_command('unregister', {
             'user': user,
             'host': constants.server,
@@ -236,9 +236,9 @@ class HostbotComponent(ComponentXMPP):
      
     def _create_friendship(self, user1, user2):
         if not self._user_exists(user1):
-            raise ExecutionError, 'User1 %s does not exist in the Chatidea database' % user1
+            raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
         if not self._user_exists(user2):
-            raise ExecutionError, 'User2 %s does not exist in the Chatidea database' % user2
+            raise ExecutionError, 'User2 %s does not exist in the Vine database' % user2
         proxybot_id = self._find_idle_proxybot(user1, user2)
         if proxybot_id:
             raise ExecutionError, 'Idle proxybot %s arleady exists for %s and %s!' % (proxybot_id, user1, user2)
@@ -266,9 +266,9 @@ class HostbotComponent(ComponentXMPP):
         return 'Friendship for %s and %s successfully created as %s.' % (user1, user2, proxybot_jid)
     def _delete_friendship(self, user1, user2):
         if not self._user_exists(user1):
-            raise ExecutionError, 'User1 %s does not exist in the Chatidea database' % user1
+            raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
         if not self._user_exists(user2):
-            raise ExecutionError, 'User2 %s does not exist in the Chatidea database' % user2
+            raise ExecutionError, 'User2 %s does not exist in the Vine database' % user2
         proxybot_uuid = self._find_idle_proxybot(user1, user2)
         if not proxybot_uuid:
             raise ExecutionError, 'Idle proxybot not found %s and %s.' % (user1, user2)

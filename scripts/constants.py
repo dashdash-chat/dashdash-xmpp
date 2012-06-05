@@ -35,8 +35,8 @@ rosterbot_xmlrpc_jid = '_rosterbot'
 rosterbot_xmlrpc_password = env_vars.rosterbot_xmlrpc_password
 
 proxybot_group = 'contacts'
-active_group = 'Chatidea Conversations'
-idle_group = 'Chatidea Contacts'
+active_group = 'Vine Conversations'
+idle_group = 'Vine Contacts'
 
 db_name = 'chatidea'
 hostbot_mysql_user = 'hostbot'
