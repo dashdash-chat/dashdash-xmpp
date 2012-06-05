@@ -513,7 +513,7 @@ class HostbotComponent(ComponentXMPP):
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
         return fn({
-            'user': constants.hostbot_xmlrpc_jid,  #NOTE the server is not bot.localhost because of xml_rpc authentication
+            'user': constants.hostbot_xmlrpc_jid,  #NOTE the server is not bot.vine.im because of xml_rpc authentication
             'server': constants.server,
             'password': constants.hostbot_xmlrpc_password
         }, data)

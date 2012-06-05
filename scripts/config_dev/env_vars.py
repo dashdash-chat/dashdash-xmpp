@@ -2,7 +2,7 @@ component_port = 5237
 client_port = 5222
 xmlrpc_port = 4560
 
-server = 'localhost'
+server = 'vine.im'
 repo_dir = '/vagrant/chatidea/'
 log_dir = '/var/log/chatidea/'
 
