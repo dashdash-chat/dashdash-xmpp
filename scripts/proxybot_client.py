@@ -581,9 +581,10 @@ class Proxybot(sleekxmpp.ClientXMPP):
     
     # Adhoc commands - general functions
     def _cmd_error(self, iq, session):
-        logging.error("COMMAND: %s %s" % (iq['error']['condition'],
-                                          iq['error']['text']))
+        logging.error('%s command: %s %s' % (iq['command']['node'], iq['error']['condition'], iq['error']['text']))
         self['xep_0050'].terminate_command(session)
+        self._broadcast_alert('There was an error with the %s command, and this proxybot will now restart itself.' % iq['command']['node'])
+        self.event('bounce', {})  # bounce on command failure, since we're in an unknown state and need to re-fetch state from database
 
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
