@@ -396,7 +396,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                 msg.reply("Admins cannot send normal messages to proxybots, please use the /notify command.").send()
                 return
             elif self.stage is Stage.RETIRED:  # if we're retired yet still online, the ad hoc command probably failed the first time, so retry
-                session = {'user': user,
+                session = {'user': msg['from'].user,
                            'next': self._cmd_send_retire,
                            'error': self._cmd_error}
                 self['xep_0050'].start_command(jid=constants.hostbot_component_jid,

@@ -91,6 +91,8 @@ sudo touch /var/log/chatidea/proxybots.log
 sudo chown ec2-user /var/log/chatidea/proxybots.log
 sudo touch /var/log/chatidea/hostbot.log
 sudo chown ec2-user /var/log/chatidea/hostbot.log
+sudo touch /var/log/chatidea/misc.log
+sudo chown ec2-user /var/log/chatidea/misc.log
 sudo: no tty present and no askpass program specified
 python chatidea/scripts/hostbot_component.py
 
