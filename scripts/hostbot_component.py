@@ -29,7 +29,7 @@ def proxybot_only(fn):
         if args[1]['from'].user.startswith(constants.proxybot_prefix):
             return fn(*args, **kwargs)
         else:
-            logging.error('This command can only be invoked by a proxybot, but the IQ stanza was from %s.' % args[1]['from'])
+            logging.warning("%s tried to use a proxybot ad hoc command: %s" % args[1]['from'], args[1]['body'])
             return
     return wrapped
 
@@ -60,7 +60,7 @@ class HostbotComponent(ComponentXMPP):
                 if self._proxybot_is_online(proxybot_jid):
                     session = {'next': self._cmd_complete,
                                'error': self._cmd_error}
-                    self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_uuid),
+                    self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
                                                    node=HostbotCommand.bounce_proxybot,
                                                    session=session,
                                                    ifrom=constants.hostbot_component_jid)
@@ -180,28 +180,21 @@ class HostbotComponent(ComponentXMPP):
                                      name='Remove a participant',
                                      handler=self._cmd_receive_remove_participant,
                                      jid=self.boundjid.full)
-        self.send_presence(pfrom=self.fulljid_with_user(), pnick=constants.hostbot_nick, pshow="available")
-    
-    def fulljid_with_user(self):
-        return 'host' + '@' + self.boundjid.full
+        self.send_presence(pfrom=constants.hostbot_user_jid, pnick=constants.hostbot_nick, pshow="available")
+        logging.info("Session started")
 
     def _handle_message(self, msg):
-        if msg['type'] in ['groupchat', 'error']:
-            return
-        if msg['to'].user == constants.hostbot_user:
-            if self.commands.is_command(msg['body']):
-                msg.reply(self.commands.handle_command(msg['from'], msg['body'])).send()
+        if msg['type'] in ('chat', 'normal'):
+            if msg['to'].user == constants.hostbot_user:
+                if self.commands.is_command(msg['body']):
+                    msg.reply(self.commands.handle_command(msg['from'], msg['body'])).send()
+                else:
+                    msg.reply(self.commands.handle_command(msg['from'], '/help')).send()
             else:
-                msg.reply(self.commands.handle_command(msg['from'], '/help')).send()
-        else:
-            resp = msg.reply("You've got the wrong bot!\nPlease send messages to %s@%s." % (constants.hostbot_user, constants.hostbot_server)).send()
+                resp = msg.reply("You've got the wrong bot!\nPlease send messages to %s@%s." % (constants.hostbot_user, constants.hostbot_server)).send()
 
     def _handle_probe(self, presence):
-        self.sendPresence(pfrom=self.fulljid_with_user(),
-                          pnick=constants.hostbot_nick,
-                          pstatus="Who do you want to chat with?",
-                          pshow="available",
-                          pto=presence['from'])
+        self.sendPresence(pfrom=constants.hostbot_user_jid, pnick=constants.hostbot_nick, pshow="available", pto=presence['from'])
 
     def _launch_proxybot(self, proxybot_args):
         process_args = [sys.executable, constants.proxybot_script, '--daemon']
@@ -219,6 +212,7 @@ class HostbotComponent(ComponentXMPP):
             'password': password
         })
         self._db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
+        logging.info("Creating user %s" % user)
     def _delete_user(self, user):
         if not self._user_exists(user):
             raise ExecutionError, 'User %s does not exist in the Vine database' % user
@@ -236,11 +230,12 @@ class HostbotComponent(ComponentXMPP):
             session = {'user': user,
                        'next': self._cmd_send_participant_deleted,
                        'error': self._cmd_error}
-            self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
+            self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_id),
                                            node=HostbotCommand.participant_deleted,
                                            session=session,
                                            ifrom=constants.hostbot_component_jid)
-     
+        logging.info("Deleting user %s" % user)
+
     def _create_friendship(self, user1, user2):
         if not self._user_exists(user1):
             raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
@@ -249,28 +244,28 @@ class HostbotComponent(ComponentXMPP):
         proxybot_id = self._find_idle_proxybot(user1, user2)
         if proxybot_id:
             raise ExecutionError, 'Idle proxybot %s arleady exists for %s and %s!' % (proxybot_id, user1, user2)
-        proxybot_id = uuid.uuid4()
-        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_id))
+        proxybot_uuid = uuid.uuid4()
+        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
         try:
             self._xmlrpc_command('register', {
                 'user': proxybot_jid,
                 'host': constants.server,
                 'password': constants.proxybot_password
             })
-            self._db_execute("INSERT INTO proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_id})
+            self._db_execute("INSERT INTO proxybots (id) VALUES (%(proxybot_id)s)", {'proxybot_id': proxybot_uuid})
             self._db_execute("""INSERT INTO proxybot_participants (proxybot_id, user) VALUES 
                 (%(proxybot_id)s, %(user1)s), (%(proxybot_id)s, %(user2)s)""",
-                {'proxybot_id': proxybot_id, 'user1': user1, 'user2': user2})
+                {'proxybot_id': proxybot_uuid, 'user1': user1, 'user2': user2})
             self._launch_proxybot(['--username', proxybot_jid, '--participant1', user1, '--participant2', user2])
             self._add_or_remove_observers(user1, user2, HostbotCommand.add_observer)
-            logging.info('Proxybot %s created for %s and %s' % (proxybot_jid, user1, user2))
+            logging.info('Friendship %s, %s created for %s and %s' % (proxybot_jid, proxybot_uuid, user1, user2))
+            return 'Friendship for %s and %s successfully created as %s.' % (user1, user2, proxybot_jid)
         except MySQLdb.Error, e:
-            logging.error('Failed to register proxybot %s for %s and %s with MySQL error %s' % (proxybot_jid, user1, user2, e))
+            logging.error('Failed to register %s, %s for %s and %s with MySQL error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
             raise ExecutionError
         except xmlrpclib.Fault as e:
-            logging.error('Could not register account: %s' % e)
+            logging.error('Failed to register %s, %s for %s and %s with XMLRPC error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
             raise ExecutionError
-        return 'Friendship for %s and %s successfully created as %s.' % (user1, user2, proxybot_jid)
     def _delete_friendship(self, user1, user2):
         if not self._user_exists(user1):
             raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
@@ -279,16 +274,25 @@ class HostbotComponent(ComponentXMPP):
         proxybot_uuid = self._find_idle_proxybot(user1, user2)
         if not proxybot_uuid:
             raise ExecutionError, 'Idle proxybot not found %s and %s.' % (user1, user2)
+        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
         session = {'next': self._cmd_complete,
                    'error': self._cmd_error}
-        self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_uuid),
+        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
                                        node=HostbotCommand.delete_proxybot,
                                        session=session,
                                        ifrom=constants.hostbot_component_jid)
-        self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
-        self._db_execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
-        self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
-        return 'Friendship for %s and %s successfully deleted as %s.' % (user1, user2, proxybot_uuid)
+        try:
+            self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+            self._db_execute("DELETE FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+            self._add_or_remove_observers(user1, user2, HostbotCommand.remove_observer)
+            logging.info('Friendship %s, %s deleted for %s and %s' % (proxybot_jid, proxybot_uuid, user1, user2))
+            return 'Friendship for %s and %s successfully deleted as %s.' % (user1, user2, proxybot_uuid)
+        except MySQLdb.Error, e:
+            logging.error('Failed to delete %s, %s for %s and %s with MySQL error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
+            raise ExecutionError
+        except xmlrpclib.Fault as e:
+            logging.error('Failed to delete %s, %s for %s and %s with XMLRPC error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
+            raise ExecutionError
     def _list_friendships(self):
         try:
             friendships = self._db_execute_and_fetchall("""SELECT GROUP_CONCAT(proxybot_participants.user SEPARATOR ' '), proxybots.id FROM
@@ -319,28 +323,29 @@ class HostbotComponent(ComponentXMPP):
         if self._proxybot_is_online(proxybot_jid):
             raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
         self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
+        logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
         return 'Proxybot %s has been restarted - look for it online!' % proxybot_jid
 
-    def _add_or_remove_observers(self, user1, user2, command):    
+    def _add_or_remove_observers(self, user1, user2, command):
         # find active proxybots with each user as a participant but *not* the other, and add/remove the other as an observer
         for participant, observer in [(user1, user2), (user2, user1)]:
             proxybot_ids = self._db_execute_and_fetchall("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
                 proxybots.id = proxybot_participants.proxybot_id AND
                 proxybots.stage = 'active' AND
                 proxybot_participants.user = %(participant)s AND
-            	proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
-            	{'participant': participant, 'observer': observer}, )
+                proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
+                {'participant': participant, 'observer': observer}, )
             for proxybot_id in proxybot_ids:
                 session = {'participant': participant,
                            'observer': observer,
                            'next': self._cmd_send_addremove_observer,
                            'error': self._cmd_error}
-                self['xep_0050'].start_command(jid=self._get_jid_for_proxybot(proxybot_id),
-                                               node=command,  # they can use the same adhoc send function!
+                self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_id),
+                                               node=command,  # they can use the same ad hoc send function!
                                                session=session,
                                                ifrom=constants.hostbot_component_jid)
 
-    def _get_jid_for_proxybot(self, proxybot_uuid):
+    def _full_jid_for_proxybot(self, proxybot_uuid):
         return '%s%s@%s/%s' % (constants.proxybot_prefix,
                                shortuuid.encode(uuid.UUID(proxybot_uuid)),
                                constants.server,
@@ -359,7 +364,7 @@ class HostbotComponent(ComponentXMPP):
         elif len(proxybot_ids) == 1:
             return proxybot_ids[0]
         else:
-            logging.error('There are %d idle proxybots for %s and %s! There should only be 1.' % (len(proxybot_ids), user1, user2))
+            logging.error('There are %d idle proxybots for %s and %s! There should only be 1: %s' % (len(proxybot_ids), user1, user2, proxybot_ids))
             return None
 
     def _user_exists(self, user):
@@ -369,113 +374,11 @@ class HostbotComponent(ComponentXMPP):
         else:
             return True
 
-    # Adhoc commands for which the hostbot is the user and the proxybot is the provider
-    @proxybot_only
-    def _cmd_send_participant_deleted(self, iq, session):
-        form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='user', value=session['user'])
-        session['payload'] = form
-        session['next'] = None
-        self['xep_0050'].complete_command(session)
-    @proxybot_only
-    def _cmd_send_addremove_observer(self, iq, session):
-        form = self['xep_0004'].makeForm(ftype='submit')
-        form.addField(var='participant', value=session['participant'])
-        form.addField(var='observer', value=session['observer'])
-        session['payload'] = form
-        session['next'] = None
-        self['xep_0050'].complete_command(session)
-
-    # Adhoc commands for which the hostbot is the provider and the proxybot is the user
-    @proxybot_only
-    def _cmd_receive_activate(self, iq, session):
-        form = self['xep_0004'].makeForm('form', 'Activate proxybot')
-        form.addField(ftype='text-single', var='proxybot')
-        form.addField(ftype='text-single', var='user1')
-        form.addField(ftype='text-single', var='user2')
-        session['payload'] = form
-        session['next'] = self._cmd_complete_activate
-        session['has_next'] = False
-        return session
-    @proxybot_only
-    def _cmd_receive_retire(self, iq, session):
-        form = self['xep_0004'].makeForm('form', 'Retire proxybot')
-        form.addField(ftype='text-single', var='proxybot')
-        form.addField(ftype='text-single', var='user')
-        session['payload'] = form
-        session['next'] = self._cmd_complete_retire
-        session['has_next'] = False
-        return session
-    @proxybot_only
-    def _cmd_receive_add_participant(self, iq, session):
-        form = self['xep_0004'].makeForm('form', 'Add a participant')
-        form.addField(ftype='text-single', var='proxybot')
-        form.addField(ftype='text-single', var='user')
-        session['payload'] = form
-        session['next'] = self._cmd_complete_add_participant
-        session['has_next'] = False
-        return session
-    @proxybot_only
-    def _cmd_receive_remove_participant(self, iq, session):
-        form = self['xep_0004'].makeForm('form', 'Remove a participant')
-        form.addField(ftype='text-single', var='proxybot')
-        form.addField(ftype='text-single', var='user')
-        session['payload'] = form
-        session['next'] = self._cmd_complete_remove_participant
-        session['has_next'] = False
-        return session
-    def _cmd_complete_activate(self, payload, session):
-        form = payload
-        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
-        user1 = form['values']['user1']
-        user2 = form['values']['user2']
-        self._db_execute("UPDATE proxybots SET stage = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
-        self._create_friendship(user1, user2)  #NOTE activate before creating the new proxybot, so the idle-does-not-exist check passes
-        session['payload'] = None
-        session['next'] = None
-        return session
-    def _cmd_complete_retire(self, payload, session):
-        form = payload
-        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
-        user = form['values']['user']
-        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
-        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
-            {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
-        session['payload'] = None
-        session['next'] = None
-        return session
-    def _cmd_complete_add_participant(self, payload, session):
-        form = payload
-        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
-        user = form['values']['user']
-        self._db_execute("INSERT INTO proxybot_participants (proxybot_id, user) VALUES (%(proxybot_id)s, %(user)s)",
-            {'proxybot_id': shortuuid.decode(proxybot_id), 'user': user})
-        session['payload'] = None
-        session['next'] = None
-        return session
-    def _cmd_complete_remove_participant(self, payload, session):
-        form = payload
-        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
-        user = form['values']['user']
-        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
-            {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
-        session['payload'] = None
-        session['next'] = None
-        return session
-    
-    # Adhoc commands - general functions
-    def _cmd_complete(self, iq, session):
-        self['xep_0050'].complete_command(session)
-    def _cmd_error(self, iq, session):
-        logging.error("COMMAND: %s %s" % (iq['error']['condition'],
-                                          iq['error']['text']))
-        self['xep_0050'].terminate_command(session)
-
     def _proxybot_status(self, proxybot_jid, proxybot_uuid):
         try:
             stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
         except Exception, e:
-            raise ExecutionError, 'This proxybot was not found in the database: %s' % e
+            raise ExecutionError, 'There was an error finding the proxybot: %s' % e
         try:
             participants = self._db_execute_and_fetchall("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         except Exception, e:
@@ -492,7 +395,7 @@ class HostbotComponent(ComponentXMPP):
                     proxybot_participants_1.user = %(user)s""", {'user': participant}))
         except Exception, e:
             raise ExecutionError, 'There was an error finding the observers for this proxybot: %s' % e
-        #LATER add commands to get data from the live process for this proxybot, probably using adhoc commands.
+        #LATER add commands to get data from the live process for this proxybot, probably using ad hoc commands.
         output = '%(proxybot_jid)s\n%(proxybot_uuid)s' + \
                 '\n\t%(online)s' + \
                 '\n\t%(stage)s' + \
@@ -529,19 +432,135 @@ class HostbotComponent(ComponentXMPP):
         users = [User(username, proxybot_jid) for username in observers.union(participants)]
         for user in users:
             user.delete_from_rosters()
+        logging.info("Database and roster cleanup was done for %s, %s with users %s" % (proxybot_jid, proxybot_uuid, ', '.join([str(user) for user in users])))
         return 'This proxybot has been retired in the database and is no longer in the following rosters: %s' % ', '.join([str(user) for user in users])
     def _proxybot_purge(self, proxybot_jid, proxybot_uuid):
-        if proxybot_jid == 'all':    
+        if proxybot_jid == 'all':
             self._db_execute("DELETE proxybot_participants FROM proxybots, proxybot_participants WHERE proxybots.stage = 'retired' AND proxybots.id = proxybot_participants.proxybot_id")
             self._db_execute("DELETE FROM proxybots WHERE stage = 'retired'")
+            logging.info("All proxybots deleted from database")
             return 'All retired proxybots have been deleted from the database.'
         stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
         if self._proxybot_is_online(proxybot_jid) and stage != 'retired':
             return '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
         self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         self._db_execute("DELETE FROM proxybots WHERE stage = 'retired' AND id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        logging.info("%s, %s deleted from database" % (proxybot_jid, proxybot_uuid))
         return '%s, %s has been deleted from the database.' % (proxybot_jid, proxybot_uuid)
-    
+
+    # Adhoc commands for which the hostbot is the user and the proxybot is the provider
+    @proxybot_only
+    def _cmd_send_participant_deleted(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='user', value=session['user'])
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+        logging.info("Ad hoc command sent to proxybote: participant_deleted")
+    @proxybot_only
+    def _cmd_send_addremove_observer(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        form.addField(var='participant', value=session['participant'])
+        form.addField(var='observer', value=session['observer'])
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+        logging.info("Ad hoc command sent to proxybote: addremove_observer")
+
+    # Adhoc commands for which the hostbot is the provider and the proxybot is the user
+    @proxybot_only
+    def _cmd_receive_activate(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Activate proxybot')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user1')
+        form.addField(ftype='text-single', var='user2')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_activate
+        session['has_next'] = False
+        logging.info("Ad hoc command from %s recieved: activate" % iq['from'].user)
+        return session
+    @proxybot_only
+    def _cmd_receive_retire(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Retire proxybot')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_retire
+        session['has_next'] = False
+        logging.info("Ad hoc command from %s recieved: retire" % iq['from'].user)
+        return session
+    @proxybot_only
+    def _cmd_receive_add_participant(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Add a participant')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_add_participant
+        session['has_next'] = False
+        logging.info("Ad hoc command from %s recieved: add_participant" % iq['from'].user)
+        return session
+    @proxybot_only
+    def _cmd_receive_remove_participant(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Remove a participant')
+        form.addField(ftype='text-single', var='proxybot')
+        form.addField(ftype='text-single', var='user')
+        session['payload'] = form
+        session['next'] = self._cmd_complete_remove_participant
+        session['has_next'] = False
+        logging.info("Ad hoc command from %s recieved: remove_participant" % iq['from'].user)
+        return session
+    def _cmd_complete_activate(self, payload, session):
+        form = payload
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
+        user1 = form['values']['user1']
+        user2 = form['values']['user2']
+        self._db_execute("UPDATE proxybots SET stage = 'active' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self._create_friendship(user1, user2)  #NOTE activate before creating the new proxybot, so the idle-does-not-exist check passes
+        session['payload'] = None
+        session['next'] = None
+        logging.info(payload)
+        logging.info(session)
+        logging.info("Ad hoc command from %s completed and recorded in the database: activate" % session['from'].user)
+        return session
+    def _cmd_complete_retire(self, payload, session):
+        form = payload
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
+        user = form['values']['user']
+        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': shortuuid.decode(proxybot_id)})
+        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
+            {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
+        session['payload'] = None
+        session['next'] = None
+        logging.info("Ad hoc command from %s completed and recorded in the database: retire" % session['from'].user)
+        return session
+    def _cmd_complete_add_participant(self, payload, session):
+        form = payload
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
+        user = form['values']['user']
+        self._db_execute("INSERT INTO proxybot_participants (proxybot_id, user) VALUES (%(proxybot_id)s, %(user)s)",
+            {'proxybot_id': shortuuid.decode(proxybot_id), 'user': user})
+        session['payload'] = None
+        session['next'] = None
+        logging.info("Ad hoc command from %s completed and recorded in the database: add_participant" % session['from'].user)
+        return session
+    def _cmd_complete_remove_participant(self, payload, session):
+        form = payload
+        proxybot_id = form['values']['proxybot'].split('proxybot_')[1]
+        user = form['values']['user']
+        self._db_execute("DELETE FROM proxybot_participants WHERE user = %(user)s and proxybot_id = %(proxybot_id)s",
+            {'user': user, 'proxybot_id': shortuuid.decode(proxybot_id)})
+        session['payload'] = None
+        session['next'] = None
+        logging.info("Ad hoc command from %s completed and recorded in the database: remove_participant" % session['from'].user)
+        return session
+
+    # Adhoc commands - general functions
+    def _cmd_complete(self, iq, session):
+        self['xep_0050'].complete_command(session)
+    def _cmd_error(self, iq, session):
+        logging.error('%s ad hoc command: %s %s' % (iq['command']['node'], iq['error']['condition'], iq['error']['text']))
+        self['xep_0050'].terminate_command(session)
+
     def _proxybot_is_online(self, proxybot_jid):
         try:              
             res = self._xmlrpc_command('user_sessions_info', {
@@ -552,6 +571,7 @@ class HostbotComponent(ComponentXMPP):
         except xmlrpclib.ProtocolError, e:
             logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (proxybot_jid, str(e)))
             return False
+
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
         return fn({
@@ -571,11 +591,14 @@ class HostbotComponent(ComponentXMPP):
         return []
     def _db_execute(self, query, data={}):
         if not self.db or not self.cursor:
+            logging.info("Database connection missing, attempting to reconnect")
+            if self.db:
+                self.db.close()
             self._db_connect()
         try:
             self.cursor.execute(query, data)
         except MySQLdb.OperationalError, e:
-            logging.info('Database OperationalError: %s\n\t for query: %s', (e, query % data))
+            logging.info('Database OperationalError %s for query, will retry: %s', (e, query % data))
             self._db_connect()  # Try again, but only once
             self.cursor.execute(query, data)
     def _db_connect(self):
@@ -583,8 +606,9 @@ class HostbotComponent(ComponentXMPP):
             self.db = MySQLdb.connect('localhost', constants.hostbot_mysql_user, constants.hostbot_mysql_password, constants.db_name)
             self.db.autocommit(True)
             self.cursor = self.db.cursor()
+            logging.info("Database connection created")
         except MySQLdb.Error, e:
-            logging.error('Failed to connect to database and create cursor, %d: %s' % (e.args[0], e.args[1]))
+            logging.error('Database connection and/orcursor creation failed with %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
     def cleanup(self):
         if self.db:
@@ -609,13 +633,13 @@ if __name__ == '__main__':
     opts, args = optp.parse_args()
 
     logging.basicConfig(level=opts.loglevel,
-                        format='Hostbot  %(levelname)-8s %(message)s')
+                        format='%(asctime)-15s Hostbot %(levelname)-8s %(message)s')
 
     xmpp = HostbotComponent(opts.restore, opts.bounce)
-    
+
     if xmpp.connect(constants.server_ip, constants.component_port):
         xmpp.process(block=True)
         xmpp.cleanup()
-        print('Hostbot done')
-    else:
-        print('Hostbot unable to connect.')
+        logging.info("Done")
+    else:    
+        logging.error("Unable to connect")

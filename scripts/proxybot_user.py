@@ -83,7 +83,7 @@ class User(object):
             })
             return len(res['sessions_info']) > 0
         except xmlrpclib.ProtocolError, e:
-            logging.error('ProtocolError in is_online for %s, assuming offline: %s' % (self._user, str(e)))
+            logging.error('ProtocolError in is_online, assuming %s is offline: %s' % (self._user, str(e)))
             return False
         
     def __str__(self):
@@ -127,8 +127,9 @@ class Participant(User):
             self._observers = set([Observer(contact[0], self.proxybot_jid()) for contact in cursor.fetchall()]) 
             db.close()  # no need to keep the DB connection open!
         except MySQLdb.Error, e:
-            print "Error %d: %s" % (e.args[0], e.args[1])
-            db.close()
+            logging.error("MySQLdb %d: %s" % (e.args[0], e.args[1])
+            if db:
+                db.close()
             sys.exit(1)
     
     def add_observer(self, user, proxybot_jid, nick):
