@@ -29,7 +29,7 @@ class InitializerBot(sleekxmpp.ClientXMPP):
             "/create_user queen_of_hearts password",
             "/create_user dormouse password",
             "/create_user march_hare password",
-            "sleep 5",  #NOTE sleep here so that the proxybots can finish their adhoc commands #LATER find a better way to do this
+            "sleep 5",  #NOTE sleep here so that the proxybots can finish their ad hoc commands #LATER find a better way to do this
             "/create_friendship alice queen_of_hearts",
             "/create_friendship alice chesire_cat",
             "/create_friendship dormouse chesire_cat",

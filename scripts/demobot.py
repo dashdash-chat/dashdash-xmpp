@@ -18,7 +18,7 @@ class DemoBot(sleekxmpp.ClientXMPP):
         sleekxmpp.ClientXMPP.__init__(self, jid, constants.default_user_password)
         self.add_event_handler("session_start", self.start)
         self.add_event_handler("message", self.message)
-	self.last_message = None
+        self.last_message = None
 
     def start(self, event):
         self.send_presence()
