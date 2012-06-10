@@ -56,15 +56,10 @@ class HostbotComponent(ComponentXMPP):
         if bounce_proxybots:
             proxybot_uuids = self._db_execute_and_fetchall("SELECT id FROM proxybots WHERE stage != 'retired'")
             for proxybot_uuid in proxybot_uuids:
-                proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
-                if self._proxybot_is_online(proxybot_jid):
-                    session = {'next': self._cmd_complete,
-                               'error': self._cmd_error}
-                    self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
-                                                   node=HostbotCommand.bounce_proxybot,
-                                                   session=session,
-                                                   ifrom=constants.hostbot_component_jid)
-                    logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
+                try:
+                    self._proxybot_bounce('%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid))), proxybot_uuid)
+                except ExecutionError:
+                    logging.info("%s, %s wasn't online, so can't be bounced" % (proxybot_jid, proxybot_uuid))
         # Set up slash commands to be handled by the hostbot's SlashCommandRegistry
         self.commands = SlashCommandRegistry()
         def is_admin(sender):
@@ -138,7 +133,13 @@ class HostbotComponent(ComponentXMPP):
                                        text_description = 'Restore an idle or active proxybot from the database.',
                                        validate_sender  = is_admin,
                                        transform_args   = has_proxybot_id,
-                                       action           = self._restore_proxybot))
+                                       action           = self._proxybot_restore))
+        self.commands.add(SlashCommand(command_name     = 'bounce',
+                                       text_arg_format  = 'proxybot_jid OR proxybot_uuid',
+                                       text_description = 'Bounce a single proxybot.',
+                                       validate_sender  = is_admin,
+                                       transform_args   = has_proxybot_id,
+                                       action           = self._proxybot_bounce))
         self.commands.add(SlashCommand(command_name     = 'status',
                                        text_arg_format  = 'proxybot_jid OR proxybot_uuid',
                                        text_description = 'Check the status of a proxybot.',
@@ -294,37 +295,6 @@ class HostbotComponent(ComponentXMPP):
             logging.error('Failed to delete %s, %s for %s and %s with XMLRPC error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
             raise ExecutionError
     def _list_friendships(self):
-        try:
-            friendships = self._db_execute_and_fetchall("""SELECT GROUP_CONCAT(proxybot_participants.user SEPARATOR ' '), proxybots.id FROM
-                proxybots, proxybot_participants WHERE proxybots.stage = 'idle' AND
-                proxybots.id = proxybot_participants.proxybot_id GROUP BY proxybots.id""", strip_pairs=False)
-        except Exception, e:
-            raise ExecutionError, 'There was an error finding idle proxybots in the database: %s' % e
-        if len(friendships) <= 0:
-            return 'No idle proxybots found. Use /new_friendship to create an idle proxybot for two users.'    
-        output = 'The current friendships (i.e. idle proxybots) are:'
-        for friendship in friendships:
-            try:
-                user1, user2 = friendship[0].split(' ')
-            except ValueError:
-                raise ExecutionError, 'There were not two users found for %s, %s in this string: %s' % (proxbot_uuid, proxybot_jid, friendship[0])
-            proxbot_uuid = friendship[1]
-            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(friendship[1])))
-            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s\n\t\t\t\t\t%s' % (user1, user2, proxbot_uuid, proxybot_jid)
-        return output
-
-    def _restore_proxybot(self, proxybot_jid, proxybot_uuid):
-        num_proxybots = self._db_execute_and_fetchall("""SELECT COUNT(*) FROM proxybots WHERE 
-            id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
-        if not num_proxybots:
-            raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
-        if int(num_proxybots[0]) != 1:
-            raise ExecutionError, '%d proxybots found in the database for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
-        if self._proxybot_is_online(proxybot_jid):
-            raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
-        self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
-        logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
-        return 'Proxybot %s has been restarted - look for it online!' % proxybot_jid
 
     def _add_or_remove_observers(self, user1, user2, command):
         # find active proxybots with each user as a participant but *not* the other, and add/remove the other as an observer
@@ -374,6 +344,29 @@ class HostbotComponent(ComponentXMPP):
         else:
             return True
 
+    def _proxybot_restore(self, proxybot_jid, proxybot_uuid):
+        num_proxybots = self._db_execute_and_fetchall("""SELECT COUNT(*) FROM proxybots WHERE 
+            id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
+        if not num_proxybots:
+            raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
+        if int(num_proxybots[0]) != 1:
+            raise ExecutionError, '%d proxybots found in the database for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
+        if self._proxybot_is_online(proxybot_jid):
+            raise ExecutionError, 'Proxybot already online for %s, %s.' % (int(num_proxybots[0][0]), proxybot_jid, proxybot_uuid)
+        self._launch_proxybot(['--username', proxybot_jid, '--bounced'])
+        logging.info("Restored client process for %s, %s" % (proxybot_jid, proxybot_uuid))
+        return 'Proxybot %s has been restarted - look for it online!' % proxybot_jid
+    def _proxybot_bounce(self, proxybot_jid, proxybot_uuid):
+        if not self._proxybot_is_online(proxybot_jid):
+            raise ExecutionError, '%s, %s wasn\'t online, so can\'t be bounced. /restore it instead?' % (proxybot_jid, proxybot_uuid)
+        session = {'next': self._cmd_complete,
+                   'error': self._cmd_error}
+        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
+                                       node=HostbotCommand.bounce_proxybot,
+                                       session=session,
+                                       ifrom=constants.hostbot_component_jid)
+        logging.info("Bouncing client process for %s, %s" % (proxybot_jid, proxybot_uuid))
+        return '%s, %s has been bounced - look for it online!' % (proxybot_jid, proxybot_uuid)
     def _proxybot_status(self, proxybot_jid, proxybot_uuid):
         try:
             stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
