@@ -127,7 +127,7 @@ class Participant(User):
             self._observers = set([Observer(contact[0], self.proxybot_jid()) for contact in cursor.fetchall()]) 
             db.close()  # no need to keep the DB connection open!
         except MySQLdb.Error, e:
-            logging.error("MySQLdb %d: %s" % (e.args[0], e.args[1])
+            logging.error("MySQLdb %d: %s" % (e.args[0], e.args[1]))
             if db:
                 db.close()
             sys.exit(1)
