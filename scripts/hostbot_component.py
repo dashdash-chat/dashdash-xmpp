@@ -13,6 +13,7 @@ import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
+from proxybot_user import User
 import constants
 from constants import Stage, ProxybotCommand, HostbotCommand
 
@@ -72,11 +73,11 @@ class HostbotComponent(ComponentXMPP):
             if len(arg_tokens) == 0:
                 return []
             return False
-        def has_one_string(sender, arg_string, arg_tokens):
+        def has_one_token(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 return arg_tokens
             return False
-        def has_two_strings(sender, arg_string, arg_tokens):
+        def has_two_tokens(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
                 return arg_tokens
             return False
@@ -97,37 +98,41 @@ class HostbotComponent(ComponentXMPP):
                     except ValueError, e:
                         return False
                 return [proxybot_jid, proxybot_uuid]
-            return False
+            return False         
+        def all_or_proxybot_id(sender, arg_string, arg_tokens):
+            if len(arg_tokens) == 1 and arg_tokens[0] == 'all':
+                return [arg_tokens[0], None]
+            return has_proxybot_id(sender, arg_string, arg_tokens)
         self.commands.add(SlashCommand(command_name     = 'new_user',
                                        text_arg_format  = 'username password',
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = is_admin,
-                                       transform_args   = has_two_strings,
+                                       transform_args   = has_two_tokens,
                                        action           = self._create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = 'username',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database and applicable proxybots.',
                                        validate_sender  = is_admin,
-                                       transform_args   = has_one_string,
+                                       transform_args   = has_one_token,
                                        action           = self._delete_user))
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = 'arg1 arg2',
                                        text_description = 'Create a friendship (and launch a new idle proxybot) between two users.',
                                        validate_sender  = is_admin,
-                                       transform_args   = has_two_strings,
+                                       transform_args   = has_two_tokens,
                                        action           = self._create_friendship))
         self.commands.add(SlashCommand(command_name     = 'del_friendship',
                                        text_arg_format  = 'username1 username2',
                                        text_description = 'Delete a friendship (and destroy the idle proxybot) between two users.',
                                        validate_sender  = is_admin,
-                                       transform_args   = has_two_strings,
+                                       transform_args   = has_two_tokens,
                                        action           = self._delete_friendship))
         self.commands.add(SlashCommand(command_name     = 'friendships',
-                                      text_arg_format  = '',
-                                      text_description = 'List all current friendships (i.e., all idle proxybots).',
-                                      validate_sender  = is_admin,
-                                      transform_args   = has_none,
-                                      action           = self._list_friendships))
+                                       text_arg_format  = '',
+                                       text_description = 'List all current friendships (i.e., all idle proxybots).',
+                                       validate_sender  = is_admin,
+                                       transform_args   = has_none,
+                                       action           = self._list_friendships))
         self.commands.add(SlashCommand(command_name     = 'restore',
                                        text_arg_format  = 'proxybot_jid OR proxybot_uuid',
                                        text_description = 'Restore an idle or active proxybot from the database.',
@@ -140,6 +145,18 @@ class HostbotComponent(ComponentXMPP):
                                        validate_sender  = is_admin,
                                        transform_args   = has_proxybot_id,
                                        action           = self._proxybot_status))
+        self.commands.add(SlashCommand(command_name     = 'cleanup',
+                                       text_arg_format  = 'proxybot_jid OR proxybot_uuid',
+                                       text_description = 'Set a proxybot to retired in the database, and remove it from everyone\'s rosters.',
+                                       validate_sender  = is_admin,
+                                       transform_args   = has_proxybot_id,
+                                       action           = self._proxybot_cleanup))
+        self.commands.add(SlashCommand(command_name     = 'purge',
+                                       text_arg_format  = 'proxybot_jid OR proxybot_uuid OR \'all\'',
+                                       text_description = 'Remove a database entry (and associated participants) for a specific proxybot, or for all proxybots.',
+                                       validate_sender  = is_admin,
+                                       transform_args   = all_or_proxybot_id,
+                                       action           = self._proxybot_purge))
         # Add event handlers
         self.add_event_handler("session_start", self._handle_start)
         self.add_event_handler('message', self._handle_message)
@@ -489,7 +506,42 @@ class HostbotComponent(ComponentXMPP):
                 'participants': ''.join(['\n\t\t%s' % user for user in participants]),
                 'observers': ''.join(['\n\t\t%s' % user for user in observers.difference(participants)])
              }
-
+    def _proxybot_cleanup(self, proxybot_jid, proxybot_uuid):
+        if self._proxybot_is_online(proxybot_jid):
+            return '%s@%s is online - try sending it a /command to reset its state' % (proxybot_jid, constants.server)
+        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': proxybot_uuid})
+        try:
+            participants = self._db_execute_and_fetchall("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding the participants for this proxybot: %s' % e
+        try:
+            #LATER this code is copied from proxybot_user.py, but I'm not sure where best to put it
+            observers = set([])
+            for participant in participants:
+                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots, 
+                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
+                    proxybots.stage = 'idle' AND
+                    proxybots.id = proxybot_participants_1.proxybot_id AND
+                    proxybots.id = proxybot_participants_2.proxybot_id AND
+                    proxybot_participants_1.user = %(user)s""", {'user': participant}))
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding the observers for this proxybot: %s' % e
+        users = [User(username, proxybot_jid) for username in observers.union(participants)]
+        for user in users:
+            user.delete_from_rosters()
+        return 'This proxybot has been retired in the database and is no longer in the following rosters: %s' % ', '.join([str(user) for user in users])
+    def _proxybot_purge(self, proxybot_jid, proxybot_uuid):
+        if proxybot_jid == 'all':    
+            self._db_execute("DELETE proxybot_participants FROM proxybots, proxybot_participants WHERE proxybots.stage = 'retired' AND proxybots.id = proxybot_participants.proxybot_id")
+            self._db_execute("DELETE FROM proxybots WHERE stage = 'retired'")
+            return 'All retired proxybots have been deleted from the database.'
+        stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
+        if self._proxybot_is_online(proxybot_jid) and stage != 'retired':
+            return '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
+        self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        self._db_execute("DELETE FROM proxybots WHERE stage = 'retired' AND id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
+        return '%s, %s has been deleted from the database.' % (proxybot_jid, proxybot_uuid)
+    
     def _proxybot_is_online(self, proxybot_jid):
         try:              
             res = self._xmlrpc_command('user_sessions_info', {

@@ -92,11 +92,11 @@ class Proxybot(sleekxmpp.ClientXMPP):
             if len(arg_tokens) == 0:
                 return []
             return False
-        def sender_as_only_arg(sender, arg_string, arg_tokens):
+        def only_sender(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
                 return [sender.user]
             return False
-        def sender_and_one_arg(sender, arg_string, arg_tokens):            
+        def sender_and_one_token(sender, arg_string, arg_tokens):            
             if len(arg_tokens) == 1:
                 return [sender.user, arg_tokens[0]]
             return False
@@ -104,7 +104,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             if len(arg_string.strip()) > 0:
                 return [sender.user, arg_string]
             return False
-        def one_arg_and_string(sender, arg_string, arg_tokens):
+        def one_token_and_string(sender, arg_string, arg_tokens):
             if len(arg_tokens) >= 2:
                 return [sender.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
             return False
@@ -112,7 +112,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_as_only_arg,
+                                       transform_args   = only_sender,
                                        action           = self._remove_participant))
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
@@ -125,31 +125,31 @@ class Proxybot(sleekxmpp.ClientXMPP):
                                        text_arg_format  = 'username',
                                        text_description = 'Invite another user to this conversation.',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_and_one_arg,
+                                       transform_args   = sender_and_one_token,
                                        action           = self._invite_participant))
         self.commands.add(SlashCommand(command_name     = 'kick',
                                        text_arg_format  = 'username',
                                        text_description = 'Kick a user out of this conversation.',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_and_one_arg,
+                                       transform_args   = sender_and_one_token,
                                        action           = self._kick_participant))
         self.commands.add(SlashCommand(command_name     = 'whisper',
                                        text_arg_format  = 'username message to be sent to that user',
                                        text_description = 'Whisper a quick message to only one other participant',
                                        validate_sender  = is_admin_or_participant,
-                                       transform_args   = one_arg_and_string,
+                                       transform_args   = one_token_and_string,
                                        action           = self._whisper_message))
         self.commands.add(SlashCommand(command_name     = 'invisible',
                                        text_arg_format  = '',
                                        text_description = 'Hide this conversation from everyone who isn\'t already a participant',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_as_only_arg,
+                                       transform_args   = only_sender,
                                        action           = self._hide_from_observers))
         self.commands.add(SlashCommand(command_name     = 'visible',
                                        text_arg_format  = '',
                                        text_description = 'Let this conversation be found by friends of participants',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_as_only_arg,
+                                       transform_args   = only_sender,
                                        action           = self._show_to_observers))
         self.commands.add(SlashCommand(command_name     = 'notify',
                                        text_arg_format  = 'message to be sent to that conversation',
