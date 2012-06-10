@@ -401,11 +401,24 @@ class Proxybot(sleekxmpp.ClientXMPP):
             elif msg['from'].bare in constants.admin_users:
                 msg.reply("Admins cannot send normal messages to proxybots, please use the /notify command.").send()
                 return
+            elif self.stage is Stage.RETIRED:  # if we're retired yet still online, the adhoc command probably failed the first time, so retry
+                session = {'user': user,
+                           'next': self._cmd_send_retire,
+                           'error': self._cmd_error}
+                self['xep_0050'].start_command(jid=constants.hostbot_component_jid,
+                                               node=ProxybotCommand.retire,
+                                               session=session)
+                msg.reply("This conversation has already ended, and should be offline. Goodbye!").send()
             elif self.stage is Stage.IDLE:  # idle proxybots can receive /commands, but the commands don't activate them
+                other_user = self.participants.difference([msg['from'].user]).pop()  # ugh, verbose
+                if not other_user.is_online():
+                    msg.reply('%s is offline and cannot receive messages.' % other_user).send()
+                    self._set_invisibility(True)
+                    return
                 self.stage = Stage.ACTIVE
                 self._update_rosters(set([]), self.participants)
                 session = {'user1': msg['from'].user,
-                           'user2': self.participants.difference([msg['from'].user]).pop().user(),  # ugh, verbose
+                           'user2': other_user.user(),
                            'next': self._cmd_send_activate,
                            'error': self._cmd_error}
                 self['xep_0050'].start_command(jid=constants.hostbot_component_jid,
@@ -593,7 +606,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
             'server': constants.server,
             'password': constants.proxybot_xmlrpc_password
         }, data)
-        
+
 
 if __name__ == '__main__':
     optp = OptionParser()
