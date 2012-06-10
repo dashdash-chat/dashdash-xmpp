@@ -145,16 +145,6 @@ class HostbotComponent(ComponentXMPP):
         self.add_event_handler('message', self._handle_message)
         self.add_event_handler('presence_probe', self._handle_probe)
 
-    def _test_slash_command(self, string, number):
-        logging.warning('%s, %s' % (string, number))
-        number = int(number)
-        res = ''
-        if number != 2:
-            raise ExecutionError, 'testing the error string'
-        for _ in range(number):
-            res += string
-        logging.warning(res)
-
     def _handle_start(self, event):
         # Register these commands *after* session_start
         self['xep_0050'].add_command(node=ProxybotCommand.activate,

@@ -33,9 +33,10 @@ class SlashCommand(object):
         if not self.validate_sender(sender):
             raise PermissionError
         # pass the sender to transform_args in case the args depend on it or in case it *should* be an arg
-        # pass the original string in case not all of the tokens in the list should be treated as individual arguments
-        # also note that .split(' ') returns arrays with the empty string as an element, so filter those out
-        args = self.transform_args(sender, arg_string, filter(lambda arg: arg != '', arg_string.split(' ')))
+        # and the original string in case not all of the tokens in the list should be treated as individual arguments
+        # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
+        arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
+        args = self.transform_args(sender, arg_string, arg_tokens)
         if args is False:
             raise ArgFormatError
         return self._action(*args)
@@ -60,6 +61,7 @@ class SlashCommandRegistry(object):
         message = message.strip().lstrip('/')
         try:
             command_name, _, args = message.partition(' ')
+            command_name = command_name.lower()
         except ValueError:
             return 'The command was not formatted properly. Please separate the command from the arguments with a single space.'
         if command_name in self.slash_commands:
