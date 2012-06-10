@@ -56,8 +56,9 @@ class HostbotComponent(ComponentXMPP):
         if bounce_proxybots:
             proxybot_uuids = self._db_execute_and_fetchall("SELECT id FROM proxybots WHERE stage != 'retired'")
             for proxybot_uuid in proxybot_uuids:
+                proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid)))
                 try:
-                    self._proxybot_bounce('%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_uuid))), proxybot_uuid)
+                    self._proxybot_bounce(proxybot_jid, proxybot_uuid)
                 except ExecutionError:
                     logging.info("%s, %s wasn't online, so can't be bounced" % (proxybot_jid, proxybot_uuid))
         # Set up slash commands to be handled by the hostbot's SlashCommandRegistry
@@ -295,6 +296,24 @@ class HostbotComponent(ComponentXMPP):
             logging.error('Failed to delete %s, %s for %s and %s with XMLRPC error %s' % (proxybot_jid, proxybot_uuid, user1, user2, e))
             raise ExecutionError
     def _list_friendships(self):
+        try:
+            friendships = self._db_execute_and_fetchall("""SELECT GROUP_CONCAT(proxybot_participants.user SEPARATOR ' '), proxybots.id FROM
+                proxybots, proxybot_participants WHERE proxybots.stage = 'idle' AND
+                proxybots.id = proxybot_participants.proxybot_id GROUP BY proxybots.id""", strip_pairs=False)
+        except Exception, e:
+            raise ExecutionError, 'There was an error finding idle proxybots in the database: %s' % e
+        if len(friendships) <= 0:
+            return 'No idle proxybots found. Use /new_friendship to create an idle proxybot for two users.'    
+        output = 'The current friendships (i.e. idle proxybots) are:'
+        for friendship in friendships:
+            try:
+                user1, user2 = friendship[0].split(' ')
+            except ValueError:
+                raise ExecutionError, 'There were not two users found for %s, %s in this string: %s' % (proxbot_uuid, proxybot_jid, friendship[0])
+            proxbot_uuid = friendship[1]
+            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(friendship[1])))
+            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s\n\t\t\t\t\t%s' % (user1, user2, proxbot_uuid, proxybot_jid)
+        return output
 
     def _add_or_remove_observers(self, user1, user2, command):
         # find active proxybots with each user as a participant but *not* the other, and add/remove the other as an observer
