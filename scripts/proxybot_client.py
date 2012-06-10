@@ -514,7 +514,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         logging.info("Ad hoc command recieved: delete_proxybot")
         return session
     def _cmd_complete_bounce_proxybot(self, payload, session):
-        self.bounce()
+        self.event('bounce', {})
         session['has_next'] = False
         session['next'] = None
         logging.info("Ad hoc command recieved: bounce_proxybot")
