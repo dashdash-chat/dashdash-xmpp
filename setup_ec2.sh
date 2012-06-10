@@ -93,3 +93,18 @@ sudo touch /var/log/chatidea/hostbot.log
 sudo chown ec2-user /var/log/chatidea/hostbot.log
 sudo: no tty present and no askpass program specified
 python chatidea/scripts/hostbot_component.py
+
+wget http://downloads.sourceforge.net/pcre/pcre-8.10.tar.bz2
+tar -jxf pcre-8.10.tar.bz2
+cd pcre-8.10
+./config
+make
+sudo make install
+cd..
+wget http://nginx.org/download/nginx-1.2.0.tar.gz
+gunzip -c nginx-1.2.0.tar.gz | tar xf -
+cd nginx-1.2.0
+make
+sudo make install
+sudo vim /usr/local/nginx/html/index.html 
+/usr/local/nginx/sbin/nginx -s start
