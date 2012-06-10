@@ -380,7 +380,7 @@ class HostbotComponent(ComponentXMPP):
             raise ExecutionError, '%s, %s wasn\'t online, so can\'t be bounced. /restore it instead?' % (proxybot_jid, proxybot_uuid)
         session = {'next': self._cmd_complete,
                    'error': self._cmd_error}
-        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
+        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(str(proxybot_uuid)),  # this is the only time the proxybot_uuid is already a uuid not a string
                                        node=HostbotCommand.bounce_proxybot,
                                        session=session,
                                        ifrom=constants.hostbot_component_jid)
