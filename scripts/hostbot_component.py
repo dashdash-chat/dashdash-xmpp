@@ -277,7 +277,7 @@ class HostbotComponent(ComponentXMPP):
         if not proxybot_uuid:
             raise ExecutionError, 'Idle proxybot not found %s and %s.' % (user1, user2)
         proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
-        session = {'next': self._cmd_complete,
+        session = {'next': self.__cmd_send_delete_proxybot,
                    'error': self._cmd_error}
         self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
                                        node=HostbotCommand.delete_proxybot,
@@ -378,7 +378,7 @@ class HostbotComponent(ComponentXMPP):
     def _proxybot_bounce(self, proxybot_jid, proxybot_uuid):
         if not self._proxybot_is_online(proxybot_jid):
             raise ExecutionError, '%s, %s wasn\'t online, so can\'t be bounced. /restore it instead?' % (proxybot_jid, proxybot_uuid)
-        session = {'next': self._cmd_complete,
+        session = {'next': self._cmd_send_bounce_proxybot,
                    'error': self._cmd_error}
         self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(str(proxybot_uuid)),  # this is the only time the proxybot_uuid is already a uuid not a string
                                        node=HostbotCommand.bounce_proxybot,
@@ -468,7 +468,7 @@ class HostbotComponent(ComponentXMPP):
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent to proxybote: participant_deleted")
+        logging.info("Ad hoc command sent to proxybot: participant_deleted")
     @proxybot_only
     def _cmd_send_addremove_observer(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
@@ -477,7 +477,23 @@ class HostbotComponent(ComponentXMPP):
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent to proxybote: addremove_observer")
+        logging.info("Ad hoc command sent to proxybot: addremove_observer")
+    @proxybot_only
+    def _cmd_send_delete_proxybot(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        # no fields!
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+        logging.info("Ad hoc command sent to proxybot: delete_proxybot")
+    @proxybot_only
+    def _cmd_send_bounce_proxybot(self, iq, session):
+        form = self['xep_0004'].makeForm(ftype='submit')
+        # no fields!
+        session['payload'] = form
+        session['next'] = None
+        self['xep_0050'].complete_command(session)
+        logging.info("Ad hoc command sent to proxybot: bounce_proxybot")
 
     # Adhoc commands for which the hostbot is the provider and the proxybot is the user
     @proxybot_only
@@ -567,8 +583,6 @@ class HostbotComponent(ComponentXMPP):
         return session
 
     # Adhoc commands - general functions
-    def _cmd_complete(self, iq, session):
-        self['xep_0050'].complete_command(session)
     def _cmd_error(self, iq, session):
         logging.error('%s ad hoc command: %s %s' % (iq['command']['node'], iq['error']['condition'], iq['error']['text']))
         self['xep_0050'].terminate_command(session)

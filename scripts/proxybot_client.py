@@ -191,11 +191,11 @@ class Proxybot(sleekxmpp.ClientXMPP):
         # Register these commands *after* session_start
         self['xep_0050'].add_command(node=HostbotCommand.delete_proxybot,
                                      name='Disconnect and unregister proxybot',
-                                     handler=self._cmd_complete_delete_proxybot,
+                                     handler=self._cmd_receive_delete_proxybot,
                                      jid=self.boundjid.full)
         self['xep_0050'].add_command(node=HostbotCommand.bounce_proxybot,
                                      name='Disconnect and restart the proxybot',
-                                     handler=self._cmd_complete_bounce_proxybot,
+                                     handler=self._cmd_receive_bounce_proxybot,
                                      jid=self.boundjid.full)
         self['xep_0050'].add_command(node=HostbotCommand.participant_deleted,
                                      name='Remove a participant from this proxybot',
@@ -479,6 +479,24 @@ class Proxybot(sleekxmpp.ClientXMPP):
 
     # Adhoc commands for which the proxybot is the provider and the hostbot is the user
     @hostbot_only
+    def _cmd_receive_delete_proxybot(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Delete proxybot')
+        # no fields!
+        session['payload'] = form
+        session['next'] = self._cmd_complete_delete_proxybot
+        session['has_next'] = False
+        logging.info("Ad hoc command recieved: delete_proxybot")
+        return session
+    @hostbot_only
+    def _cmd_receive_bounce_proxybot(self, iq, session):
+        form = self['xep_0004'].makeForm('form', 'Bounce proxybot')
+        # no fields!
+        session['payload'] = form
+        session['next'] = self._cmd_complete_bounce_proxybot
+        session['has_next'] = False
+        logging.info("Ad hoc command recieved: bounce_proxybot")
+        return session
+    @hostbot_only
     def _cmd_receive_participant_deleted(self, iq, session):
         form = self['xep_0004'].makeForm('form', 'Participant deleted')
         form.addField(ftype='text-single', var='user')
@@ -511,13 +529,13 @@ class Proxybot(sleekxmpp.ClientXMPP):
         self.disconnect_and_unregister()
         session['has_next'] = False
         session['next'] = None
-        logging.info("Ad hoc command recieved: delete_proxybot")
+        logging.info("Ad hoc command completed: delete_proxybot")
         return session
     def _cmd_complete_bounce_proxybot(self, payload, session):
         self.event('bounce', {})
         session['has_next'] = False
         session['next'] = None
-        logging.info("Ad hoc command recieved: bounce_proxybot")
+        logging.info("Ad hoc command completed: bounce_proxybot")
         return session
     def _cmd_complete_participant_deleted(self, payload, session):
         form = payload
