@@ -389,7 +389,7 @@ class HostbotComponent(ComponentXMPP):
     def _proxybot_status(self, proxybot_jid, proxybot_uuid):
         try:
             stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
-        except Exception, e:
+        except IndexError, e:
             raise ExecutionError, 'There was an error finding the proxybot: %s' % e
         try:
             participants = self._db_execute_and_fetchall("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
@@ -452,9 +452,12 @@ class HostbotComponent(ComponentXMPP):
             self._db_execute("DELETE FROM proxybots WHERE stage = 'retired'")
             logging.info("All proxybots deleted from database")
             return 'All retired proxybots have been deleted from the database.'
-        stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
+        try:
+            stage = self._db_execute_and_fetchall("SELECT stage FROM proxybots WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})[0]
+        except IndexError, e:
+            raise ExecutionError, 'There was an error finding the proxybot: %s' % e
         if self._proxybot_is_online(proxybot_jid) and stage != 'retired':
-            return '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
+            raise ExecutionError '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
         self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         self._db_execute("DELETE FROM proxybots WHERE stage = 'retired' AND id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         logging.info("%s, %s deleted from database" % (proxybot_jid, proxybot_uuid))
