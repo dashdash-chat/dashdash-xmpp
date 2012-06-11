@@ -457,7 +457,7 @@ class HostbotComponent(ComponentXMPP):
         except IndexError, e:
             raise ExecutionError, 'There was an error finding the proxybot: %s' % e
         if self._proxybot_is_online(proxybot_jid) and stage != 'retired':
-            raise ExecutionError '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
+            raise ExecutionError, '%s@%s is online and %s, and this command is only for retired proxybots.' % (proxybot_jid, constants.server, stage)
         self._db_execute("DELETE FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         self._db_execute("DELETE FROM proxybots WHERE stage = 'retired' AND id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         logging.info("%s, %s deleted from database" % (proxybot_jid, proxybot_uuid))
