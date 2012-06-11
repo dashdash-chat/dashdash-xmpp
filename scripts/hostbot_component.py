@@ -93,7 +93,7 @@ class HostbotComponent(ComponentXMPP):
                         proxybot_uuid = uuid.UUID(proxybot)
                     except ValueError, e:
                         return False
-                return [proxybot_jid, proxybot_uuid]
+                return (proxybot_jid, proxybot_uuid)
             return False         
         def all_or_proxybot_id(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 1 and arg_tokens[0] == 'all':
@@ -243,8 +243,8 @@ class HostbotComponent(ComponentXMPP):
             raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
         if not self._user_exists(user2):
             raise ExecutionError, 'User2 %s does not exist in the Vine database' % user2
-        proxybot_id = self._find_idle_proxybot(user1, user2)
-        if proxybot_id:
+        (proxybot_jid, proxybot_uuid) = self._find_idle_proxybot(user1, user2)
+        if proxybot_jid and proxybot_uuid:
             raise ExecutionError, 'Idle proxybot %s arleady exists for %s and %s!' % (proxybot_id, user1, user2)
         proxybot_uuid = uuid.uuid4()
         proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
@@ -273,11 +273,10 @@ class HostbotComponent(ComponentXMPP):
             raise ExecutionError, 'User1 %s does not exist in the Vine database' % user1
         if not self._user_exists(user2):
             raise ExecutionError, 'User2 %s does not exist in the Vine database' % user2
-        proxybot_uuid = self._find_idle_proxybot(user1, user2)
-        if not proxybot_uuid:
+        proxybot_jid, proxybot_uuid = self._find_idle_proxybot(user1, user2)
+        if not proxybot_jid or not proxybot_uuid:
             raise ExecutionError, 'Idle proxybot not found %s and %s.' % (user1, user2)
-        proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
-        session = {'next': self.__cmd_send_delete_proxybot,
+        session = {'next': self._cmd_send_delete_proxybot,
                    'error': self._cmd_error}
         self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),
                                        node=HostbotCommand.delete_proxybot,
@@ -335,8 +334,12 @@ class HostbotComponent(ComponentXMPP):
                                                ifrom=constants.hostbot_component_jid)
 
     def _full_jid_for_proxybot(self, proxybot_uuid):
+        try:
+            proxybot_id = shortuuid.encode(uuid.UUID(proxybot_uuid))
+        except AttributeError:
+            proxybot_id = shortuuid.encode(proxybot_uuid)
         return '%s%s@%s/%s' % (constants.proxybot_prefix,
-                               shortuuid.encode(uuid.UUID(proxybot_uuid)),
+                               proxybot_id,
                                constants.server,
                                constants.proxybot_resource)
 
@@ -349,12 +352,14 @@ class HostbotComponent(ComponentXMPP):
             proxybot_participants_1.user = %(user1)s AND
             proxybot_participants_2.user = %(user2)s""", {'user1': user1, 'user2': user2})
         if len(proxybot_ids) == 0:
-            return None
+            return (None, None)
         elif len(proxybot_ids) == 1:
-            return proxybot_ids[0]
+            proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(uuid.UUID(proxybot_ids[0])))
+            proxybot_uuid = uuid.UUID(proxybot_ids[0])
+            return (proxybot_jid, proxybot_uuid)
         else:
             logging.error('There are %d idle proxybots for %s and %s! There should only be 1: %s' % (len(proxybot_ids), user1, user2, proxybot_ids))
-            return None
+            return (None, None)
 
     def _user_exists(self, user):
         num_users = self._db_execute_and_fetchall("SELECT COUNT(*) FROM users WHERE user = %(user)s", {'user': user})
@@ -380,7 +385,7 @@ class HostbotComponent(ComponentXMPP):
             raise ExecutionError, '%s, %s wasn\'t online, so can\'t be bounced. /restore it instead?' % (proxybot_jid, proxybot_uuid)
         session = {'next': self._cmd_send_bounce_proxybot,
                    'error': self._cmd_error}
-        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(str(proxybot_uuid)),  # this is the only time the proxybot_uuid is already a uuid not a string
+        self['xep_0050'].start_command(jid=self._full_jid_for_proxybot(proxybot_uuid),  # this is the only time the proxybot_uuid is already a uuid not a string
                                        node=HostbotCommand.bounce_proxybot,
                                        session=session,
                                        ifrom=constants.hostbot_component_jid)
