@@ -439,8 +439,7 @@ class HostbotComponent(ComponentXMPP):
             observers = set([])
             for participant in participants:
                 observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots, 
-                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
-                    proxybots.stage = 'idle' AND
+                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE
                     proxybots.id = proxybot_participants_1.proxybot_id AND
                     proxybots.id = proxybot_participants_2.proxybot_id AND
                     proxybot_participants_1.user = %(user)s""", {'user': participant}))
