@@ -93,7 +93,7 @@ class HostbotComponent(ComponentXMPP):
                         proxybot_uuid = uuid.UUID(proxybot)
                     except ValueError, e:
                         return False
-                return (proxybot_jid, proxybot_uuid)
+                return [proxybot_jid, proxybot_uuid]  # must be a list!
             return False         
         def all_or_proxybot_id(sender, arg_string, arg_tokens):
             if len(arg_tokens) == 1 and arg_tokens[0] == 'all':
@@ -404,8 +404,8 @@ class HostbotComponent(ComponentXMPP):
             #LATER this code is copied from proxybot_user.py, but I'm not sure where best to put it
             observers = set([])
             for participant in participants:
-                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots, 
-                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE 
+                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots,
+                    proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE
                     proxybots.stage = 'idle' AND
                     proxybots.id = proxybot_participants_1.proxybot_id AND
                     proxybots.id = proxybot_participants_2.proxybot_id AND
@@ -438,8 +438,9 @@ class HostbotComponent(ComponentXMPP):
             #LATER this code is copied from proxybot_user.py, but I'm not sure where best to put it
             observers = set([])
             for participant in participants:
-                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots, 
+                observers = observers.union(self._db_execute_and_fetchall("""SELECT proxybot_participants_2.user FROM proxybots,
                     proxybot_participants AS proxybot_participants_1, proxybot_participants AS proxybot_participants_2 WHERE
+                    proxybots.stage = 'idle' AND
                     proxybots.id = proxybot_participants_1.proxybot_id AND
                     proxybots.id = proxybot_participants_2.proxybot_id AND
                     proxybot_participants_1.user = %(user)s""", {'user': participant}))
