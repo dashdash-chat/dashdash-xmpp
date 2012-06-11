@@ -87,13 +87,16 @@ sudo ejabberdctl register admin1 ec2-107-21-87-153.compute-1.amazonaws.com ADMIN
 sudo ejabberdctl start
 
 sudo mkdir /var/log/chatidea
+sudo rm /var/log/chatidea/proxybots.log
 sudo touch /var/log/chatidea/proxybots.log
 sudo chown ec2-user /var/log/chatidea/proxybots.log
+sudo rm /var/log/chatidea/hostbot.log
 sudo touch /var/log/chatidea/hostbot.log
 sudo chown ec2-user /var/log/chatidea/hostbot.log
+sudo rm /var/log/chatidea/misc.log
 sudo touch /var/log/chatidea/misc.log
 sudo chown ec2-user /var/log/chatidea/misc.log
-sudo: no tty present and no askpass program specified
+
 python chatidea/scripts/hostbot_component.py
 
 wget http://downloads.sourceforge.net/pcre/pcre-8.10.tar.bz2
