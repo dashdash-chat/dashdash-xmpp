@@ -25,17 +25,17 @@ class User(object):
 
     def user(self):
         return self._user
-    
+
     def proxybot_jid(self):
         return self._proxybot_jid
-    
+
     def add_to_rosters(self, nick, stage):
         self._add_proxy_rosteritem()
         if stage is Stage.IDLE:
             self._add_user_rosteritem(nick, constants.idle_group)
         elif stage is Stage.ACTIVE:
             self._add_user_rosteritem(nick, constants.active_group)
-        
+
     def delete_from_rosters(self):
         self._delete_proxy_rosteritem()
         self._delete_user_rosteritem()
@@ -85,7 +85,7 @@ class User(object):
         except xmlrpclib.ProtocolError, e:
             logging.error('ProtocolError in is_online, assuming %s is offline: %s' % (self._user, str(e)))
             return False
-        
+
     def __str__(self):
         return self.user()
     def __eq__(self, other):
@@ -102,7 +102,7 @@ class User(object):
 
 class Observer(User):
     pass
-            
+
 class Participant(User):
     def __init__(self, *args, **kwargs):
         super(Participant, self).__init__(*args, **kwargs)
