@@ -245,7 +245,7 @@ class HostbotComponent(ComponentXMPP):
             raise ExecutionError, 'User2 %s does not exist in the Vine database' % user2
         (proxybot_jid, proxybot_uuid) = self._find_idle_proxybot(user1, user2)
         if proxybot_jid and proxybot_uuid:
-            raise ExecutionError, 'Idle proxybot %s arleady exists for %s and %s!' % (proxybot_id, user1, user2)
+            raise ExecutionError, 'Idle proxybot %s, %s arleady exists for %s and %s!' % (proxybot_jid, proxybot_uuid, user1, user2)
         proxybot_uuid = uuid.uuid4()
         proxybot_jid = '%s%s' % (constants.proxybot_prefix, shortuuid.encode(proxybot_uuid))
         try:
