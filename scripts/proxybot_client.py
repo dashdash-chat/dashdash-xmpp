@@ -582,7 +582,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent for recording in the databsae: activate")
+        logging.info("Ad hoc command sent for recording in the database: activate")
     @hostbot_only
     def _cmd_send_retire(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
@@ -591,7 +591,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = form
         session['next'] = self._cmd_finish_retire
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent for recording in the databsae: retire")
+        logging.info("Ad hoc command sent for recording in the database: retire")
     @hostbot_only
     def _cmd_send_add_participant(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
@@ -600,7 +600,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent for recording in the databsae: add_participant")
+        logging.info("Ad hoc command sent for recording in the database: add_participant")
     @hostbot_only
     def _cmd_send_remove_participant(self, iq, session):
         form = self['xep_0004'].makeForm(ftype='submit')
@@ -609,17 +609,20 @@ class Proxybot(sleekxmpp.ClientXMPP):
         session['payload'] = form
         session['next'] = None
         self['xep_0050'].complete_command(session)
-        logging.info("Ad hoc command sent for recording in the databsae: remove_participant")
+        logging.info("Ad hoc command sent for recording in the database: remove_participant")
     @hostbot_only
     def _cmd_finish_retire(self, iq, session):
         self.event('disconnect_and_unregister', {})
-    
+
     # Adhoc commands - general functions
     def _cmd_error(self, iq, session):
         logging.error('%s ad hoc command: %s %s' % (iq['command']['node'], iq['error']['condition'], iq['error']['text']))
         self['xep_0050'].terminate_command(session)
-        self._broadcast_alert('There was an error with the %s command, and this proxybot will now restart itself.' % iq['command']['node'])
-        self.event('bounce', {})  # bounce on command failure, since we're in an unknown state and need to re-fetch state from database
+        self._broadcast_alert('This proxybot encountered an error and will now sigh off.')
+        self.event('disconnect_and_unregister', {})  # we're in an unknown state and need an admin to restart us
+        # Bouncing here is dangerous, since we could get stuck in an infinite loop. If a user /leaves, for example, and
+        # the proxybot can't tell the hostbot to remove the user, then when the proxybot re-starts it will still have
+        # that user as a participant, and will try to remove him/her again (or something like that), and thus loop.
 
     def _xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
