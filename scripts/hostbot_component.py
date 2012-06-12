@@ -554,8 +554,6 @@ class HostbotComponent(ComponentXMPP):
         self._create_friendship(user1, user2)  #NOTE activate before creating the new proxybot, so the idle-does-not-exist check passes
         session['payload'] = None
         session['next'] = None
-        logging.info(payload)
-        logging.info(session)
         logging.info("Ad hoc command from %s completed and recorded in the database: activate" % session['from'].user)
         return session
     def _cmd_complete_retire(self, payload, session):
