@@ -413,7 +413,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
                     self._set_invisibility(True)
                     return
                 self.stage = Stage.ACTIVE
-                for participant in participants:
+                for participant in self.participants:
                     participant.fetch_observers()
                 self._update_rosters(set([]), self.participants)
                 session = {'user1': msg['from'].user,
