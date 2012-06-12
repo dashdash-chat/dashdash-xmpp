@@ -319,7 +319,7 @@ class HostbotComponent(ComponentXMPP):
         for participant, observer in [(user1, user2), (user2, user1)]:
             proxybot_ids = self._db_execute_and_fetchall("""SELECT proxybots.id FROM proxybots, proxybot_participants WHERE
                 proxybots.id = proxybot_participants.proxybot_id AND
-                proxybots.stage != 'retired' AND
+                proxybots.stage = 'active' AND
                 proxybot_participants.user = %(participant)s AND
                 proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
                 {'participant': participant, 'observer': observer}, )

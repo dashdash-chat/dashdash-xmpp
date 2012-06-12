@@ -107,12 +107,13 @@ class Participant(User):
     def __init__(self, *args, **kwargs):
         super(Participant, self).__init__(*args, **kwargs)
         self._observers = set([])
-        self.fetch_observers()
+        # don't initialize the observers list until we need it, since the social graph might change before the conversation begins
 
     def observers(self):
         return self._observers
 
     def fetch_observers(self):
+        #LATER maybe move this query into the hostbot, and have it run when the proxybot activates itself, and return this data as part of that ad hoc command
         db = None
         cursor = None
         try:

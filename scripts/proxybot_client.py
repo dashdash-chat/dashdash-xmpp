@@ -299,7 +299,9 @@ class Proxybot(sleekxmpp.ClientXMPP):
     def _add_participant(self, user):
         #LATER broadcast a join message before this happens, to prevent offline message queueing
         old_participants = self.participants.copy()
-        self.participants.add(Participant(user, self.boundjid.user))
+        new_participant = Participant(user, self.boundjid.user)
+        new_participant.fetch_observers()
+        self.participants.add(new_participant)
         self._update_rosters(old_participants, self.participants)
         session = {'user': user,
                    'next': self._cmd_send_add_participant,
@@ -411,6 +413,8 @@ class Proxybot(sleekxmpp.ClientXMPP):
                     self._set_invisibility(True)
                     return
                 self.stage = Stage.ACTIVE
+                for participant in participants:
+                    participant.fetch_observers()
                 self._update_rosters(set([]), self.participants)
                 session = {'user1': msg['from'].user,
                            'user2': other_user.user(),
