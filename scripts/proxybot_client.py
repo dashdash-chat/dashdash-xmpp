@@ -559,6 +559,7 @@ class Proxybot(sleekxmpp.ClientXMPP):
         for participant in self.participants:
             if participant == participant_to_match:
                 participant.add_observer(observer, self.boundjid.user, self._get_nick())
+        self.send_presence(pto='%s@%s' % (observer, constants.server))
         session['payload'] = None
         session['next'] = None
         logging.info("Ad hoc command completed: add_observer")
