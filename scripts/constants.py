@@ -7,7 +7,7 @@ shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 
 server = env_vars.server
-server_ip = '127.0.0.1'
+server_ip = env_vars.server_ip
 component_port = env_vars.component_port
 client_port = env_vars.client_port
 xmlrpc_port = env_vars.xmlrpc_port
