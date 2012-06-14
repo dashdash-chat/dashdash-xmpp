@@ -321,7 +321,7 @@ class HostbotComponent(ComponentXMPP):
                 proxybots.id = proxybot_participants.proxybot_id AND
                 proxybots.stage = 'active' AND
                 proxybot_participants.user = %(participant)s AND
-                proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user =  %(observer)s)""",
+                proxybots.id NOT IN (SELECT proxybot_id FROM proxybot_participants WHERE user = %(observer)s)""",
                 {'participant': participant, 'observer': observer}, )
             for proxybot_id in proxybot_ids:
                 session = {'participant': participant,
@@ -370,7 +370,7 @@ class HostbotComponent(ComponentXMPP):
 
     def _proxybot_restore(self, proxybot_jid, proxybot_uuid):
         num_proxybots = self._db_execute_and_fetchall("""SELECT COUNT(*) FROM proxybots WHERE 
-            id = %(proxybot_uuid)s AND stage != 'retired'""", {'proxybot_uuid': proxybot_uuid})
+            id = %(proxybot_id)s AND stage != 'retired'""", {'proxybot_id': proxybot_uuid})
         if not num_proxybots:
             raise ExecutionError, 'No proxybot found in the database for %s, %s.' % (proxybot_jid, proxybot_uuid)
         if int(num_proxybots[0]) != 1:
@@ -429,7 +429,7 @@ class HostbotComponent(ComponentXMPP):
     def _proxybot_cleanup(self, proxybot_jid, proxybot_uuid):
         if self._proxybot_is_online(proxybot_jid):
             return '%s@%s is online - try sending it a /command to reset its state' % (proxybot_jid, constants.server)
-        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(id)s", {'id': proxybot_uuid})
+        self._db_execute("UPDATE proxybots SET stage = 'retired' WHERE id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         try:
             participants = self._db_execute_and_fetchall("SELECT user FROM proxybot_participants WHERE proxybot_id = %(proxybot_id)s", {'proxybot_id': proxybot_uuid})
         except Exception, e:
@@ -630,7 +630,7 @@ class HostbotComponent(ComponentXMPP):
         try:
             self.cursor.execute(query, data)
         except MySQLdb.OperationalError, e:
-            logging.info('Database OperationalError %s for query, will retry: %s', (e, query % data))
+            logging.info('Database OperationalError %s for query, will retry: %s' % (e, query % data))
             self._db_connect()  # Try again, but only once
             self.cursor.execute(query, data)
     def _db_connect(self):
