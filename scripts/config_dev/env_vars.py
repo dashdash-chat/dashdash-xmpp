@@ -1,3 +1,8 @@
+leaf_secret = 'is3joic8vorn8uf4ge4o'
+leaf_mysql_password = 'ish9gen8ob8hap7ac9hy'
+leaf_xmlrpc_password = 'wraf7marj7og4e7ob4je'
+
+
 component_port = 5237
 client_port = 5222
 xmlrpc_port = 4560

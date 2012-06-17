@@ -5,6 +5,16 @@ except ImportError, e:
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
+leaf_name = "leaf"
+leaf_secret = env_vars.hostbot_secret
+leaf_mysql_password = env_vars.leaf_mysql_password
+db_name = 'vine'
+vinebot_prefix = 'vinebot_'
+lead_xmlrpc_jid_prefix  = '_leaf'
+leaf_xmlrpc_password = env_vars.leaf_xmlrpc_password
+
+
+
 
 server = env_vars.server
 server_ip = env_vars.server_ip
@@ -38,7 +48,6 @@ proxybot_group = 'contacts'
 active_group = 'Vine Conversations'
 idle_group = 'Vine Contacts'
 
-db_name = 'chatidea'
 hostbot_mysql_user = 'hostbot'
 hostbot_mysql_password = env_vars.hostbot_mysql_password
 proxybotinfo_mysql_user = 'proxybotinfo'
