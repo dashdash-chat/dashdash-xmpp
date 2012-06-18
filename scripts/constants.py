@@ -10,8 +10,9 @@ leaf_secret = env_vars.hostbot_secret
 leaf_mysql_password = env_vars.leaf_mysql_password
 db_name = 'vine'
 vinebot_prefix = 'vinebot_'
-lead_xmlrpc_jid_prefix  = '_leaf'
+leaf_xmlrpc_jid_prefix  = '_leaf'
 leaf_xmlrpc_password = env_vars.leaf_xmlrpc_password
+roster_group = 'Vine Conversations'
 
 
 
