@@ -28,7 +28,7 @@ class SlashCommand(object):
         self.validate_sender = validate_sender
         self.transform_args = transform_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
         self._action = action
-
+    
     def execute(self, sender, recipient, arg_string):
         if not self.validate_sender(sender, recipient):
             raise PermissionError
@@ -41,7 +41,7 @@ class SlashCommand(object):
         if args is False:
             raise ArgFormatError
         return self._action(*args)
-
+    
     def __getattr__(self, name):
         if name == 'name':
             return self._command_name
@@ -53,11 +53,11 @@ class SlashCommand(object):
 class SlashCommandRegistry(object):
     def __init__(self):
         self.slash_commands = {}
-
+    
     def is_command(self, message):
         message = message.lstrip()
         return message.startswith('/') and len(message.lstrip('/')) > 0
-
+    
     def handle_command(self, sender, recipient, message):
         message = message.strip().lstrip('/')
         try:
@@ -92,7 +92,7 @@ class SlashCommandRegistry(object):
                 
         else:
             return 'Sorry, /%s is not a registered command. Type /help to see a full list.' % command_name
-   
+    
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
             logging.error('/%s is already a registered command.' % slash_command.name)
@@ -100,7 +100,7 @@ class SlashCommandRegistry(object):
             logging.error('The /help command is built in and can not be added.' % slash_command.name)
         else:
             self.slash_commands[slash_command.name] = slash_command
-
+    
     def remove(self, command_name):
         if command_name in self.slash_commands:
             del self.slash_commands[command_name]
