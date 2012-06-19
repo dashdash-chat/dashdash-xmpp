@@ -89,7 +89,6 @@ class SlashCommandRegistry(object):
                 return 'You do not have permission to execute any commands with this bot.'
             else:
                 return 'The available commands are:\n' + command_string
-                
         else:
             return 'Sorry, /%s is not a registered command. Type /help to see a full list.' % command_name
     

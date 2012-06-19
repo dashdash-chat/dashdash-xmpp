@@ -41,20 +41,20 @@ class LeafComponent(ComponentXMPP):
         def is_participant(sender, recipient):
             participants, is_active, is_party = self.db_fetch_vinebot(recipient.user)
             return is_active and sender.user in participants
-        # def is_admin_or_participant(sender):
-        #     return is_admin(sender) or is_participant(sender)
+        def is_admin_or_participant(sender, recipient):
+            return is_admin(sender, recipient) or is_participant(sender, recipient)
         # def has_none(sender, arg_string, arg_tokens):
         #     if len(arg_tokens) == 0:
         #         return []
         #     return False
-        def sender_and_recipient(sender, recipient, arg_string, arg_tokens):
+        def sender_recipient(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
                 return [sender.user, recipient.user]
             return False
-        # def sender_and_one_token(sender, arg_string, arg_tokens):            
-        #     if len(arg_tokens) == 1:
-        #         return [sender.user, arg_tokens[0]]
-        #     return False
+        def sender_recipient_one_token(sender, recipient, arg_string, arg_tokens):            
+            if len(arg_tokens) == 1:
+                return [sender.user, recipient.user, arg_tokens[0]]
+            return False
         # def only_string(sender, arg_string, arg_tokens):
         #     if len(arg_string.strip()) > 0:
         #         return [sender.user, arg_string]
@@ -67,8 +67,15 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
                                        validate_sender  = is_participant,
-                                       transform_args   = sender_and_recipient,
+                                       transform_args   = sender_recipient,
                                        action           = self.user_left))                  
+        self.commands.add(SlashCommand(command_name     = 'kick',
+                                       text_arg_format  = 'username',
+                                       text_description = 'Kick a user out of this conversation.',
+                                       validate_sender  = is_admin_or_participant,
+                                       transform_args   = sender_recipient_one_token,
+                                       action           = self.user_kicked))
+
         self.add_event_handler("session_start", self.handle_start)
         self.del_event_handler('presence_probe', self._handle_probe)
         self.add_event_handler('presence_probe', self.handle_probe)
@@ -195,7 +202,6 @@ class LeafComponent(ComponentXMPP):
         msg = self.Message()
         msg['body'] = body
         msg['to'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)  # this will get moved to 'from' in broadcast_msg
-        logging.info((msg, participants))
         self.broadcast_msg(msg, participants)
     
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
@@ -214,17 +220,23 @@ class LeafComponent(ComponentXMPP):
         for observer in self.db_fetch_observers(participants):
             self.add_proxy_rosteritem(observer, vinebot_user, self.get_nick(participants))
     
-    
     def user_disconnected(self, user, vinebot_user):
-        self.remove_participant(user, vinebot_user, "has disconnected and left the conversation")
+        self.remove_participant(user, vinebot_user, '%s has disconnected and left the conversation' % user)
     
     def user_left(self, user, vinebot_user):
-        self.remove_participant(user, vinebot_user, "has left the conversation")
+        self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
+    
+    def user_kicked(self, kicker, vinebot_user, user):    
+        self.remove_participant(user, vinebot_user, '%s was kicked from the conversation by %s' % (user, kicker))
+        msg = self.Message()
+        msg['body'] = '%s has kicked you from the conversation' % kicker
+        msg['from'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)
+        msg['to'] = '%s@%s' % (user, constants.server)
+        msg.send()
     
     def remove_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
         # participants = set(filter(self.user_online, participants))
-        logging.info((user, vinebot_user, participants, is_active, is_party))
         if user in participants:
             if is_party:
                 if len(participants) > 2:
@@ -240,10 +252,11 @@ class LeafComponent(ComponentXMPP):
                     self.db_activate_vinebot(vinebot_user, False)
                     for observer in self.db_fetch_observers(participants):
                         self.delete_proxy_rosteritem(observer, vinebot_user)
-                self.sendPresence(pfrom='%s@%s' % (vinebot_user, constants.server),
+                self.sendPresence(pfrom='%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server),
                                   pto='%s@%s' % (participants.difference([user]).pop(), constants.server),
                                   pshow='unavailable')
-            self.broadcast_alert('%s %s' % (user, alert_msg), participants, vinebot_user)
+            self.broadcast_alert(alert_msg, participants, vinebot_user)
+    
     
     ##### ejabberdctl XML RPC commands
     def add_proxy_rosteritem(self, user, vinebot_user, nick):
@@ -316,11 +329,12 @@ class LeafComponent(ComponentXMPP):
             self.db_add_participant(participant, vinebot_user)
         return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(new_vinebot_uuid))
     
-    def db_fetch_all_uservinebots(self):  # useful for starting up/shutting down the leaf
+    def db_fetch_all_uservinebots(self):  # these should correspond to every roster entry for every user
         uservinebots = []
         pair_vinebots = self.db_execute_and_fetchall("""SELECT users.user, pair_vinebots.id, pair_vinebots.is_active
-                          FROM users, pair_vinebots
-                          WHERE pair_vinebots.user1 = users.id OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
+                                                        FROM users, pair_vinebots
+                                                        WHERE pair_vinebots.user1 = users.id 
+                                                        OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
         for pair_vinebot in pair_vinebots:
             user, vinebot_user, is_active = (pair_vinebot[0],
                                             '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[1]))),
@@ -330,6 +344,16 @@ class LeafComponent(ComponentXMPP):
                 participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
                 observers = self.db_fetch_observers(participants)
                 uservinebots.extend([(observer, vinebot_user) for observer in observers])
+        party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.user)
+                                                         FROM users, party_vinebots
+                                                         WHERE party_vinebots.user = users.id""", {}, strip_pairs=False)
+        for party_vinebot in party_vinebots:
+            vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=party_vinebot[0])))
+            participants = party_vinebot[1].split(',')
+            for participant in participants:
+                uservinebots.append((participant, vinebot_user))
+            for observer in self.db_fetch_observers(participants):
+                uservinebots.append((observer, vinebot_user))
         return uservinebots
     
     def db_activate_vinebot(self, vinebot_user, activate):
