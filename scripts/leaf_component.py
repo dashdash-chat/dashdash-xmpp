@@ -45,32 +45,31 @@ class LeafComponent(ComponentXMPP):
     
     def disconnect(self, *args, **kwargs):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
-        for user_vinebot_pair in self.db_fetch_all_vinebot_users():
+        for user_vinebot_pair in self.db_fetch_all_uservinebots():
             self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
                               pto='%s@%s' % (user_vinebot_pair[0], constants.server),
                               pshow='unavailable')
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
-        
+    
+    
     ##### event handlers
     def handle_start(self, event):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
-        for user_vinebot_pair in self.db_fetch_all_vinebot_users():
+        all_uservinebots = self.db_fetch_all_uservinebots()
+        for user_vinebot_pair in all_uservinebots:
             self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
                               pto='%s@%s' % (user_vinebot_pair[0], constants.server))
-        logging.info("Session started")
+        logging.info("Session started with %d user-vinebots" % len(all_uservinebots))
     
     def handle_probe(self, presence):
-        logging.warning(presence['from'])
         self.sendPresence(pfrom=presence['to'], pto=presence['from'])
-        logging.info("Presence probe received from %s by %s" % (presence['from'].user, presence['to'].user))
     
     def handle_presence_available(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
             participants, observers, is_active, is_party = self.db_fetch_vinebot(presence['to'].user)
-            
             self.sendPresence(pfrom=presence['to'], pto=presence['from'])
-            logging.info("Presence available received from %s by %s" % (presence['from'].user, presence['to'].user))
+            self.sendPresence(pfrom=presence['to'], pto='%s@%s' % (participants.difference([presence['from'].user]).pop(), constants.server))
     
     def handle_presence_unavailable(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
@@ -91,8 +90,9 @@ class LeafComponent(ComponentXMPP):
                         self.db_activate_vinebot(presence['to'].user, False)
                         for observer in observers:
                             self.delete_proxy_rosteritem(observer, presence['to'].user)
-                    #TODO make invisible                         
-        logging.info("Presence unavailable received from %s by %s" % (presence['from'].user, presence['to'].user))
+                    self.sendPresence(pfrom=presence['to'],
+                                      pto='%s@%s' % (participants.difference([presence['from'].user]).pop(), constants.server),
+                                      pshow='unavailable')
     
     def handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
@@ -110,7 +110,6 @@ class LeafComponent(ComponentXMPP):
                             if not is_active:
                                 self.db_activate_vinebot(msg['to'].user, True)
                                 for observer in observers:
-                                    logging.info((observer, self.get_nick(online_participants)))
                                     self.add_proxy_rosteritem(observer, msg['to'].user, self.get_nick(online_participants))
                             self.broadcast_msg(msg, participants, sender=msg['from'].user)
                     else:
@@ -118,8 +117,8 @@ class LeafComponent(ComponentXMPP):
                             logging.info('TODO cleanup this party vinebot')
                             msg.reply('TODO cleanup this party vinebot').send()
                         else:
-                            logging.info('TODO set to invisible and send error message')
-                            msg.reply('TODO set to invisible and send error message').send()
+                            self.sendPresence(pfrom=msg['to'], pto=msg['from'], pshow='unavailable')
+                            msg.reply('Sorry, but %s is offline.' % participants.difference([msg['from'].user]).pop()).send()
                 else:
                     if msg['from'].user in observers:
                         if is_active:
@@ -213,8 +212,8 @@ class LeafComponent(ComponentXMPP):
     def db_delete_party(self, vinebot_jid):
         logging.error("TODO implement party vinebot stuff")
     
-    def db_fetch_all_vinebot_users(self):  # useful for starting up/shutting down the leaf
-        user_vinebot_pairs = []
+    def db_fetch_all_uservinebots(self):  # useful for starting up/shutting down the leaf
+        uservinebots = []
         pair_vinebots = self.db_execute_and_fetchall("""SELECT users.user, pair_vinebots.id, pair_vinebots.is_active
                           FROM users, pair_vinebots
                           WHERE pair_vinebots.user1 = users.id OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
@@ -222,11 +221,11 @@ class LeafComponent(ComponentXMPP):
             user, vinebot_jid, is_active = (pair_vinebot[0],
                                             '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[1]))),
                                             pair_vinebot[2])
-            user_vinebot_pairs.append((user, vinebot_jid))
+            uservinebots.append((user, vinebot_jid))
             if is_active:
                 participants, observers, is_active, is_party = self.db_fetch_vinebot(vinebot_jid)
-                user_vinebot_pairs.extend([(observer, vinebot_jid) for observer in observers])
-        return user_vinebot_pairs
+                uservinebots.extend([(observer, vinebot_jid) for observer in observers])
+        return uservinebots
     
     def db_activate_vinebot(self, vinebot_jid, activate):
         _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
