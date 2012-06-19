@@ -69,7 +69,11 @@ class LeafComponent(ComponentXMPP):
         if presence['to'].user.startswith(constants.vinebot_prefix):
             participants, is_active, is_party = self.db_fetch_vinebot(presence['to'].user)
             self.sendPresence(pfrom=presence['to'], pto=presence['from'])
-            self.sendPresence(pfrom=presence['to'], pto='%s@%s' % (participants.difference([presence['from'].user]).pop(), constants.server))
+            if presence['from'].user in participants:
+                participants.remove(presence['from'].user)
+                for participant in participants:
+                    self.sendPresence(pfrom=presence['to'], 
+                                      pto='%s@%s' % (participant, constants.server))
     
     def handle_presence_unavailable(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
