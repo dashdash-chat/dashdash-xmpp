@@ -29,14 +29,15 @@ class SlashCommand(object):
         self.transform_args = transform_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
         self._action = action
 
-    def execute(self, sender, arg_string):
-        if not self.validate_sender(sender):
+    def execute(self, sender, recipient, arg_string):
+        if not self.validate_sender(sender, recipient):
             raise PermissionError
         # pass the sender to transform_args in case the args depend on it or in case it *should* be an arg
+        # and the recipient so that the leaf can figure out which vinebot this command was for
         # and the original string in case not all of the tokens in the list should be treated as individual arguments
         # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
         arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
-        args = self.transform_args(sender, arg_string, arg_tokens)
+        args = self.transform_args(sender, recipient, arg_string, arg_tokens)
         if args is False:
             raise ArgFormatError
         return self._action(*args)
@@ -57,7 +58,7 @@ class SlashCommandRegistry(object):
         message = message.lstrip()
         return message.startswith('/') and len(message.lstrip('/')) > 0
 
-    def handle_command(self, sender, message):
+    def handle_command(self, sender, recipient, message):
         message = message.strip().lstrip('/')
         try:
             command_name, _, args = message.partition(' ')
@@ -67,7 +68,7 @@ class SlashCommandRegistry(object):
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
-                result_message = slash_command.execute(sender, args)
+                result_message = slash_command.execute(sender, recipient, args)
                 if result_message is not None:  # this way we can return an empty string to send no response
                     return result_message
                 else:
@@ -82,7 +83,7 @@ class SlashCommandRegistry(object):
         elif command_name == 'help':
             command_string = ''
             for slash_command in self.slash_commands.values():
-                if slash_command.validate_sender(sender):
+                if slash_command.validate_sender(sender, recipient):
                     command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
                 return 'You do not have permission to execute any commands with this bot.'

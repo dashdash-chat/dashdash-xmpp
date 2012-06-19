@@ -14,6 +14,7 @@ leaf_xmlrpc_jid_prefix  = '_leaf'
 leaf_xmlrpc_password = env_vars.leaf_xmlrpc_password
 roster_group = 'Vine Conversations'
 
+admin_users = env_vars.admin_users
 
 
 
@@ -35,7 +36,6 @@ hostbot_nick = 'Hostbot'
 hostbot_secret = env_vars.hostbot_secret
 default_user_password = env_vars.default_user_password
 
-admin_users = env_vars.admin_users
 admin_password = env_vars.admin_password
 
 hostbot_xmlrpc_jid = '_hostbot'
