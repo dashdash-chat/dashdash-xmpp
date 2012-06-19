@@ -43,21 +43,33 @@ class LeafComponent(ComponentXMPP):
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self.handle_chatstate)
     
+    def disconnect(self, *args, **kwargs):
+        #LATER check if other leaves are online, since otherwise we don't need to do this.
+        for user_vinebot_pair in self.db_fetch_all_vinebot_users():
+            self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
+                              pto='%s@%s' % (user_vinebot_pair[0], constants.server),
+                              pshow='unavailable')
+        kwargs['wait'] = True
+        super(LeafComponent, self).disconnect(*args, **kwargs)
+        
     ##### event handlers
     def handle_start(self, event):
-        self.sendPresence()
+        #LATER check if other leaves are online, since otherwise we don't need to do this.
+        for user_vinebot_pair in self.db_fetch_all_vinebot_users():
+            self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
+                              pto='%s@%s' % (user_vinebot_pair[0], constants.server))
         logging.info("Session started")
     
     def handle_probe(self, presence):
         logging.warning(presence['from'])
-        self.tempSendPrecence(pfrom=presence['to'], pto=presence['from'])
+        self.sendPresence(pfrom=presence['to'], pto=presence['from'])
         logging.info("Presence probe received from %s by %s" % (presence['from'].user, presence['to'].user))
     
     def handle_presence_available(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
             participants, observers, is_active, is_party = self.db_fetch_vinebot(presence['to'].user)
             
-            self.tempSendPrecence(pfrom=presence['to'], pto=presence['from'])
+            self.sendPresence(pfrom=presence['to'], pto=presence['from'])
             logging.info("Presence available received from %s by %s" % (presence['from'].user, presence['to'].user))
     
     def handle_presence_unavailable(self, presence):
@@ -149,12 +161,6 @@ class LeafComponent(ComponentXMPP):
         comma_sep = ''.join([', %s' % participant for participant in participants[1:-1]])
         return '%s%s & %s' % (participants[0], comma_sep, participants[-1])
     
-    def tempSendPrecence(self, pto, pfrom):
-        pres = self.Presence()
-        pres['to'] = pto
-        pres['from'] = pfrom
-        pres.send()
-    
     
     ##### ejabberdctl XML RPC commands
     # def add_proxy_rosteritems(self, user1, user2, vinebot_jid):
@@ -206,6 +212,21 @@ class LeafComponent(ComponentXMPP):
     
     def db_delete_party(self, vinebot_jid):
         logging.error("TODO implement party vinebot stuff")
+    
+    def db_fetch_all_vinebot_users(self):  # useful for starting up/shutting down the leaf
+        user_vinebot_pairs = []
+        pair_vinebots = self.db_execute_and_fetchall("""SELECT users.user, pair_vinebots.id, pair_vinebots.is_active
+                          FROM users, pair_vinebots
+                          WHERE pair_vinebots.user1 = users.id OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
+        for pair_vinebot in pair_vinebots:
+            user, vinebot_jid, is_active = (pair_vinebot[0],
+                                            '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[1]))),
+                                            pair_vinebot[2])
+            user_vinebot_pairs.append((user, vinebot_jid))
+            if is_active:
+                participants, observers, is_active, is_party = self.db_fetch_vinebot(vinebot_jid)
+                user_vinebot_pairs.extend([(observer, vinebot_jid) for observer in observers])
+        return user_vinebot_pairs
     
     def db_activate_vinebot(self, vinebot_jid, activate):
         _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
