@@ -131,9 +131,9 @@ class LeafComponent(ComponentXMPP):
                                 self.db_add_participant(msg['from'].user, msg['to'].user)
                             else:
                                 old_participants = participants.difference([msg['from'].user])
-                                new_vinebot_jid = self.db_new_party_vinebot(participants, msg['to'].user)
+                                new_vinebot_user = self.db_new_party_vinebot(participants, msg['to'].user)
                                 for old_participant in old_participants:
-                                    self.add_proxy_rosteritem(old_participant, new_vinebot_jid, old_participants.difference([old_participant]).pop())
+                                    self.add_proxy_rosteritem(old_participant, new_vinebot_user, old_participants.difference([old_participant]).pop())
                             self.addupdate_rosteritems(participants, msg['to'].user)
                             self.broadcast_alert('%s has joined the conversation' % msg['from'].user, participants, msg['to'])
                             self.broadcast_msg(msg, participants, sender=msg['from'].user)
@@ -182,29 +182,29 @@ class LeafComponent(ComponentXMPP):
         comma_sep = ''.join([', %s' % participant for participant in participants[1:-1]])
         return '%s%s & %s' % (participants[0], comma_sep, participants[-1])
     
-    def addupdate_rosteritems(self, participants, vinebot_jid):
+    def addupdate_rosteritems(self, participants, vinebot_user):
         for participant in participants:
-            self.add_proxy_rosteritem(participant, vinebot_jid, self.get_nick(participants, participant))
+            self.add_proxy_rosteritem(participant, vinebot_user, self.get_nick(participants, participant))
         for observer in self.db_fetch_observers(participants):
-            self.add_proxy_rosteritem(observer, vinebot_jid, self.get_nick(participants))
+            self.add_proxy_rosteritem(observer, vinebot_user, self.get_nick(participants))
     
     ##### ejabberdctl XML RPC commands
-    def add_proxy_rosteritem(self, user, vinebot_jid, nick):
+    def add_proxy_rosteritem(self, user, vinebot_user, nick):
         self.xmlrpc_command('add_rosteritem', {
             'localuser': user,
             'localserver': constants.server,
-            'user': vinebot_jid,
+            'user': vinebot_user,
             'server': '%s%s.%s' % (constants.leaf_name, self.id, constants.server),
             'group': constants.proxybot_group,
             'nick': nick,
             'subs': 'both'
         })
     
-    def delete_proxy_rosteritem(self, user, vinebot_jid):
+    def delete_proxy_rosteritem(self, user, vinebot_user):
         self.xmlrpc_command('delete_rosteritem', {
             'localuser': user,
             'localserver': constants.server,
-            'user': vinebot_jid,
+            'user': vinebot_user,
             'server': '%s%s.%s' % (constants.leaf_name, self.id, constants.server)
         })
     
@@ -229,35 +229,35 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### database queries and connection management
-    def db_add_participant(self, user, vinebot_jid):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
+    def db_add_participant(self, user, vinebot_user):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""INSERT INTO party_vinebots (id, user)
                            VALUES (%(id)s, (SELECT id FROM users 
                                             WHERE user = %(user)s 
-                                            LIMIT 1))""", {'id': _uuid.bytes, 'user': user})
+                                            LIMIT 1))""", {'id': vinebot_uuid.bytes, 'user': user})
 
-    def db_remove_participant(self, user, vinebot_jid):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
+    def db_remove_participant(self, user, vinebot_user):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""DELETE FROM party_vinebots 
                            WHERE user = (SELECT id FROM users WHERE user = %(user)s)
-                           AND id = %(id)s""", {'id': _uuid.bytes, 'user': user})
+                           AND id = %(id)s""", {'id': vinebot_uuid.bytes, 'user': user})
     
-    def db_delete_party(self, vinebot_jid):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
-        self.db_execute("""DELETE FROM party_vinebots WHERE id = %(id)s""", {'id': _uuid.bytes})
+    def db_delete_party(self, vinebot_user):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
+        self.db_execute("""DELETE FROM party_vinebots WHERE id = %(id)s""", {'id': vinebot_uuid.bytes})
     
-    def db_new_party_vinebot(self, participants, vinebot_jid):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
-        new_uuid = uuid.uuid4()
+    def db_new_party_vinebot(self, participants, vinebot_user):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
+        new_vinebot_uuid = uuid.uuid4()
         self.db_execute("""UPDATE pair_vinebots SET id = %(new_id)s, is_active = 0
-                           WHERE id = %(old_id)s""", {'new_id': new_uuid.bytes, 'old_id': _uuid.bytes})
+                           WHERE id = %(old_id)s""", {'new_id': new_vinebot_uuid.bytes, 'old_id': vinebot_uuid.bytes})
         for participant in participants:  #LATER use cursor.executemany()
-            self.db_add_participant(participant, vinebot_jid)
-        return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(new_uuid))
+            self.db_add_participant(participant, vinebot_user)
+        return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(new_vinebot_uuid))
         
     def db_fetch_all_uservinebots(self):  # useful for starting up/shutting down the leaf
         uservinebots = []
@@ -265,29 +265,29 @@ class LeafComponent(ComponentXMPP):
                           FROM users, pair_vinebots
                           WHERE pair_vinebots.user1 = users.id OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
         for pair_vinebot in pair_vinebots:
-            user, vinebot_jid, is_active = (pair_vinebot[0],
+            user, vinebot_user, is_active = (pair_vinebot[0],
                                             '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[1]))),
                                             pair_vinebot[2])
-            uservinebots.append((user, vinebot_jid))
+            uservinebots.append((user, vinebot_user))
             if is_active:
-                participants, is_active, is_party = self.db_fetch_vinebot(vinebot_jid)
+                participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
                 observers = self.db_fetch_observers(participants)
-                uservinebots.extend([(observer, vinebot_jid) for observer in observers])
+                uservinebots.extend([(observer, vinebot_user) for observer in observers])
         return uservinebots
     
-    def db_activate_vinebot(self, vinebot_jid, activate):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
+    def db_activate_vinebot(self, vinebot_user, activate):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
         pair_vinebot = self.db_execute("""UPDATE pair_vinebots SET is_active = %(activate)s
-                                          WHERE id = %(id)s""", {'id': _uuid.bytes, 'activate': activate},)
+                                          WHERE id = %(id)s""", {'id': vinebot_uuid.bytes, 'activate': activate},)
     
-    def db_fetch_vinebot(self, vinebot_jid):
-        _shortuuid = vinebot_jid.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
+    def db_fetch_vinebot(self, vinebot_user):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
         pair_vinebot = self.db_execute_and_fetchall("""SELECT users_1.user, users_2.user, pair_vinebots.is_active
                           FROM users AS users_1, users AS users_2, pair_vinebots
                           WHERE pair_vinebots.id = %(id)s AND pair_vinebots.user1 = users_1.id AND pair_vinebots.user2 = users_2.id
-                          LIMIT 1""", {'id': _uuid.bytes}, strip_pairs=False)
+                          LIMIT 1""", {'id': vinebot_uuid.bytes}, strip_pairs=False)
         if len(pair_vinebot) > 0:
             participants = set([pair_vinebot[0][0], pair_vinebot[0][1]])
             is_active = (pair_vinebot[0][2] == 1)
@@ -295,7 +295,7 @@ class LeafComponent(ComponentXMPP):
         else:
             party_vinebot = self.db_execute_and_fetchall("""SELECT users.user FROM users, party_vinebots
                               WHERE party_vinebots.id = %(id)s 
-                              AND party_vinebots.user = users.id""", {'id': _uuid.bytes})
+                              AND party_vinebots.user = users.id""", {'id': vinebot_uuid.bytes})
             if len(party_vinebot) > 0:
                 participants = set(party_vinebot)
                 is_active = True
