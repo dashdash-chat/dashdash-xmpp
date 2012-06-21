@@ -74,7 +74,7 @@ class SlashCommandRegistry(object):
                 else:
                     return 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
-                return 'Sorry, but there was an error executing this command:\n\t%s' % error
+                return 'Sorry, but %s' % error
             except PermissionError:
                 return 'Sorry, but you don\'t have permission to use this command.'
             except ArgFormatError:
@@ -107,4 +107,4 @@ class SlashCommandRegistry(object):
             logging.error('The /help command is built in and can not be removed.' % command_name)
         else:
             logging.error('/%s is not a registered command.' % command_name)
-        
+    

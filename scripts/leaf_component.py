@@ -75,7 +75,18 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = is_admin_or_participant,
                                        transform_args   = sender_recipient_one_token,
                                        action           = self.user_kicked))
-
+        self.commands.add(SlashCommand(command_name     = 'list',
+                                       text_arg_format  = '',
+                                       text_description = 'List the participants in this conversation.',
+                                       validate_sender  = is_admin_or_participant,
+                                       transform_args   = sender_recipient,
+                                       action           = self.list_participants))
+        self.commands.add(SlashCommand(command_name     = 'observers',
+                                       text_arg_format  = '',
+                                       text_description = 'List the observers of this conversation.',
+                                       validate_sender  = is_admin_or_participant,
+                                       transform_args   = sender_recipient,
+                                       action           = self.list_observers))
         self.add_event_handler("session_start", self.handle_start)
         self.del_event_handler('presence_probe', self._handle_probe)
         self.add_event_handler('presence_probe', self.handle_probe)
@@ -102,7 +113,7 @@ class LeafComponent(ComponentXMPP):
         for user_vinebot_pair in all_uservinebots:
             self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
                               pto='%s@%s' % (user_vinebot_pair[0], constants.server))
-        logging.info("Session started with %d user-vinebots" % len(all_uservinebots))
+        logging.info("Leaf started with %d user-vinebots" % len(all_uservinebots))
     
     def handle_probe(self, presence):
         self.sendPresence(pfrom=presence['to'], pto=presence['from'])
@@ -139,7 +150,7 @@ class LeafComponent(ComponentXMPP):
                     #offline_participants = participants.difference(online_participants)
                     if len(participants) >= 2:
                         if self.commands.is_command(msg['body']):
-                            logging.info(self.commands.handle_command(msg['from'], msg['to'], msg['body']))
+                            msg.reply(self.commands.handle_command(msg['from'], msg['to'], msg['body'])).send()
                         elif msg['body'].strip().startswith('/'):
                             msg.reply(self.commands.handle_command(msg['from'], msg['to'], '/help')).send()
                         else:
@@ -233,6 +244,29 @@ class LeafComponent(ComponentXMPP):
         msg['from'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)
         msg['to'] = '%s@%s' % (user, constants.server)
         msg.send()
+        # [jorgeo] also: no message when someone logs out?
+        # [jorgeo] it's really annoying to get a dock bounce for something that's not dock-bounce-worthy
+        # [jorgeo] my jabber client will notify me you left if i want to be notified
+        # [jorgeo] err, at least in the N = 2 case
+        # [jorgeo] maybe there's a case for message about someone leaving if N > 2
+    
+    def list_participants(self, user, vinebot_user):
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+            participants.remove(user)
+            participants = list(participants)
+            participants.append('you')
+            return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
+        else:
+            raise ExecutionError, 'this command only works with vinebots.'
+    
+    def list_observers(self, user, vinebot_user):
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+            observers = self.db_fetch_observers(participants)
+            return 'The current observers are:\n' + ''.join(['\t%s\n' % user for user in observers]).strip('\n')
+        else:
+            raise ExecutionError, 'this command only works with vinebots.'
     
     def remove_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
@@ -348,12 +382,13 @@ class LeafComponent(ComponentXMPP):
                                                          FROM users, party_vinebots
                                                          WHERE party_vinebots.user = users.id""", {}, strip_pairs=False)
         for party_vinebot in party_vinebots:
-            vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=party_vinebot[0])))
-            participants = party_vinebot[1].split(',')
-            for participant in participants:
-                uservinebots.append((participant, vinebot_user))
-            for observer in self.db_fetch_observers(participants):
-                uservinebots.append((observer, vinebot_user))
+            if party_vinebot[0]:  # the query returns (None, None) if no rows are found
+                vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=party_vinebot[0])))
+                participants = party_vinebot[1].split(',')
+                for participant in participants:
+                    uservinebots.append((participant, vinebot_user))
+                for observer in self.db_fetch_observers(participants):
+                    uservinebots.append((observer, vinebot_user))
         return uservinebots
     
     def db_activate_vinebot(self, vinebot_user, activate):
