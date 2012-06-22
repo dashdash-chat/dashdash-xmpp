@@ -27,10 +27,8 @@ class LeafComponent(ComponentXMPP):
                                      constants.leaf_secret,
                                      constants.server,
                                      constants.component_port)
-        # self.registerPlugin('xep_0030') # Service Discovery
-        # self.registerPlugin('xep_0004') # Data Forms
-        # self.registerPlugin('xep_0060') # PubSub
-        # self.registerPlugin('xep_0199') # XMPP Ping
+        self.registerPlugin('xep_0030') # Service Discovery
+        self.registerPlugin('xep_0199') # XMPP Ping
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
         self.db = None
         self.cursor = None
@@ -43,26 +41,18 @@ class LeafComponent(ComponentXMPP):
             return is_active and sender.user in participants
         def is_admin_or_participant(sender, recipient):
             return is_admin(sender, recipient) or is_participant(sender, recipient)
-        # def has_none(sender, arg_string, arg_tokens):
-        #     if len(arg_tokens) == 0:
-        #         return []
-        #     return False
         def sender_recipient(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
                 return [sender.user, recipient.user]
             return False
-        def sender_recipient_one_token(sender, recipient, arg_string, arg_tokens):            
+        def sender_recipient_token(sender, recipient, arg_string, arg_tokens):            
             if len(arg_tokens) == 1:
                 return [sender.user, recipient.user, arg_tokens[0]]
             return False
-        # def only_string(sender, arg_string, arg_tokens):
-        #     if len(arg_string.strip()) > 0:
-        #         return [sender.user, arg_string]
-        #     return False
-        # def one_token_and_string(sender, arg_string, arg_tokens):
-        #     if len(arg_tokens) >= 2:
-        #         return [sender.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
-        #     return False
+        def sender_recipient_token_string(sender, recipient, arg_string, arg_tokens):
+            if len(arg_tokens) >= 2:
+                return [sender.user, recipient.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
+            return False
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
@@ -73,13 +63,13 @@ class LeafComponent(ComponentXMPP):
                                       text_arg_format  = 'username',
                                       text_description = 'Invite a user to this conversation.',
                                       validate_sender  = is_admin_or_participant,
-                                      transform_args   = sender_recipient_one_token,
+                                      transform_args   = sender_recipient_token,
                                       action           = self.user_invited))
         self.commands.add(SlashCommand(command_name     = 'kick',
                                        text_arg_format  = 'username',
                                        text_description = 'Kick a user out of this conversation.',
                                        validate_sender  = is_admin_or_participant,
-                                       transform_args   = sender_recipient_one_token,
+                                       transform_args   = sender_recipient_token,
                                        action           = self.user_kicked))
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
@@ -93,6 +83,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = is_admin_or_participant,
                                        transform_args   = sender_recipient,
                                        action           = self.list_observers))
+        self.commands.add(SlashCommand(command_name     = 'whisper',
+                                       text_arg_format  = 'username message to be sent to that user',
+                                       text_description = 'Whisper a quick message to only one other participant.',
+                                       validate_sender  = is_admin_or_participant,
+                                       transform_args   = sender_recipient_token_string,
+                                       action           = self.whisper_msg))
         self.add_event_handler("session_start", self.handle_start)
         self.del_event_handler('presence_probe', self._handle_probe)
         self.add_event_handler('presence_probe', self.handle_probe)
@@ -137,9 +133,11 @@ class LeafComponent(ComponentXMPP):
     def handle_presence_unavailable(self, presence):
         #NOTE don't call this when users are still online! remember delete_rosteritem triggers presence_unavaible... nasty bugs
         if presence['to'].user.startswith(constants.vinebot_prefix) and not self.user_online(presence['from'].user):
-            self.remove_participant(presence['from'].user,
-                                    presence['to'].user,
-                                    '%s has disconnected and left the conversation' % presence['from'].user)
+            participants = self.remove_participant(presence['from'].user,
+                                                   presence['to'].user,
+                                                   '%s has disconnected and left the conversation' % presence['from'].user)
+            for participant in participants:
+                self.sendPresence(pfrom=presence['to'], pto='%s@%s' % (participant, constants.server), pshow='unavailable')
     
     def handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
@@ -178,7 +176,7 @@ class LeafComponent(ComponentXMPP):
                 else:
                     if msg['from'].user in self.db_fetch_observers(participants):
                         if is_active:
-                            self.add_participnat(msg['from'].user, msg['to'].user, '%s has joined the conversation' % msg['from'].user)
+                            self.add_participant(msg['from'].user, msg['to'].user, '%s has joined the conversation' % msg['from'].user)
                             self.broadcast_msg(msg, participants, sender=msg['from'].user)
                         else:
                             msg.reply('Sorry, but you can\'t join a conversation that hasn\'t started yet.').send()
@@ -216,6 +214,21 @@ class LeafComponent(ComponentXMPP):
         msg['to'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)  # this will get moved to 'from' in broadcast_msg
         self.broadcast_msg(msg, participants)
     
+    def whisper_msg(self, sender, vinebot_user, recipient, body):
+        recipient_jid = '%s@%s' % (recipient, constants.server)
+        if recipient == sender:
+            raise ExecutionError, 'You can\'t whisper to youerself.'
+        participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+        if recipient not in participants and recipient_jid not in constants.admin_users:
+            raise ExecutionError, 'You can\'t whisper to someone who isn\'t a participant in this conversation.'
+        self.send_message(mto=recipient_jid,
+                          mfrom='%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server),
+                          mbody='[%s, whispering] %s' % (sender, body))
+        if len(participants) == 2:
+            return 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
+        else:
+            return 'You whispered to %s, and no one noticed!' % recipient
+        
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
         if viewing_participant:
             participants = participants.difference([viewing_participant])
@@ -255,9 +268,10 @@ class LeafComponent(ComponentXMPP):
     
     def user_left(self, user, vinebot_user):
         self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
+        return 'You left the conversation.'
     
     def user_invited(self, inviter, vinebot_user, invitee):    
-        self.add_participnat(invitee, vinebot_user, '%s has invited %s the conversation' % (inviter, invitee))
+        self.add_participant(invitee, vinebot_user, '%s has invited %s the conversation' % (inviter, invitee))
         return ''
     
     def user_kicked(self, kicker, vinebot_user, kickee):    
@@ -268,13 +282,8 @@ class LeafComponent(ComponentXMPP):
         msg['to'] = '%s@%s' % (kickee, constants.server)
         msg.send()
         return ''
-        # [jorgeo] also: no message when someone logs out?
-        # [jorgeo] it's really annoying to get a dock bounce for something that's not dock-bounce-worthy
-        # [jorgeo] my jabber client will notify me you left if i want to be notified
-        # [jorgeo] err, at least in the N = 2 case
-        # [jorgeo] maybe there's a case for message about someone leaving if N > 2
     
-    def add_participnat(self, user, vinebot_user, alert_msg):
+    def add_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
         participants.add(user)
         if is_party:
@@ -311,15 +320,15 @@ class LeafComponent(ComponentXMPP):
                     for observer in self.db_fetch_observers(participants):
                         self.delete_proxy_rosteritem(observer, vinebot_user)
                     self.db_delete_party(vinebot_user)
+                # only broadcast if there's at least one user left in the conversation, which is only true for parties
+                self.broadcast_alert(alert_msg, participants, vinebot_user)
             else:
                 if is_active:
                     self.db_activate_vinebot(vinebot_user, False)
                     for observer in self.db_fetch_observers(participants):
                         self.delete_proxy_rosteritem(observer, vinebot_user)
-                self.sendPresence(pfrom='%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server),
-                                  pto='%s@%s' % (participants.difference([user]).pop(), constants.server),
-                                  pshow='unavailable')
-            self.broadcast_alert(alert_msg, participants, vinebot_user)
+                return participants
+        return []
     
     
     ##### ejabberdctl XML RPC commands

@@ -64,7 +64,7 @@ class SlashCommandRegistry(object):
             command_name, _, args = message.partition(' ')
             command_name = command_name.lower()
         except ValueError:
-            return 'The command was not formatted properly. Please separate the command from the arguments with a single space.'
+            return 'Sorry, that command wasn\'t formatted properly. Try separating the command from the arguments with a single space.'
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
@@ -74,11 +74,11 @@ class SlashCommandRegistry(object):
                 else:
                     return 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
-                return 'Sorry, but %s' % error
+                return 'Sorry, %s' % error
             except PermissionError:
-                return 'Sorry, but you don\'t have permission to use this command.'
+                return 'Sorry, you don\'t have permission to use this command.'
             except ArgFormatError:
-                return 'The arguments were not formatted properly. Please use:\n\t/%s %s' % \
+                return 'Sorry, that format wasn\'t quite right. Try:\n\t/%s %s' % \
                     (slash_command.name, slash_command.arg_format)
         elif command_name == 'help':
             command_string = ''
@@ -86,11 +86,11 @@ class SlashCommandRegistry(object):
                 if slash_command.validate_sender(sender, recipient):
                     command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
-                return 'You do not have permission to execute any commands with this bot.'
+                return 'You do not have permission to send any commands to this vinebot.'
             else:
                 return 'The available commands are:\n' + command_string
         else:
-            return 'Sorry, /%s is not a registered command. Type /help to see a full list.' % command_name
+            return 'Sorry, /%s isn\'t a registered command. Type /help to see a full list.' % command_name
     
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
