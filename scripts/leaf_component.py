@@ -129,8 +129,11 @@ class LeafComponent(ComponentXMPP):
                                       pto='%s@%s' % (participant, constants.server))
     
     def handle_presence_unavailable(self, presence):
-        if presence['to'].user.startswith(constants.vinebot_prefix):
-            self.user_disconnected(presence['from'].user, presence['to'].user)
+        #NOTE don't call this when users are still online! remember delete_rosteritem triggers presence_unavaible... nasty bugs
+        if presence['to'].user.startswith(constants.vinebot_prefix) and not self.user_online(presence['from'].user):
+            self.remove_participant(presence['from'].user,
+                                    presence['to'].user,
+                                    '%s has disconnected and left the conversation' % presence['from'].user)
     
     def handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
@@ -216,10 +219,13 @@ class LeafComponent(ComponentXMPP):
         self.broadcast_msg(msg, participants)
     
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
-        if viewing_participant: 
+        if viewing_participant:
             participants = participants.difference([viewing_participant])
-            participants = list(participants)
-            participants.insert(0, 'you')
+            if len(participants) == 1:
+                return participants.pop()
+            else:
+                participants = list(participants)
+                participants.insert(0, 'you')
         else:
             participants = list(participants)
         comma_sep = ''.join([', %s' % participant for participant in participants[1:-1]])
@@ -231,8 +237,23 @@ class LeafComponent(ComponentXMPP):
         for observer in self.db_fetch_observers(participants):
             self.add_proxy_rosteritem(observer, vinebot_user, self.get_nick(participants))
     
-    def user_disconnected(self, user, vinebot_user):
-        self.remove_participant(user, vinebot_user, '%s has disconnected and left the conversation' % user)
+    def list_participants(self, user, vinebot_user):
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+            participants.remove(user)
+            participants = list(participants)
+            participants.append('you')
+            return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
+        else:
+            raise ExecutionError, 'this command only works with vinebots.'
+    
+    def list_observers(self, user, vinebot_user):
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+            observers = filter(self.user_online, self.db_fetch_observers(participants))
+            return 'These users are online and can see this conversation:\n' + ''.join(['\t%s\n' % user for user in observers]).strip('\n')
+        else:
+            raise ExecutionError, 'this command only works with vinebots.'
     
     def user_left(self, user, vinebot_user):
         self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
@@ -250,33 +271,26 @@ class LeafComponent(ComponentXMPP):
         # [jorgeo] err, at least in the N = 2 case
         # [jorgeo] maybe there's a case for message about someone leaving if N > 2
     
-    def list_participants(self, user, vinebot_user):
-        if vinebot_user.startswith(constants.vinebot_prefix):
-            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
-            participants.remove(user)
-            participants = list(participants)
-            participants.append('you')
-            return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
-        else:
-            raise ExecutionError, 'this command only works with vinebots.'
-    
-    def list_observers(self, user, vinebot_user):
-        if vinebot_user.startswith(constants.vinebot_prefix):
-            participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
-            observers = self.db_fetch_observers(participants)
-            return 'The current observers are:\n' + ''.join(['\t%s\n' % user for user in observers]).strip('\n')
-        else:
-            raise ExecutionError, 'this command only works with vinebots.'
-    
     def remove_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
-        # participants = set(filter(self.user_online, participants))
         if user in participants:
             if is_party:
-                if len(participants) > 2:
+                if len(participants) > 3:
                     participants.remove(user)
-                    self.addupdate_rosteritems(participants, vinebot_user)
                     self.db_remove_participant(user, vinebot_user)
+                    self.addupdate_rosteritems(participants, vinebot_user)
+                elif len(participants) == 3:
+                    participants.remove(user)
+                    self.db_remove_participant(user, vinebot_user)
+                    pair_vinebot_user, pair_is_active = self.db_fetch_pair_vinebot(*list(participants))
+                    if pair_is_active:  # same behavior as for len(participants) > 3
+                        self.addupdate_rosteritems(participants, vinebot_user)
+                    else:    
+                        self.db_fold_party_into_pair(vinebot_user, pair_vinebot_user)
+                        for participant in participants:
+                            self.delete_proxy_rosteritem(participant, pair_vinebot_user)
+                        # the roster items for observers will change below, but don't need to be deleted
+                        self.addupdate_rosteritems(participants, vinebot_user)
                 else:
                     for observer in self.db_fetch_observers(participants):
                         self.delete_proxy_rosteritem(observer, vinebot_user)
@@ -325,6 +339,7 @@ class LeafComponent(ComponentXMPP):
     
     def xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
+        logging.debug('XMLRPC %s: %s' % (command, str(data)))
         return fn({
             'user': '%s%s' % (constants.leaf_xmlrpc_jid_prefix, self.id),
             'server': constants.server,
@@ -394,8 +409,19 @@ class LeafComponent(ComponentXMPP):
     def db_activate_vinebot(self, vinebot_user, activate):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
-        pair_vinebot = self.db_execute("""UPDATE pair_vinebots SET is_active = %(activate)s
-                                          WHERE id = %(id)s""", {'id': vinebot_uuid.bytes, 'activate': activate},)
+        self.db_execute("""UPDATE pair_vinebots SET is_active = %(activate)s
+                           WHERE id = %(id)s""", {'id': vinebot_uuid.bytes, 'activate': activate})
+    
+    def db_fold_party_into_pair(self, party_vinebot_user, pair_vinebot_user):
+        party_vinebot_id = party_vinebot_user.replace(constants.vinebot_prefix, '')
+        party_vinebot_uuid = shortuuid.decode(party_vinebot_id)
+        pair_vinebot_id = pair_vinebot_user.replace(constants.vinebot_prefix, '')
+        pair_vinebot_uuid = shortuuid.decode(pair_vinebot_id)
+        self.db_execute("UPDATE pair_vinebots SET id = %(new_id)s, is_active = %(activate)s  WHERE id = %(old_id)s", {
+            'new_id': party_vinebot_uuid.bytes,
+            'old_id': pair_vinebot_uuid.bytes,
+            'activate': True})
+        self.db_execute("DELETE FROM party_vinebots WHERE id = %(id)s", {'id': party_vinebot_uuid.bytes})
     
     def db_fetch_vinebot(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
@@ -421,6 +447,22 @@ class LeafComponent(ComponentXMPP):
                 is_active = False
                 is_party = False
         return (participants, is_active, is_party)
+    
+    def db_fetch_pair_vinebot(self, user1, user2):
+        pair_vinebot = self.db_execute_and_fetchall("""SELECT pair_vinebots.id, pair_vinebots.is_active
+            FROM users AS users_1, users AS users_2, pair_vinebots
+            WHERE (pair_vinebots.user1 = users_1.id AND users_1.user = %(user1)s
+               AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user2)s)
+               OR (pair_vinebots.user1 = users_1.id AND users_1.user = %(user2)s
+               AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user1)s)
+               LIMIT 1""", {'user1': user1, 'user2': user2}, strip_pairs=False)
+        if pair_vinebot and pair_vinebot[0]:
+            vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[0][0])))
+            is_active = (pair_vinebot[0][1] == 1)
+        else:
+            vinebot_user = None
+            is_active = False
+        return (vinebot_user, is_active)
     
     def db_fetch_observers(self, participants):
         observers = set([])
