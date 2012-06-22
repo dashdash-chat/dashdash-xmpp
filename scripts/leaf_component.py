@@ -58,13 +58,13 @@ class LeafComponent(ComponentXMPP):
             if len(arg_tokens) >= 2:
                 return [sender.user, recipient.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
             return False
-        def sender_token(sender, recipient, arg_string, arg_tokens):
+        def token(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
                 return [sender.user, arg_tokens[0]]
             return False
-        def sender_token_token(sender, recipient, arg_string, arg_tokens):
+        def token_token(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
-                return [sender.user, arg_tokens[0], arg_tokens[1]]
+                return [arg_tokens[0], arg_tokens[1]]
             return False
         # Register vinebot commands
         self.commands.add(SlashCommand(command_name     = 'leave',
@@ -108,25 +108,25 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = 'username password',
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = is_admin,
-                                       transform_args   = sender_token_token,
+                                       transform_args   = token_token,
                                        action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = 'username',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
                                        validate_sender  = is_admin,
-                                       transform_args   = sender_token,
+                                       transform_args   = token,
                                        action           = self.destroy_user))
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = 'username1 username2',
                                        text_description = 'Create a friendship between two users.',
                                        validate_sender  = is_admin,
-                                       transform_args   = sender_token_token,
+                                       transform_args   = token_token,
                                        action           = self.create_friendship))
         self.commands.add(SlashCommand(command_name     = 'del_friendship',
                                        text_arg_format  = 'username1 username2',
                                        text_description = 'Delete a friendship between two users.',
                                        validate_sender  = is_admin,
-                                       transform_args   = sender_token_token,
+                                       transform_args   = token_token,
                                        action           = self.destroy_friendship))
         self.commands.add(SlashCommand(command_name     = 'friendships',
                                        text_arg_format  = '',
@@ -292,12 +292,15 @@ class LeafComponent(ComponentXMPP):
         logging.info(user)
     
     def create_friendship(self, user1, user2):
-        logging.info('create_friendship')
-        logging.info((user1, user2))
+        vinebot_user = self.db_create_pair_vinebot(user1, user2)
+        participants = set([user1, user2])
+        self.add_proxy_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
+        self.add_proxy_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
     
     def destroy_friendship(self, user1, user2):
-        logging.info('destroy_friendship')
-        logging.info((user1, user2))
+        destroyed_vinebot = self.db_destroy_pair_vinebot(user1, user2)
+        self.delete_proxy_rosteritem(user1, destroyed_vinebot)
+        self.delete_proxy_rosteritem(user2, destroyed_vinebot)
     
     def friendships(self):
         logging.info('friendships')
@@ -461,6 +464,30 @@ class LeafComponent(ComponentXMPP):
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""DELETE FROM party_vinebots WHERE id = %(id)s""", {'id': vinebot_uuid.bytes})
     
+    def db_create_pair_vinebot(self, user1, user2):
+        vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
+        if vinebot_user:
+            raise ExecutionError, 'These users are already friends.'
+        vinebot_uuid = uuid.uuid4()
+        try:
+            self.db_execute("""INSERT INTO pair_vinebots (id, user1, user2)
+                               VALUES (%(id)s, 
+                                       (SELECT id FROM users  WHERE user = %(user1)s LIMIT 1),
+                                       (SELECT id FROM users  WHERE user = %(user2)s LIMIT 1)
+                                      )""", {'id': vinebot_uuid.bytes, 'user1': user1, 'user2': user2})
+            return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(vinebot_uuid))
+        except Exception, e:
+            raise ExecutionError, 'There was an error - are you sure both users exist?'
+    
+    def db_destroy_pair_vinebot(self, user1, user2):
+        vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
+        if not vinebot_user:
+            raise ExecutionError, 'No friendship found.'
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
+        self.db_execute("DELETE FROM pair_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
+        return vinebot_user
+    
     def db_new_party_vinebot(self, participants, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
@@ -470,7 +497,6 @@ class LeafComponent(ComponentXMPP):
         for participant in participants:  #LATER use cursor.executemany()
             self.db_add_participant(participant, vinebot_user)
         return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(new_vinebot_uuid))
-    
     
     def db_fetch_all_pair_vinebots(self):
         pair_vinebots = self.db_execute_and_fetchall("""SELECT pair_vinebots.id, users_1.user, users_2.user
@@ -558,8 +584,10 @@ class LeafComponent(ComponentXMPP):
                AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user2)s)
                OR (pair_vinebots.user1 = users_1.id AND users_1.user = %(user2)s
                AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user1)s)
-               LIMIT 1""", {'user1': user1, 'user2': user2})
+            """, {'user1': user1, 'user2': user2})
         if pair_vinebot and pair_vinebot[0]:
+            if len(pair_vinebot) > 1:
+                logging.error('Multiple pair_vinebots found for %s and %s; %s' % (user1, user2, pair_vinebots))
             vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[0][0])))
             is_active = (pair_vinebot[0][1] == 1)
         else:
