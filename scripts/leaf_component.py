@@ -24,9 +24,7 @@ class LeafComponent(ComponentXMPP):
     def __init__(self, leaf_id):
         self.id = leaf_id
         ComponentXMPP.__init__(self, '%s%s.%s' % (constants.leaf_name, self.id, constants.server), 
-                                     constants.leaf_secret,
-                                     constants.server,
-                                     constants.component_port)
+                               constants.leaf_secret, constants.server, constants.component_port)
         self.registerPlugin('xep_0030') # Service Discovery
         self.registerPlugin('xep_0199') # XMPP Ping
         self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
@@ -101,7 +99,7 @@ class LeafComponent(ComponentXMPP):
     def disconnect(self, *args, **kwargs):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
         for user_vinebot_pair in self.db_fetch_all_uservinebots():
-            self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
+            self.sendPresence(pfrom='%s@%s' % (user_vinebot_pair[1], self.boundjid.bare),
                               pto='%s@%s' % (user_vinebot_pair[0], constants.server),
                               pshow='unavailable')
         kwargs['wait'] = True
@@ -113,7 +111,7 @@ class LeafComponent(ComponentXMPP):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
         all_uservinebots = self.db_fetch_all_uservinebots()
         for user_vinebot_pair in all_uservinebots:
-            self.sendPresence(pfrom='%s@%s%s.%s' % (user_vinebot_pair[1], constants.leaf_name, self.id, constants.server),
+            self.sendPresence(pfrom='%s@%s' % (user_vinebot_pair[1], self.boundjid.bare),
                               pto='%s@%s' % (user_vinebot_pair[0], constants.server))
         logging.info("Leaf started with %d user-vinebots" % len(all_uservinebots))
     
@@ -211,7 +209,7 @@ class LeafComponent(ComponentXMPP):
     def broadcast_alert(self, body, participants, vinebot_user):
         msg = self.Message()
         msg['body'] = body
-        msg['to'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)  # this will get moved to 'from' in broadcast_msg
+        msg['to'] = '%s@%s' % (vinebot_user, self.boundjid.bare)  # this will get moved to 'from' in broadcast_msg
         self.broadcast_msg(msg, participants)
     
     def whisper_msg(self, sender, vinebot_user, recipient, body):
@@ -222,7 +220,7 @@ class LeafComponent(ComponentXMPP):
         if recipient not in participants and recipient_jid not in constants.admin_users:
             raise ExecutionError, 'You can\'t whisper to someone who isn\'t a participant in this conversation.'
         self.send_message(mto=recipient_jid,
-                          mfrom='%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server),
+                          mfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
                           mbody='[%s, whispering] %s' % (sender, body))
         if len(participants) == 2:
             return 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
@@ -278,7 +276,7 @@ class LeafComponent(ComponentXMPP):
         self.remove_participant(kickee, vinebot_user, '%s was kicked from the conversation by %s' % (kickee, kicker))
         msg = self.Message()
         msg['body'] = '%s has kicked you from the conversation' % kicker
-        msg['from'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)
+        msg['from'] = '%s@%s' % (vinebot_user, self.boundjid.bare)
         msg['to'] = '%s@%s' % (kickee, constants.server)
         msg.send()
         return ''
@@ -337,7 +335,7 @@ class LeafComponent(ComponentXMPP):
             'localuser': user,
             'localserver': constants.server,
             'user': vinebot_user,
-            'server': '%s%s.%s' % (constants.leaf_name, self.id, constants.server),
+            'server': self.boundjid.bare,
             'group': constants.proxybot_group,
             'nick': nick,
             'subs': 'both'
@@ -348,7 +346,7 @@ class LeafComponent(ComponentXMPP):
             'localuser': user,
             'localserver': constants.server,
             'user': vinebot_user,
-            'server': '%s%s.%s' % (constants.leaf_name, self.id, constants.server)
+            'server': self.boundjid.bare
         })
     
     def user_online(self, user):
