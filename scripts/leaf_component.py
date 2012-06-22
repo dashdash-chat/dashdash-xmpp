@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import MySQLdb
+from MySQLdb import IntegrityError
 import logging
 from optparse import OptionParser
 import uuid
@@ -59,8 +60,8 @@ class LeafComponent(ComponentXMPP):
                 return [sender.user, recipient.user, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
             return False
         def token(sender, recipient, arg_string, arg_tokens):
-            if len(arg_tokens) == 2:
-                return [sender.user, arg_tokens[0]]
+            if len(arg_tokens) == 1:
+                return [arg_tokens[0]]
             return False
         def token_token(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
@@ -227,7 +228,8 @@ class LeafComponent(ComponentXMPP):
                 #LATER try this without using the new_msg to strip the body, see SleekXMPP chat logs
                 new_msg = msg.__copy__()
                 del new_msg['body']
-                self.broadcast_msg(new_msg, participants, sender=msg['from'].user)
+                observers = filter(self.user_online, self.db_fetch_observers(participants))
+                self.broadcast_msg(new_msg, participants.union(observers), sender=msg['from'].user)
     
     
     ##### user /commands
@@ -283,13 +285,13 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### admin /commands
-    def create_user(self, username, password):
-        logging.info('create_user')
-        logging.info((username, password))
+    def create_user(self, user, password):
+        self.db_create_user(user)
+        self.register(user, password)
     
     def destroy_user(self, user):
-        logging.info('destroy_user')
-        logging.info(user)
+        self.db_destroy_user(user)
+        self.unregister(user)
     
     def create_friendship(self, user1, user2):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
@@ -361,7 +363,7 @@ class LeafComponent(ComponentXMPP):
             self.db_add_participant(user, vinebot_user)
         else:
             old_participants = participants.difference([user])
-            new_vinebot_user = self.db_new_party_vinebot(participants, vinebot_user)
+            new_vinebot_user = self.db_create_party_vinebot(participants, vinebot_user)
             for old_participant in old_participants:
                 self.add_proxy_rosteritem(old_participant, new_vinebot_user, old_participants.difference([old_participant]).pop())
         self.addupdate_rosteritems(participants, vinebot_user)
@@ -383,14 +385,16 @@ class LeafComponent(ComponentXMPP):
                         self.db_fold_party_into_pair(vinebot_user, pair_vinebot_user)
                         for participant in participants:
                             self.delete_proxy_rosteritem(participant, pair_vinebot_user)
-                        # the roster items for observers will change below, but don't need to be deleted
+                        #TODO more intelligent observer roster updating. when a user is removed, we need to remove appropriate observers and update the rest
                         self.addupdate_rosteritems(participants, vinebot_user)
                     else:  # same behavior as for len(participants) > 3
                         self.addupdate_rosteritems(participants, vinebot_user)
                 else:
+                    for participant in participants:
+                        self.delete_proxy_rosteritem(participant, vinebot_user)
                     for observer in self.db_fetch_observers(participants):
                         self.delete_proxy_rosteritem(observer, vinebot_user)
-                    self.db_delete_party(vinebot_user)
+                    self.db_delete_party_vinebot(vinebot_user)
                 # only broadcast if there's at least one user left in the conversation, which is only true for parties
                 self.broadcast_alert(alert_msg, participants, vinebot_user)
             else:
@@ -403,6 +407,19 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### ejabberdctl XML RPC commands
+    def register(self, user, password):
+        self.xmlrpc_command('register', {
+            'user': user,
+            'host': constants.server,
+            'password': password
+        })
+    
+    def unregister(self, user):
+        self.xmlrpc_command('unregister', {
+            'user': user,
+            'host': constants.server,
+        })
+    
     def add_proxy_rosteritem(self, user, vinebot_user, nick):
         self.xmlrpc_command('add_rosteritem', {
             'localuser': user,
@@ -459,7 +476,7 @@ class LeafComponent(ComponentXMPP):
                            WHERE user = (SELECT id FROM users WHERE user = %(user)s)
                            AND id = %(id)s""", {'id': vinebot_uuid.bytes, 'user': user})
     
-    def db_delete_party(self, vinebot_user):
+    def db_delete_party_vinebot(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""DELETE FROM party_vinebots WHERE id = %(id)s""", {'id': vinebot_uuid.bytes})
@@ -476,8 +493,8 @@ class LeafComponent(ComponentXMPP):
                                        (SELECT id FROM users  WHERE user = %(user2)s LIMIT 1)
                                       )""", {'id': vinebot_uuid.bytes, 'user1': user1, 'user2': user2})
             return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(vinebot_uuid))
-        except Exception, e:
-            raise ExecutionError, 'There was an error - are you sure both users exist?'
+        except IntegrityError:
+            raise ExecutionError, 'There was an IntegrityError - are you sure both users exist?'
     
     def db_destroy_pair_vinebot(self, user1, user2):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
@@ -488,7 +505,7 @@ class LeafComponent(ComponentXMPP):
         self.db_execute("DELETE FROM pair_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
         return vinebot_user
     
-    def db_new_party_vinebot(self, participants, vinebot_user):
+    def db_create_party_vinebot(self, participants, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         new_vinebot_uuid = uuid.uuid4()
@@ -598,12 +615,36 @@ class LeafComponent(ComponentXMPP):
     def db_fetch_observers(self, participants):
         observers = set([])
         for participant in participants:
-            observers = observers.union(self.db_execute_and_fetchall("""SELECT users.user FROM users, pair_vinebots
-                WHERE (pair_vinebots.user1 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
-                   AND pair_vinebots.user2 = users.id)
-                OR    (pair_vinebots.user2 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
-                   AND pair_vinebots.user1 = users.id)""", {'user': participant}, strip_pairs=True))
+            observers = observers.union(self.db_fetch_user_friends(participant))
         return observers.difference(participants)
+    
+    def db_fetch_user_friends(self, user):
+        return self.db_execute_and_fetchall("""SELECT users.user FROM users, pair_vinebots
+                    WHERE (pair_vinebots.user1 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
+                       AND pair_vinebots.user2 = users.id)
+                    OR    (pair_vinebots.user2 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
+                       AND pair_vinebots.user1 = users.id)""", {'user': user}, strip_pairs=True)
+    
+    def db_fetch_user_parties(self, user):
+        return self.db_execute_and_fetchall("""SELECT party_vinebots.id FROM party_vinebots
+            WHERE party_vinebots.user = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)""", {'user': user}, strip_pairs=True)
+    
+    def db_create_user(self, user):
+        try:
+            self.db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
+        except IntegrityError:
+            raise ExecutionError, 'There was an IntegrityError - are you sure the user doesn\'t already exist?'
+    
+    def db_destroy_user(self, user):
+        try:
+            for friend in self.db_fetch_user_friends(user):
+                self.destroy_friendship(user, friend)
+            for party_vinebot_uuid in self.db_fetch_user_parties(user):
+                vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=party_vinebot_uuid)))
+                self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
+            self.db_execute("DELETE FROM users WHERE user = %(user)s", {'user': user})
+        except IntegrityError:
+            raise ExecutionError, 'There was an IntegrityError - are you sure the user doesn\'t already exist?'
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
