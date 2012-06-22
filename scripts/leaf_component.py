@@ -69,6 +69,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = is_participant,
                                        transform_args   = sender_recipient,
                                        action           = self.user_left))                  
+        self.commands.add(SlashCommand(command_name     = 'invite',
+                                      text_arg_format  = 'username',
+                                      text_description = 'Invite a user to this conversation.',
+                                      validate_sender  = is_admin_or_participant,
+                                      transform_args   = sender_recipient_one_token,
+                                      action           = self.user_invited))
         self.commands.add(SlashCommand(command_name     = 'kick',
                                        text_arg_format  = 'username',
                                        text_description = 'Kick a user out of this conversation.',
@@ -172,16 +178,7 @@ class LeafComponent(ComponentXMPP):
                 else:
                     if msg['from'].user in self.db_fetch_observers(participants):
                         if is_active:
-                            participants.add(msg['from'].user)
-                            if is_party:
-                                self.db_add_participant(msg['from'].user, msg['to'].user)
-                            else:
-                                old_participants = participants.difference([msg['from'].user])
-                                new_vinebot_user = self.db_new_party_vinebot(participants, msg['to'].user)
-                                for old_participant in old_participants:
-                                    self.add_proxy_rosteritem(old_participant, new_vinebot_user, old_participants.difference([old_participant]).pop())
-                            self.addupdate_rosteritems(participants, msg['to'].user)
-                            self.broadcast_alert('%s has joined the conversation' % msg['from'].user, participants, msg['to'].user)
+                            self.add_participnat(msg['from'].user, msg['to'].user, '%s has joined the conversation' % msg['from'].user)
                             self.broadcast_msg(msg, participants, sender=msg['from'].user)
                         else:
                             msg.reply('Sorry, but you can\'t join a conversation that hasn\'t started yet.').send()
@@ -195,6 +192,7 @@ class LeafComponent(ComponentXMPP):
                 # if both users are online
                     # if it's active, then pass on the chatstate
         logging.info("Chatstate received")
+    
     
     # helper functions
     def broadcast_msg(self, msg, participants, sender=None):
@@ -258,18 +256,36 @@ class LeafComponent(ComponentXMPP):
     def user_left(self, user, vinebot_user):
         self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
     
-    def user_kicked(self, kicker, vinebot_user, user):    
-        self.remove_participant(user, vinebot_user, '%s was kicked from the conversation by %s' % (user, kicker))
+    def user_invited(self, inviter, vinebot_user, invitee):    
+        self.add_participnat(invitee, vinebot_user, '%s has invited %s the conversation' % (inviter, invitee))
+        return ''
+    
+    def user_kicked(self, kicker, vinebot_user, kickee):    
+        self.remove_participant(kickee, vinebot_user, '%s was kicked from the conversation by %s' % (kickee, kicker))
         msg = self.Message()
         msg['body'] = '%s has kicked you from the conversation' % kicker
         msg['from'] = '%s@%s%s.%s' % (vinebot_user, constants.leaf_name, self.id, constants.server)
-        msg['to'] = '%s@%s' % (user, constants.server)
+        msg['to'] = '%s@%s' % (kickee, constants.server)
         msg.send()
+        return ''
         # [jorgeo] also: no message when someone logs out?
         # [jorgeo] it's really annoying to get a dock bounce for something that's not dock-bounce-worthy
         # [jorgeo] my jabber client will notify me you left if i want to be notified
         # [jorgeo] err, at least in the N = 2 case
         # [jorgeo] maybe there's a case for message about someone leaving if N > 2
+    
+    def add_participnat(self, user, vinebot_user, alert_msg):
+        participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+        participants.add(user)
+        if is_party:
+            self.db_add_participant(user, vinebot_user)
+        else:
+            old_participants = participants.difference([user])
+            new_vinebot_user = self.db_new_party_vinebot(participants, vinebot_user)
+            for old_participant in old_participants:
+                self.add_proxy_rosteritem(old_participant, new_vinebot_user, old_participants.difference([old_participant]).pop())
+        self.addupdate_rosteritems(participants, vinebot_user)
+        self.broadcast_alert(alert_msg, participants, vinebot_user)
     
     def remove_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
@@ -283,13 +299,13 @@ class LeafComponent(ComponentXMPP):
                     participants.remove(user)
                     self.db_remove_participant(user, vinebot_user)
                     pair_vinebot_user, pair_is_active = self.db_fetch_pair_vinebot(*list(participants))
-                    if pair_is_active:  # same behavior as for len(participants) > 3
-                        self.addupdate_rosteritems(participants, vinebot_user)
-                    else:    
+                    if pair_vinebot_user and not pair_is_active:
                         self.db_fold_party_into_pair(vinebot_user, pair_vinebot_user)
                         for participant in participants:
                             self.delete_proxy_rosteritem(participant, pair_vinebot_user)
                         # the roster items for observers will change below, but don't need to be deleted
+                        self.addupdate_rosteritems(participants, vinebot_user)
+                    else:  # same behavior as for len(participants) > 3
                         self.addupdate_rosteritems(participants, vinebot_user)
                 else:
                     for observer in self.db_fetch_observers(participants):
