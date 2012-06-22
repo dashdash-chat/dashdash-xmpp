@@ -18,7 +18,7 @@ CREATE TABLE pair_vinebots (
     FOREIGN KEY (user1) REFERENCES users(id),
     FOREIGN KEY (user2) REFERENCES users(id),
     UNIQUE KEY user1 (user1, user2),
-    is_active BOOLEAN DEFAULT FALSE
+    is_active BOOLEAN NOT NULL DEFAULT FALSE
 );
 DROP TABLE IF EXISTS party_vinebots;
 CREATE TABLE party_vinebots (
