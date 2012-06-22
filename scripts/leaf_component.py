@@ -33,7 +33,7 @@ class LeafComponent(ComponentXMPP):
         self.cursor = None
         self.db_connect()
         self.commands = SlashCommandRegistry()
-        # Helper functions for /commands
+        # Access filters for /commands
         def is_admin(sender, recipient):
             return sender.bare in constants.admin_users
         def is_participant(sender, recipient):
@@ -41,9 +41,10 @@ class LeafComponent(ComponentXMPP):
             return is_active and sender.user in participants
         def is_admin_or_participant(sender, recipient):
             return is_admin(sender, recipient) or is_participant(sender, recipient)
-        def sender(sender):
+        # Argument transformations for /commands
+        def has_none(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
-                return [sender.user]
+                return []
             return False
         def sender_recipient(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 0:
@@ -131,7 +132,7 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '',
                                        text_description = 'List all current friendships.',
                                        validate_sender  = is_admin,
-                                       transform_args   = sender,
+                                       transform_args   = has_none,
                                        action           = self.friendships))
         # Add event handlers
         self.add_event_handler("session_start", self.handle_start)
@@ -300,6 +301,14 @@ class LeafComponent(ComponentXMPP):
     
     def friendships(self):
         logging.info('friendships')
+        pair_vinebots = self.db_fetch_all_pair_vinebots()
+        if len(pair_vinebots) <= 0:
+            return 'No idle proxybots found. Use /new_friendship to create an idle proxybot for two users.'    
+        output = 'The current friendships (i.e. idle proxybots) are:'
+        for pair_vinebot in pair_vinebots:
+            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s' % (pair_vinebot[1], pair_vinebot[2], pair_vinebot[0], self.boundjid.bare)
+        return output
+    
     
     ##### helper functions
     def broadcast_msg(self, msg, participants, sender=None):
@@ -462,12 +471,22 @@ class LeafComponent(ComponentXMPP):
             self.db_add_participant(participant, vinebot_user)
         return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(new_vinebot_uuid))
     
+    
+    def db_fetch_all_pair_vinebots(self):
+        pair_vinebots = self.db_execute_and_fetchall("""SELECT pair_vinebots.id, users_1.user, users_2.user
+                                                        FROM users AS users_1, users AS users_2, pair_vinebots
+                                                        WHERE pair_vinebots.user1 = users_1.id
+                                                        AND   pair_vinebots.user2 = users_2.id""")
+        return [('%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[0]))),
+                 pair_vinebot[1],
+                 pair_vinebot[2]) for pair_vinebot in pair_vinebots]
+    
     def db_fetch_all_uservinebots(self):  # these should correspond to every roster entry for every user
         uservinebots = []
         pair_vinebots = self.db_execute_and_fetchall("""SELECT users.user, pair_vinebots.id, pair_vinebots.is_active
                                                         FROM users, pair_vinebots
                                                         WHERE pair_vinebots.user1 = users.id 
-                                                        OR pair_vinebots.user2 = users.id""", {}, strip_pairs=False)
+                                                        OR pair_vinebots.user2 = users.id""", {})
         for pair_vinebot in pair_vinebots:
             user, vinebot_user, is_active = (pair_vinebot[0],
                                             '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[1]))),
@@ -479,7 +498,7 @@ class LeafComponent(ComponentXMPP):
                 uservinebots.extend([(observer, vinebot_user) for observer in observers])
         party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.user)
                                                          FROM users, party_vinebots
-                                                         WHERE party_vinebots.user = users.id""", {}, strip_pairs=False)
+                                                         WHERE party_vinebots.user = users.id""", {})
         for party_vinebot in party_vinebots:
             if party_vinebot[0]:  # the query returns (None, None) if no rows are found
                 vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=party_vinebot[0])))
@@ -513,7 +532,7 @@ class LeafComponent(ComponentXMPP):
         pair_vinebot = self.db_execute_and_fetchall("""SELECT users_1.user, users_2.user, pair_vinebots.is_active
                           FROM users AS users_1, users AS users_2, pair_vinebots
                           WHERE pair_vinebots.id = %(id)s AND pair_vinebots.user1 = users_1.id AND pair_vinebots.user2 = users_2.id
-                          LIMIT 1""", {'id': vinebot_uuid.bytes}, strip_pairs=False)
+                          LIMIT 1""", {'id': vinebot_uuid.bytes})
         if len(pair_vinebot) > 0:
             participants = set([pair_vinebot[0][0], pair_vinebot[0][1]])
             is_active = (pair_vinebot[0][2] == 1)
@@ -521,7 +540,7 @@ class LeafComponent(ComponentXMPP):
         else:
             party_vinebot = self.db_execute_and_fetchall("""SELECT users.user FROM users, party_vinebots
                               WHERE party_vinebots.id = %(id)s 
-                              AND party_vinebots.user = users.id""", {'id': vinebot_uuid.bytes})
+                              AND party_vinebots.user = users.id""", {'id': vinebot_uuid.bytes}, strip_pairs=True)
             if len(party_vinebot) > 0:
                 participants = set(party_vinebot)
                 is_active = True
@@ -539,7 +558,7 @@ class LeafComponent(ComponentXMPP):
                AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user2)s)
                OR (pair_vinebots.user1 = users_1.id AND users_1.user = %(user2)s
                AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user1)s)
-               LIMIT 1""", {'user1': user1, 'user2': user2}, strip_pairs=False)
+               LIMIT 1""", {'user1': user1, 'user2': user2})
         if pair_vinebot and pair_vinebot[0]:
             vinebot_user = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=pair_vinebot[0][0])))
             is_active = (pair_vinebot[0][1] == 1)
@@ -555,10 +574,10 @@ class LeafComponent(ComponentXMPP):
                 WHERE (pair_vinebots.user1 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
                    AND pair_vinebots.user2 = users.id)
                 OR    (pair_vinebots.user2 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
-                   AND pair_vinebots.user1 = users.id)""", {'user': participant}))
+                   AND pair_vinebots.user1 = users.id)""", {'user': participant}, strip_pairs=True))
         return observers.difference(participants)
     
-    def db_execute_and_fetchall(self, query, data={}, strip_pairs=True):
+    def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
         fetched = self.cursor.fetchall()
         if fetched and len(fetched) > 0:
