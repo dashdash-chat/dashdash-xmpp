@@ -39,7 +39,7 @@ class LeafComponent(ComponentXMPP):
             return sender.bare in constants.admin_users
         def is_participant(sender, recipient):
             participants, is_active, is_party = self.db_fetch_vinebot(recipient.user)
-            return is_active and sender.user in participants
+            return sender.user in participants
         def is_admin_or_participant(sender, recipient):
             return is_admin(sender, recipient) or is_participant(sender, recipient)
         # Argument transformations for /commands
@@ -208,8 +208,7 @@ class LeafComponent(ComponentXMPP):
                     else:
                         if not is_active:
                             self.db_activate_vinebot(msg['to'].user, True)
-                            for observer in self.db_fetch_observers(participants):
-                                self.add_proxy_rosteritem(observer, msg['to'].user, self.get_nick(participants))
+                            self.update_rosters(set([]), participants, msg['to'].user, False)
                         self.broadcast_msg(msg, participants, sender=msg['from'].user)
                 else:
                     if msg['from'].user in self.db_fetch_observers(participants):
@@ -237,11 +236,15 @@ class LeafComponent(ComponentXMPP):
         self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
         return 'You left the conversation.'
     
-    def invite_user(self, inviter, vinebot_user, invitee):    
+    def invite_user(self, inviter, vinebot_user, invitee):
+        if inviter == invitee:
+            raise ExecutionError, 'you can\'t invite yourself.'
         self.add_participant(invitee, vinebot_user, '%s has invited %s the conversation' % (inviter, invitee))
         return ''
     
-    def kick_user(self, kicker, vinebot_user, kickee):    
+    def kick_user(self, kicker, vinebot_user, kickee):
+        if kicker == kickee:
+            raise ExecutionError, 'you can\'t kick yourself. Maybe you meant /leave?'
         self.remove_participant(kickee, vinebot_user, '%s was kicked from the conversation by %s' % (kickee, kicker))
         msg = self.Message()
         msg['body'] = '%s has kicked you from the conversation' % kicker
@@ -254,9 +257,12 @@ class LeafComponent(ComponentXMPP):
         if vinebot_user.startswith(constants.vinebot_prefix):
             participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
             participants.remove(user)
-            participants = list(participants)
-            participants.append('you')
-            return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
+            if is_active:
+                participants = list(participants)
+                participants.append('you')
+                return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
+            else:
+                return 'This conversation hasn\'t started yet. Why don\'t you send %s a message?' % participants.pop()
         else:
             raise ExecutionError, 'this command only works with vinebots.'
     
@@ -264,7 +270,21 @@ class LeafComponent(ComponentXMPP):
         if vinebot_user.startswith(constants.vinebot_prefix):
             participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
             observers = filter(self.user_online, self.db_fetch_observers(participants))
-            return 'These users are online and can see this conversation:\n' + ''.join(['\t%s\n' % user for user in observers]).strip('\n')
+            observer_string = ''.join(['\t%s\n' % user for user in observers]).strip('\n')
+            if is_active:
+                if len(observers) > 1:
+                    return 'These users are online and can see this conversation:\n' + observer_string
+                elif len(observers) == 1:
+                    return '%s is online and can see this conversation.' + observers[0]
+                else:
+                    return 'There are no users online that can see this conversaton.'
+            else:
+                if len(observers) > 1:
+                    return 'If this conversation were active, then these online users would see it:\n' + observer_string
+                elif len(observers) == 1:
+                    return 'If this conversation were active, then %s would see it.' + observers[0]
+                else:
+                    return 'There are no users online that can see this conversaton.'
         else:
             raise ExecutionError, 'this command only works with vinebots.'
     
@@ -296,13 +316,15 @@ class LeafComponent(ComponentXMPP):
     def create_friendship(self, user1, user2):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
         participants = set([user1, user2])
-        self.add_proxy_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
-        self.add_proxy_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
+        self.add_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
+        self.add_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
     
     def destroy_friendship(self, user1, user2):
+        #TODO when this gets called by del_user it's not removing the conversations from the users rosters
+        #TODO also users as observers from conversations they can no longer see, which is tricky to compute
         destroyed_vinebot = self.db_destroy_pair_vinebot(user1, user2)
-        self.delete_proxy_rosteritem(user1, destroyed_vinebot)
-        self.delete_proxy_rosteritem(user2, destroyed_vinebot)
+        self.delete_rosteritem(user1, destroyed_vinebot)
+        self.delete_rosteritem(user2, destroyed_vinebot)
     
     def friendships(self):
         logging.info('friendships')
@@ -338,70 +360,76 @@ class LeafComponent(ComponentXMPP):
         self.broadcast_msg(msg, participants)
     
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
-        if viewing_participant:
-            participants = participants.difference([viewing_participant])
-            if len(participants) == 1:
-                return participants.pop()
+        if len(participants) < 2:
+            return 'error'
+        else:
+            if viewing_participant:
+                participants = participants.difference([viewing_participant])
+                if len(participants) == 1:
+                    return participants.pop()
+                else:
+                    participants = list(participants)
+                    participants.insert(0, 'you')
             else:
                 participants = list(participants)
-                participants.insert(0, 'you')
-        else:
-            participants = list(participants)
-        comma_sep = ''.join([', %s' % participant for participant in participants[1:-1]])
-        return '%s%s & %s' % (participants[0], comma_sep, participants[-1])
+            comma_sep = ''.join([', %s' % participant for participant in participants[1:-1]])
+            return '%s%s & %s' % (participants[0], comma_sep, participants[-1])
     
-    def addupdate_rosteritems(self, participants, vinebot_user):
-        for participant in participants:
-            self.add_proxy_rosteritem(participant, vinebot_user, self.get_nick(participants, participant))
-        for observer in self.db_fetch_observers(participants):
-            self.add_proxy_rosteritem(observer, vinebot_user, self.get_nick(participants))
+    def update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
+        observer_nick = self.get_nick(new_participants)
+        # First, create the old and new lists of observers
+        old_observers = self.db_fetch_observers(old_participants)
+        new_observers = self.db_fetch_observers(new_participants)
+        # Then, update the participants
+        if participants_changed:
+            for old_participant in old_participants.difference(new_observers).difference(new_participants):
+                self.delete_rosteritem(old_participant, vinebot_user)
+            for new_participant in new_participants:
+                self.add_rosteritem(new_participant, vinebot_user, self.get_nick(new_participants, new_participant))
+        # Finally, update the observers
+        for old_observer in old_observers.difference(new_participants).difference(new_observers):
+            self.delete_rosteritem(old_observer, vinebot_user)
+        for new_observer in new_observers.difference(new_participants):
+            self.add_rosteritem(new_observer, vinebot_user, observer_nick)
     
     def add_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
-        participants.add(user)
+        if user in participants:
+            raise ExecutionError, '%s is already part of this conversation!' % user
+        new_participants = participants.union([user])
         if is_party:
             self.db_add_participant(user, vinebot_user)
         else:
-            old_participants = participants.difference([user])
-            new_vinebot_user = self.db_create_party_vinebot(participants, vinebot_user)
-            for old_participant in old_participants:
-                self.add_proxy_rosteritem(old_participant, new_vinebot_user, old_participants.difference([old_participant]).pop())
-        self.addupdate_rosteritems(participants, vinebot_user)
+            new_pair_vinebot_user = self.db_create_party_vinebot(new_participants, vinebot_user)
+            for participant in participants:
+                self.add_rosteritem(participant, new_pair_vinebot_user, participants.difference([participant]).pop())
+        self.update_rosters(participants, new_participants, vinebot_user, True)
         self.broadcast_alert(alert_msg, participants, vinebot_user)
     
     def remove_participant(self, user, vinebot_user, alert_msg):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
         if user in participants:
             if is_party:
-                if len(participants) > 3:
-                    participants.remove(user)
+                if len(participants) >= 3:
+                    new_participants = participants.difference([user])
+                    if len(participants) == 3:
+                        pair_vinebot_user, pair_is_active = self.db_fetch_pair_vinebot(*list(new_participants))
+                        if pair_vinebot_user and not pair_is_active:
+                            self.db_fold_party_into_pair(vinebot_user, pair_vinebot_user)
+                            for participant in participants:
+                                self.delete_rosteritem(participant, pair_vinebot_user)
+                    self.update_rosters(participants, new_participants, vinebot_user, True)
                     self.db_remove_participant(user, vinebot_user)
-                    self.addupdate_rosteritems(participants, vinebot_user)
-                elif len(participants) == 3:
-                    participants.remove(user)
-                    self.db_remove_participant(user, vinebot_user)
-                    pair_vinebot_user, pair_is_active = self.db_fetch_pair_vinebot(*list(participants))
-                    if pair_vinebot_user and not pair_is_active:
-                        self.db_fold_party_into_pair(vinebot_user, pair_vinebot_user)
-                        for participant in participants:
-                            self.delete_proxy_rosteritem(participant, pair_vinebot_user)
-                        #TODO more intelligent observer roster updating. when a user is removed, we need to remove appropriate observers and update the rest
-                        self.addupdate_rosteritems(participants, vinebot_user)
-                    else:  # same behavior as for len(participants) > 3
-                        self.addupdate_rosteritems(participants, vinebot_user)
                 else:
-                    for participant in participants:
-                        self.delete_proxy_rosteritem(participant, vinebot_user)
-                    for observer in self.db_fetch_observers(participants):
-                        self.delete_proxy_rosteritem(observer, vinebot_user)
+                    new_participants = set([])
+                    self.update_rosters(participants, new_participants, vinebot_user, True)
                     self.db_delete_party_vinebot(vinebot_user)
-                # only broadcast if there's at least one user left in the conversation, which is only true for parties
-                self.broadcast_alert(alert_msg, participants, vinebot_user)
+                # only broadcast the alert for parties
+                self.broadcast_alert(alert_msg, new_participants, vinebot_user)
             else:
                 if is_active:
                     self.db_activate_vinebot(vinebot_user, False)
-                    for observer in self.db_fetch_observers(participants):
-                        self.delete_proxy_rosteritem(observer, vinebot_user)
+                    self.update_rosters(participants, set([]), vinebot_user, False)
                 return participants
         return []
     
@@ -420,7 +448,7 @@ class LeafComponent(ComponentXMPP):
             'host': constants.server,
         })
     
-    def add_proxy_rosteritem(self, user, vinebot_user, nick):
+    def add_rosteritem(self, user, vinebot_user, nick):
         self.xmlrpc_command('add_rosteritem', {
             'localuser': user,
             'localserver': constants.server,
@@ -431,7 +459,7 @@ class LeafComponent(ComponentXMPP):
             'subs': 'both'
         })
     
-    def delete_proxy_rosteritem(self, user, vinebot_user):
+    def delete_rosteritem(self, user, vinebot_user):
         self.xmlrpc_command('delete_rosteritem', {
             'localuser': user,
             'localserver': constants.server,
