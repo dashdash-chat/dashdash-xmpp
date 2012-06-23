@@ -31,7 +31,7 @@ def add_proxy_rosteritem(user, vinebot_jid, nick):
         'localserver': constants.server,
         'user': vinebot_jid,
         'server': '%s%s.%s' % (constants.leaf_name, leaf_id, constants.server),
-        'group': constants.proxybot_group,
+        'group': constants.roster_group,
         'nick': nick,
         'subs': 'both'
     })

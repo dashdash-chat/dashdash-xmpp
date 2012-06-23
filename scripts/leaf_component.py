@@ -129,6 +129,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = is_admin,
                                        transform_args   = token_token,
                                        action           = self.destroy_friendship))
+        self.commands.add(SlashCommand(command_name     = 'prune',
+                                       text_arg_format  = 'username',
+                                       text_description = 'Remove old, unused vinebots from a user\'s roster.',
+                                       validate_sender  = is_admin,
+                                       transform_args   = token,
+                                       action           = self.prune_roster))
         self.commands.add(SlashCommand(command_name     = 'friendships',
                                        text_arg_format  = '',
                                        text_description = 'List all current friendships.',
@@ -339,6 +345,36 @@ class LeafComponent(ComponentXMPP):
             if user2 not in self.db_fetch_observers(active_vinebot[0]):
                 self.delete_rosteritem(user2, active_vinebot[1])
     
+    def prune_roster(self, user):
+        errors = []
+        for roster_user, roster_nick in self.get_roster(user):
+            participants, is_active, is_party = self.db_fetch_vinebot(roster_user)
+            if user in participants:
+                correct_nick = self.get_nick(participants, user)
+                if roster_nick != correct_nick:
+                    errors.append('Incorrect nickname of %s for %s in roster of participant %s, should be %s.' %
+                        (roster_nick, roster_user, user, correct_nick))
+                    self.add_rosteritem(user, roster_user, correct_nick)
+            elif user in self.db_fetch_observers(participants):
+                if is_active:
+                    correct_nick = self.get_nick(participants)
+                    if roster_nick != correct_nick:
+                        errors.append('Incorrect nickname of %s for %s in roster of observer %s, should be %s.' %
+                            (roster_nick, roster_user, user, correct_nick))
+                        self.add_rosteritem(user, roster_user, correct_nick)
+                else:
+                    errors.append('%s in roster of %s: inactive vinebots shouldn\'t have observers!' %
+                        (roster_user, user))
+                    self.delete_rosteritem(user, roster_user)
+            else:
+                errors.append('Incorrect roster item %s for %s: participants=%s, is_active=%s, is_party=%s' %
+                    (roster_user, user, participants, is_active, is_party))
+                self.delete_rosteritem(user, roster_user)
+        if errors:
+            return '\n'.join(errors)
+        else:
+            return 'No invalid roster items found.'
+    
     def friendships(self):
         logging.info('friendships')
         pair_vinebots = self.db_fetch_all_pair_vinebots()
@@ -473,7 +509,7 @@ class LeafComponent(ComponentXMPP):
             'localserver': constants.server,
             'user': vinebot_user,
             'server': self.boundjid.bare,
-            'group': constants.proxybot_group,
+            'group': constants.roster_group,
             'nick': nick,
             'subs': 'both'
         })
@@ -485,6 +521,23 @@ class LeafComponent(ComponentXMPP):
             'user': vinebot_user,
             'server': self.boundjid.bare
         })
+    
+    def get_roster(self, user):
+        rosteritems = self.xmlrpc_command('get_roster', {
+            'user': user, 
+            'host': constants.server})
+        roster = []
+        for rosteritem in rosteritems['contacts']:
+            rosteritem = rosteritem['contact']
+            if rosteritem[2]['subscription'] != 'both':
+                logging.warning('Incorrect roster subscription for: %s' % rosteritem)
+            if rosteritem[4]['group'] != constants.roster_group:
+                logging.warning('Incorrect roster group for rosteritem: %s' % rosteritem)
+            user = rosteritem[0]['jid'].split('@')[0]
+            if not user.startswith(constants.vinebot_prefix):
+                logging.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
+            roster.append((user, rosteritem[1]['nick']))
+        return roster
     
     def user_online(self, user):
         try:              
@@ -696,7 +749,6 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, 'There was an IntegrityError - are you sure the user doesn\'t already exist?'
     
     def db_destroy_user(self, user):
-        
         try:
             for friend in self.db_fetch_user_friends(user):
                 self.destroy_friendship(user, friend)
