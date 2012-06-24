@@ -349,15 +349,16 @@ class LeafComponent(ComponentXMPP):
     
     def create_friendship(self, user1, user2):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
-        participants = set([user1, user2])
-        self.add_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
-        self.add_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
-        # update observer lists accordingly
-        for active_vinebot in self.db_fetch_user_pair_vinebots(user2):
-            self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
-        for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
-            self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
-        self.send_presence_for_pair_vinebot(user1, user2, vinebot_user)
+        if vinebot_user:
+            participants = set([user1, user2])
+            self.add_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
+            self.add_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
+            # update observer lists accordingly
+            for active_vinebot in self.db_fetch_user_pair_vinebots(user2):
+                self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
+            for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
+                self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
+            self.send_presence_for_pair_vinebot(user1, user2, vinebot_user)
     
     def destroy_friendship(self, user1, user2):
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
@@ -613,13 +614,15 @@ class LeafComponent(ComponentXMPP):
         vinebot_uuid = uuid.uuid4()
         try:
             self.db_execute("""INSERT INTO pair_vinebots (id, user1, user2)
-                               VALUES (%(id)s, 
+                               VALUES (%(id)s,
                                        (SELECT id FROM users  WHERE user = %(user1)s LIMIT 1),
                                        (SELECT id FROM users  WHERE user = %(user2)s LIMIT 1)
                                       )""", {'id': vinebot_uuid.bytes, 'user1': user1, 'user2': user2})
             return self.get_vinebot_user(vinebot_uuid)
         except IntegrityError:
             raise ExecutionError, 'There was an IntegrityError - are you sure both users exist?'
+        except OperationalError
+            raise ExecutionError, 'There was an OperationalError - are you sure both users exist?'
     
     def db_delete_pair_vinebot(self, user1, user2):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
