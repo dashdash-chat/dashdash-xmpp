@@ -409,11 +409,11 @@ class LeafComponent(ComponentXMPP):
             return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
         output = 'There are %d frienddships:' % len(pair_vinebots)
         for vinebot_user, participants, is_active in pair_vinebots:
-            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\nis_active=%s' % (participants[0],
-                                                                       participants[1],
-                                                                       vinebot_user,
-                                                                       self.boundjid.bare,
-                                                                       is_active)
+            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\tis_active=%s' % (participants[0],
+                                                                                 participants[1],
+                                                                                 vinebot_user,
+                                                                                 self.boundjid.bare,
+                                                                                 is_active)
         return output
     
     
