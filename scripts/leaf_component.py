@@ -194,7 +194,7 @@ class LeafComponent(ComponentXMPP):
         logging.info("Leaf started with %d pair_vinebots and %d party_vinebots" % (len(pair_vinebots), len(party_vinebots)))
     
     def handle_probe(self, presence):
-        self.sendPresence(pfrom=presence['to'], pto=presence['from'])
+        self.handle_presence_available(presence)
     
     def handle_presence_available(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
