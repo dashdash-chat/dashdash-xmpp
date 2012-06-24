@@ -28,12 +28,6 @@ CREATE TABLE party_vinebots (
     UNIQUE KEY membership (id, user)
 );
 
-DROP USER 'leaf0'@'localhost';
-CREATE USER 'leaf0'@'localhost' IDENTIFIED BY 'ish9gen8ob8hap7ac9hy';
-GRANT SELECT, UPDATE, INSERT, DELETE ON vine.users TO 'leaf0'@'localhost';
-GRANT SELECT, UPDATE, INSERT, DELETE ON vine.pair_vinebots TO 'leaf0'@'localhost';
-GRANT SELECT, UPDATE, INSERT, DELETE ON vine.party_vinebots TO 'leaf0'@'localhost';
-
 DROP USER 'leaf1'@'localhost';
 CREATE USER 'leaf1'@'localhost' IDENTIFIED BY 'ish9gen8ob8hap7ac9hy';
 GRANT SELECT, UPDATE, INSERT, DELETE ON vine.users TO 'leaf1'@'localhost';
