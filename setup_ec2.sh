@@ -104,9 +104,9 @@ cd shortuuid
 sudo python setup.py install
 cd ..
 
-git clone git@github.com:lehrblogger/SleekXMPP.git sleekxmpp
+git clone git://github.com/fritzy/SleekXMPP.git sleekxmpp
 cd sleekxmpp
-git checkout develop
+git checkout master
 sudo python setup.py install
 cd ..
 
@@ -116,17 +116,14 @@ git submodule init
 git submodule update
 cd ..
 
-sudo mkdir /var/log/chatidea
-sudo rm /var/log/chatidea/proxybots.log
-sudo touch /var/log/chatidea/proxybots.log
-sudo chown ec2-user /var/log/chatidea/proxybots.log
-sudo rm /var/log/chatidea/hostbot.log
-sudo touch /var/log/chatidea/hostbot.log
-sudo chown ec2-user /var/log/chatidea/hostbot.log
-sudo rm /var/log/chatidea/misc.log
-sudo touch /var/log/chatidea/misc.log
-sudo chown ec2-user /var/log/chatidea/misc.log
+sudo mkdir /var/log/vine
+sudo rm /var/log/vine/leaf1.log
+sudo touch /var/log/vine/leaf1.log
+sudo chown ec2-user /var/log/vine/leaf1.log
+sudo rm /var/log/vine/misc.log
+sudo touch /var/log/vine/misc.log
+sudo chown ec2-user /var/log/vine/misc.log
 
 mysql -u root -pMYSQL_ROOT_PASSWORD < ~/chatidea/scripts/config/init_tables.sql
 
-nohup python ~/chatidea/scripts/hostbot_component.py -r >> /var/log/chatidea/hostbot.log &
+nohup python ~/chatidea/scripts/leaf_component.py -i 1 >> /var/log/chatidea/leaf1.log &
