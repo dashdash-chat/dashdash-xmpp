@@ -175,7 +175,7 @@ class LeafComponent(ComponentXMPP):
                         self.sendPresence(pfrom=vinebot_user,
                                           pto='%s@%s' % (observer, constants.server))
                 else:
-                    self.remove_participant(user2 if user1_online else user1, vinebot_user)
+                    self.remove_participant(participants[1] if user1_online else participants[0], vinebot_user)
         party_vinebots = self.db_fetch_all_party_vinebots()
         for vinebot_user, participants, is_active in party_vinebots:
             online_participants = []
@@ -196,12 +196,18 @@ class LeafComponent(ComponentXMPP):
     def handle_presence_available(self, presence):
         if presence['to'].user.startswith(constants.vinebot_prefix):
             participants, is_active, is_party = self.db_fetch_vinebot(presence['to'].user)
-            self.sendPresence(pfrom=presence['to'], pto=presence['from'])
-            if presence['from'].user in participants:
-                participants.remove(presence['from'].user)
-                for participant in participants:
-                    self.sendPresence(pfrom=presence['to'], 
-                                      pto='%s@%s' % (participant, constants.server))
+            if is_active:  # if it's active, we should always send out the presence
+                self.sendPresence(pfrom=presence['to'], pto=presence['from'])
+                if presence['from'].user in participants:
+                    participants.remove(presence['from'].user)
+                    for participant in participants:
+                        self.sendPresence(pfrom=presence['to'], pto='%s@%s' % (participant, constants.server))
+            else:  # only pairs are inactive, so make sure both users are online
+                if presence['from'].user in participants:
+                    other_participant = participants.difference([presence['from'].user]).pop()
+                    if self.user_online(other_participant):
+                        self.sendPresence(pfrom=presence['to'], pto=presence['from'])
+                        self.sendPresence(pfrom=presence['to'], pto='%s@%s' % (other_participant, constants.server))
     
     def handle_presence_unavailable(self, presence):
         #NOTE don't call this when users are still online! remember delete_rosteritem triggers presence_unavaible... nasty bugs
