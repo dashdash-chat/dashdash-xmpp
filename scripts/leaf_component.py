@@ -352,12 +352,12 @@ class LeafComponent(ComponentXMPP):
         participants = set([user1, user2])
         self.add_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
         self.add_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
-        self.send_presence_for_pair_vinebot(user1, user2, vinebot_user)
         # update observer lists accordingly
         for active_vinebot in self.db_fetch_user_pair_vinebots(user2):
             self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
         for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
             self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
+        self.send_presence_for_pair_vinebot(user1, user2, vinebot_user)
     
     def destroy_friendship(self, user1, user2):
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
