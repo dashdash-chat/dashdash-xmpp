@@ -515,7 +515,7 @@ class LeafComponent(ComponentXMPP):
             for participant in participants:
                 self.add_rosteritem(participant, new_pair_vinebot_user, participants.difference([participant]).pop())
         self.update_rosters(participants, new_participants, vinebot_user, True)
-        self.broadcast_alert(alert_msg, participants, vinebot_user)
+        self.broadcast_alert(alert_msg, new_participants, vinebot_user)
     
     def remove_participant(self, user, vinebot_user, alert_msg=''):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
