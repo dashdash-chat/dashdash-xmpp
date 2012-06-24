@@ -464,7 +464,6 @@ class LeafComponent(ComponentXMPP):
     def send_presence_for_pair_vinebot(self, user1, user2, vinebot_user):
         user1_online = self.user_online(user1)
         user2_online = self.user_online(user2)
-        logging.info((user1, user1_online, user2, user2_online))
         if user1_online and user2_online:
             for user in [user1, user2]:
                 self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
