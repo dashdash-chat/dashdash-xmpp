@@ -443,7 +443,7 @@ class LeafComponent(ComponentXMPP):
             if sender:
                 msg['body'] = '[%s] %s' % (sender, msg['body'])
             else:
-                msg['body'] = '/me *%s*' % (msg['body'])
+                msg['body'] = '*%s*' % (msg['body'])
         for participant in participants:
             if not sender or sender != participant:
                 new_msg = msg.__copy__()

@@ -126,4 +126,4 @@ sudo chown ec2-user /var/log/vine/misc.log
 
 mysql -u root -pMYSQL_ROOT_PASSWORD < ~/chatidea/scripts/config/init_tables.sql
 
-nohup python ~/chatidea/scripts/leaf_component.py -i 1 >> /var/log/chatidea/leaf1.log &
+nohup python ~/chatidea/scripts/leaf_component.py -i 1 >> /var/log/vine/leaf1.log &
