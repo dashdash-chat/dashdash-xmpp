@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import MySQLdb
-from MySQLdb import IntegrityError
+from MySQLdb import IntegrityError, OperationalError
 import logging
 from optparse import OptionParser
 import uuid
@@ -63,6 +63,8 @@ class LeafComponent(ComponentXMPP):
             if len(arg_tokens) == 1:
                 return [arg_tokens[0]]
             return False
+        def token_or_none(sender, recipient, arg_string, arg_tokens):
+            return token(sender, recipient, arg_string, arg_tokens) or has_none(sender, recipient, arg_string, arg_tokens)
         def token_token(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
                 return [arg_tokens[0], arg_tokens[1]]
@@ -139,7 +141,7 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '',
                                        text_description = 'List all current friendships.',
                                        validate_sender  = is_admin,
-                                       transform_args   = has_none,
+                                       transform_args   = token_or_none,
                                        action           = self.friendships))
         # Add event handlers
         self.add_event_handler("session_start", self.handle_start)
@@ -162,6 +164,7 @@ class LeafComponent(ComponentXMPP):
                                   pshow='unavailable')
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
+    
     
     ##### event handlers
     def handle_start(self, event):
@@ -404,17 +407,24 @@ class LeafComponent(ComponentXMPP):
         else:
             return 'No invalid roster items found.'
     
-    def friendships(self):
-        pair_vinebots = self.db_fetch_all_pair_vinebots()
-        if len(pair_vinebots) <= 0:
-            return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
-        output = 'There are %d frienddships:' % len(pair_vinebots)
-        for vinebot_user, participants, is_active in pair_vinebots:
-            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\t%s' % (participants[0],
-                                                                       participants[1],
-                                                                       vinebot_user,
-                                                                       self.boundjid.bare,
-                                                                       'active' if is_active else 'inactive')
+    def friendships(self, user=None):
+        if user:
+            friends = self.db_fetch_user_friends(user)
+            if len(friends) <= 0:
+                return '%s doesn\'t have any friends.' % user
+            output = '%s has %d friends:\n\t' % (user, len(friends))
+            output += '\n\t'.join(friends)
+        else:
+            pair_vinebots = self.db_fetch_all_pair_vinebots()
+            if len(pair_vinebots) <= 0:
+                return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
+            output = 'There are %d friendships:' % len(pair_vinebots)
+            for vinebot_user, participants, is_active in pair_vinebots:
+                output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\t%s' % (participants[0],
+                                                                           participants[1],
+                                                                           vinebot_user,
+                                                                           self.boundjid.bare,
+                                                                           'active' if is_active else 'inactive')
         return output
     
     
@@ -620,9 +630,9 @@ class LeafComponent(ComponentXMPP):
                                       )""", {'id': vinebot_uuid.bytes, 'user1': user1, 'user2': user2})
             return self.get_vinebot_user(vinebot_uuid)
         except IntegrityError:
-            raise ExecutionError, 'There was an IntegrityError - are you sure both users exist?'
-        except OperationalError
-            raise ExecutionError, 'There was an OperationalError - are you sure both users exist?'
+            raise ExecutionError, 'there was an IntegrityError - are you sure both users exist?'
+        except OperationalError:
+            raise ExecutionError, 'there was an OperationalError - are you sure both users exist?'
     
     def db_delete_pair_vinebot(self, user1, user2):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
