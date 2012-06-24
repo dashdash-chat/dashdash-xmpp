@@ -153,23 +153,42 @@ class LeafComponent(ComponentXMPP):
     
     def disconnect(self, *args, **kwargs):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
-        for user_vinebot_pair in self.db_fetch_all_uservinebots():
-            self.sendPresence(pfrom='%s@%s' % (user_vinebot_pair[1], self.boundjid.bare),
-                              pto='%s@%s' % (user_vinebot_pair[0], constants.server),
-                              pshow='unavailable')
+        pair_vinebots = self.db_fetch_all_pair_vinebots()
+        party_vinebots = self.db_fetch_all_party_vinebots()
+        for vinebot_user, participants, is_active in pair_vinebots + party_vinebots:
+            for participant in participants:
+                self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
+                                  pto='%s@%s' % (participant, constants.server),
+                                  pshow='unavailable')
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
-    
     
     ##### event handlers
     def handle_start(self, event):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
-        all_uservinebots = self.db_fetch_all_uservinebots()
-        for user_vinebot_pair in all_uservinebots:
-            #TODO this should actually fetch pairs, and then send online presences only if both are online 
-            self.sendPresence(pfrom='%s@%s' % (user_vinebot_pair[1], self.boundjid.bare),
-                              pto='%s@%s' % (user_vinebot_pair[0], constants.server))
-        logging.info("Leaf started with %d user-vinebots" % len(all_uservinebots))
+        pair_vinebots = self.db_fetch_all_pair_vinebots()
+        for vinebot_user, participants, is_active in pair_vinebots:
+            user1_online, user2_online = self.send_presence_for_pair_vinebot(participants[0], participants[1], vinebot_user)
+            if is_active:
+                if user1_online and user2_online:
+                    for observer in self.db_fetch_observers(participants):
+                        self.sendPresence(pfrom=vinebot_user,
+                                          pto='%s@%s' % (observer, constants.server))
+                else:
+                    self.remove_participant(user2 if user1_online else user1, vinebot_user)
+        party_vinebots = self.db_fetch_all_party_vinebots()
+        for vinebot_user, participants, is_active in party_vinebots:
+            online_participants = []
+            for participant in participants:
+                if not self.user_online(participant):
+                    self.remove_participant(participant, vinebot_user)
+                else:
+                    online_participants.append(participant)
+            if len(online_participants) > 2:
+                for online_participants in online_participants:
+                    self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
+                                      pto='%s@%s' % (online_participants, constants.server))
+        logging.info("Leaf started with %d pair_vinebots and %d party_vinebots" % (len(pair_vinebots), len(party_vinebots)))
     
     def handle_probe(self, presence):
         self.sendPresence(pfrom=presence['to'], pto=presence['from'])
@@ -383,8 +402,12 @@ class LeafComponent(ComponentXMPP):
         if len(pair_vinebots) <= 0:
             return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
         output = 'There are %d frienddships:' % len(pair_vinebots)
-        for pair_vinebot in pair_vinebots:
-            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s' % (pair_vinebot[1], pair_vinebot[2], pair_vinebot[0], self.boundjid.bare)
+        for vinebot_user, participants, is_active in pair_vinebots:
+            output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\nis_active=%s' % (participants[0],
+                                                                       participants[1],
+                                                                       vinebot_user,
+                                                                       self.boundjid.bare,
+                                                                       is_active)
         return output
     
     
@@ -433,7 +456,10 @@ class LeafComponent(ComponentXMPP):
             return '%s%s & %s' % (participants[0], comma_sep, participants[-1])
     
     def send_presence_for_pair_vinebot(self, user1, user2, vinebot_user):
-        if self.user_online(user1) and self.user_online(user2):
+        user1_online = self.user_online(user1)
+        user2_online = self.user_online(user2)
+        logging.info((user1, user1_online, user2, user2_online))
+        if user1_online and user2_online:
             for user in [user1, user2]:
                 self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
                                   pto='%s@%s' % (user, constants.server))
@@ -442,6 +468,7 @@ class LeafComponent(ComponentXMPP):
                 self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
                                   pto='%s@%s' % (user, constants.server),
                                   pshow='unavailable')
+        return (user1_online, user2_online)
     
     def update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
         observer_nick = self.get_nick(new_participants)
@@ -474,7 +501,7 @@ class LeafComponent(ComponentXMPP):
         self.update_rosters(participants, new_participants, vinebot_user, True)
         self.broadcast_alert(alert_msg, participants, vinebot_user)
     
-    def remove_participant(self, user, vinebot_user, alert_msg):
+    def remove_participant(self, user, vinebot_user, alert_msg=''):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
         if user in participants:
             if is_party:
@@ -640,37 +667,23 @@ class LeafComponent(ComponentXMPP):
         self.db_execute("DELETE FROM party_vinebots WHERE id = %(id)s", {'id': party_vinebot_uuid.bytes})
     
     def db_fetch_all_pair_vinebots(self):
-        pair_vinebots = self.db_execute_and_fetchall("""SELECT pair_vinebots.id, users_1.user, users_2.user
+        pair_vinebots = self.db_execute_and_fetchall("""SELECT  users_1.user, users_2.user, pair_vinebots.id, pair_vinebots.is_active
                                                         FROM users AS users_1, users AS users_2, pair_vinebots
                                                         WHERE pair_vinebots.user1 = users_1.id
                                                         AND   pair_vinebots.user2 = users_2.id""")
-        return [(self.get_vinebot_user(pair_vinebot[0]), pair_vinebot[1], pair_vinebot[2]) for pair_vinebot in pair_vinebots]
+        return [(self.get_vinebot_user(pair_vinebot[2]),
+                 [pair_vinebot[0],  pair_vinebot[1]],
+                 pair_vinebot[3]
+                ) for pair_vinebot in pair_vinebots]
     
-    def db_fetch_all_uservinebots(self):  # these should correspond to every roster entry for every user
-        uservinebots = []
-        pair_vinebots = self.db_execute_and_fetchall("""SELECT users.user, pair_vinebots.id, pair_vinebots.is_active
-                                                        FROM users, pair_vinebots
-                                                        WHERE pair_vinebots.user1 = users.id 
-                                                        OR pair_vinebots.user2 = users.id""", {})
-        for pair_vinebot in pair_vinebots:
-            user, vinebot_user, is_active = (pair_vinebot[0], self.get_vinebot_user(pair_vinebot[1]), pair_vinebot[2])
-            uservinebots.append((user, vinebot_user))
-            if is_active:
-                participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
-                observers = self.db_fetch_observers(participants)
-                uservinebots.extend([(observer, vinebot_user) for observer in observers])
+    def db_fetch_all_party_vinebots(self):
         party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.user)
                                                          FROM users, party_vinebots
                                                          WHERE party_vinebots.user = users.id""", {})
-        for party_vinebot in party_vinebots:
-            if party_vinebot[0]:  # the query returns (None, None) if no rows are found
-                vinebot_user = self.get_vinebot_user(party_vinebot[0])
-                participants = party_vinebot[1].split(',')
-                for participant in participants:
-                    uservinebots.append((participant, vinebot_user))
-                for observer in self.db_fetch_observers(participants):
-                    uservinebots.append((observer, vinebot_user))
-        return uservinebots
+        return [(self.get_vinebot_user(party_vinebot[0]),
+                 party_vinebot[1].split(','),
+                 True
+                ) for party_vinebot in party_vinebots if party_vinebot[0]]  # the query returns (None, None) if no rows are found
     
     def db_activate_pair_vinebot(self, vinebot_user, is_active):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
