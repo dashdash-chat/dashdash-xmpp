@@ -40,6 +40,9 @@ class LeafComponent(ComponentXMPP):
         def is_participant(sender, recipient):
             participants, is_active, is_party = self.db_fetch_vinebot(recipient.user)
             return sender.user in participants
+        def is_observer(sender, recipient):
+            participants, is_active, is_party = self.db_fetch_vinebot(recipient.user)
+            return sender.user in self.db_fetch_observers(participants)
         def is_admin_or_participant(sender, recipient):
             return is_admin(sender, recipient) or is_participant(sender, recipient)
         # Argument transformations for /commands
@@ -70,6 +73,12 @@ class LeafComponent(ComponentXMPP):
                 return [arg_tokens[0], arg_tokens[1]]
             return False
         # Register vinebot commands
+        self.commands.add(SlashCommand(command_name     = 'join',
+                                       text_arg_format  = '',
+                                       text_description = 'Join this conversation without interrupting.',
+                                       validate_sender  = is_observer,
+                                       transform_args   = sender_recipient,
+                                       action           = self.user_joined))    
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
@@ -225,28 +234,19 @@ class LeafComponent(ComponentXMPP):
     
     def handle_msg(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            if msg['from'].bare in constants.admin_users:
-                if self.commands.is_command(msg['body']):
-                    msg.reply(self.commands.handle_command(msg['from'], msg['to'], msg['body'])).send()
-                elif msg['body'].strip().startswith('/'):
-                    msg.reply(self.commands.handle_command(msg['from'], msg['to'], '/help')).send()
-                else:
-                    msg.reply('Sorry, but admins can only send /commands to leaves.').send()
-            elif not msg['to'].user.startswith(constants.vinebot_prefix):
-               msg.reply('Sorry, but I can only handle messages send to vinebots.').send()
+            if not msg['to'].user.startswith(constants.vinebot_prefix) and not msg['from'].bare in constants.admin_users:
+               msg.reply('Sorry, but you can only send messages to vinebots.').send()
+            elif self.commands.is_command(msg['body']):
+                msg.reply(self.commands.handle_command(msg['from'], msg['to'], msg['body'])).send()
+            elif msg['body'].strip().startswith('/'):
+                msg.reply(self.commands.handle_command(msg['from'], msg['to'], '/help')).send()
             else:
                 participants, is_active, is_party = self.db_fetch_vinebot(msg['to'].user)
                 if msg['from'].user in participants:
-                    participants = set(filter(self.user_online, participants))
-                    if self.commands.is_command(msg['body']):
-                        msg.reply(self.commands.handle_command(msg['from'], msg['to'], msg['body'])).send()
-                    elif msg['body'].strip().startswith('/'):
-                        msg.reply(self.commands.handle_command(msg['from'], msg['to'], '/help')).send()
-                    else:
-                        if not is_active:
-                            self.db_activate_pair_vinebot(msg['to'].user, True)
-                            self.update_rosters(set([]), participants, msg['to'].user, False)
-                        self.broadcast_msg(msg, participants, sender=msg['from'].user)
+                    if not is_active:
+                        self.db_activate_pair_vinebot(msg['to'].user, True)
+                        self.update_rosters(set([]), participants, msg['to'].user, False)
+                    self.broadcast_msg(msg, participants, sender=msg['from'].user)
                 else:
                     if msg['from'].user in self.db_fetch_observers(participants):
                         if is_active:
@@ -269,6 +269,10 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### user /commands
+    def user_joined(self, user, vinebot_user):
+        self.add_participant(user, vinebot_user, '%s has joined the conversation, but didn\'t want to interrupt.' % user)
+        return ''
+    
     def user_left(self, user, vinebot_user):
         self.remove_participant(user, vinebot_user, '%s has left the conversation' % user)
         return 'You left the conversation.'
