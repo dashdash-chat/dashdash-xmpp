@@ -12,3 +12,5 @@ leaf_mysql_password = 'ish9gen8ob8hap7ac9hy'
 admin_users = ['%s@%s' % (user, server) for user in ['admin1', 'admin2']]
 
 default_user_password = 'password'
+
+roster_group = 'Dev Conversations'
