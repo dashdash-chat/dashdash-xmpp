@@ -468,12 +468,12 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### helper functions
-    def send_presences(self, vinebot_user, recipients, topic='', available=True):
+    def send_presences(self, vinebot_user, recipients, topic=None, available=True):
         for recipient in recipients:
             self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
                                 pto='%s@%s' % (recipient, constants.server),
                                 pshow=None if available else 'unavailable',
-                                pstatus=unicode(topic))
+                                pstatus=unicode(topic) if topic else None)
     
     def get_vinebot_user(self, uuid_or_bytes):
         try:
@@ -868,7 +868,7 @@ class LeafComponent(ComponentXMPP):
         if topic and len(topic) > 0:
             return topic[0]
         else:
-            return topic or ''
+            return topic or None
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
