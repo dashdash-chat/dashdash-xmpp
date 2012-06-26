@@ -58,9 +58,11 @@ class LeafComponent(ComponentXMPP):
             if len(arg_tokens) == 1:
                 return [sender.user, recipient.user, arg_tokens[0]]
             return False
-        def sender_recipient_string(sender, recipient, arg_string, arg_tokens):            
+        def sender_recipient_string_or_none(sender, recipient, arg_string, arg_tokens):            
             if len(arg_string.strip()) > 0:
                 return [sender.user, recipient.user, arg_string]
+            else:
+                return [sender.user, recipient.user, None]
             return False
         def sender_recipient_token_string(sender, recipient, arg_string, arg_tokens):
             if len(arg_tokens) >= 2:
@@ -123,7 +125,7 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '<new topic>',
                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
                                        validate_sender  = is_admin_or_participant,
-                                       transform_args   = sender_recipient_string,
+                                       transform_args   = sender_recipient_string_or_none,
                                        action           = self.set_topic))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
@@ -272,7 +274,12 @@ class LeafComponent(ComponentXMPP):
     
     ##### user /commands
     def user_joined(self, user, vinebot_user):
-        self.add_participant(user, vinebot_user, '%s has joined the conversation, but didn\'t want to interrupt.' % user)
+        topic = self.db_fetch_topic(vinebot_user)
+        if topic:
+            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user, topic)
+        else:
+            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user
+        self.add_participant(invitee, vinebot_user, alert_msg)
         return ''
     
     def user_left(self, user, vinebot_user):
@@ -282,7 +289,12 @@ class LeafComponent(ComponentXMPP):
     def invite_user(self, inviter, vinebot_user, invitee):
         if inviter == invitee:
             raise ExecutionError, 'you can\'t invite yourself.'
-        self.add_participant(invitee, vinebot_user, '%s has invited %s the conversation' % (inviter, invitee))
+        topic = self.db_fetch_topic(vinebot_user)
+        if topic:
+            alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter, invitee, topic)
+        else:
+            alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter, invitee)
+        self.add_participant(invitee, vinebot_user, alert_msg)
         return ''
     
     def kick_user(self, kicker, vinebot_user, kickee):
@@ -299,11 +311,17 @@ class LeafComponent(ComponentXMPP):
     def list_participants(self, user, vinebot_user):
         if vinebot_user.startswith(constants.vinebot_prefix):
             participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
+            topic = self.db_fetch_topic(vinebot_user)
             participants.remove(user)
             if is_active:
                 participants = list(participants)
                 participants.append('you')
-                return 'The current participants are:\n' + ''.join(['\t%s\n' % user for user in participants]).strip('\n')
+                if topic:
+                    return 'The current participants are:\n%s\nThe current topic is:\n\t%s' % (
+                            ''.join(['\t%s\n' % user for user in participants]).strip('\n'), topic)
+                else:
+                    return 'The current participants are:\n%s\nNo one has set the topic.' % (
+                            ''.join(['\t%s\n' % user for user in participants]).strip('\n'))
             else:
                 return 'This conversation hasn\'t started yet. Why don\'t you send %s a message?' % participants.pop()
         else:
@@ -350,12 +368,15 @@ class LeafComponent(ComponentXMPP):
         participants, is_active, is_party = self.db_fetch_vinebot(vinebot_user)
         if not vinebot_user.startswith(constants.vinebot_prefix):
             raise ExecutionError, 'only vinebots can have topics.'
-        elif len(topic) > 100:
+        elif topic and len(topic) > 100:
             raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
         else:
             self.db_set_topic(vinebot_user, topic)
             self.send_presences(vinebot_user, participants.union(self.db_fetch_observers(participants)), topic)
-            self.broadcast_alert('%s has set the topic of the conversation: %s' % (sender, topic), participants, vinebot_user)
+            if topic:
+                self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, topic), participants, vinebot_user)
+            else:
+                self.broadcast_alert('%s has cleared the topic of conversation.' % sender, participants, vinebot_user)
             return ''
     
     
@@ -452,7 +473,7 @@ class LeafComponent(ComponentXMPP):
             self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
                                 pto='%s@%s' % (recipient, constants.server),
                                 pshow=None if available else 'unavailable',
-                                pstatus=topic)
+                                pstatus=unicode(topic))
     
     def get_vinebot_user(self, uuid_or_bytes):
         try:
@@ -468,7 +489,7 @@ class LeafComponent(ComponentXMPP):
             if sender:
                 msg['body'] = '[%s] %s' % (sender, msg['body'])
             else:
-                msg['body'] = '*%s*' % (msg['body'])
+                msg['body'] = '*** %s' % (msg['body'])
         for participant in participants:
             if not sender or sender != participant:
                 new_msg = msg.__copy__()
@@ -835,15 +856,19 @@ class LeafComponent(ComponentXMPP):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("DELETE FROM topics WHERE vinebot = %(vinebot_id)s", {'vinebot_id': vinebot_uuid.bytes})
-        self.db_execute("""INSERT INTO topics (vinebot, body)
-                           VALUES (%(vinebot_id)s, %(body)s)""", {'vinebot_id': vinebot_uuid.bytes, 'body': topic})
+        if topic:
+            self.db_execute("""INSERT INTO topics (vinebot, body)
+                               VALUES (%(vinebot_id)s, %(body)s)""", {'vinebot_id': vinebot_uuid.bytes, 'body': topic})
     
     def db_fetch_topic(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         topic = self.db_execute_and_fetchall("SELECT body FROM topics WHERE vinebot = %(vinebot_id)s LIMIT 1",
                                      {'vinebot_id': vinebot_uuid.bytes}, strip_pairs=True)
-        return topic or ''
+        if topic and len(topic) > 0:
+            return topic[0]
+        else:
+            return topic or ''
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
