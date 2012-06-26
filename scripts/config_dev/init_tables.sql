@@ -28,10 +28,20 @@ CREATE TABLE party_vinebots (
     UNIQUE KEY membership (id, user)
 );
 
+DROP TABLE IF EXISTS topics;
+CREATE TABLE topics (
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    vinebot BINARY(16) DEFAULT NULL,
+    body VARCHAR(100) CHARACTER SET utf8,
+    UNIQUE(vinebot),
+    created TIMESTAMP DEFAULT NOW()
+);
+
 DROP USER 'leaf1'@'localhost';
 CREATE USER 'leaf1'@'localhost' IDENTIFIED BY 'ish9gen8ob8hap7ac9hy';
 GRANT SELECT, UPDATE, INSERT, DELETE ON vine.users TO 'leaf1'@'localhost';
 GRANT SELECT, UPDATE, INSERT, DELETE ON vine.pair_vinebots TO 'leaf1'@'localhost';
 GRANT SELECT, UPDATE, INSERT, DELETE ON vine.party_vinebots TO 'leaf1'@'localhost';
+GRANT SELECT, UPDATE, INSERT, DELETE ON vine.topics TO 'leaf1'@'localhost';
 
 FLUSH PRIVILEGES;
