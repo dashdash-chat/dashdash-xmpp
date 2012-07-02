@@ -290,7 +290,7 @@ class LeafComponent(ComponentXMPP):
         if msg['type'] in ('chat', 'normal'):
             bot = Bot(msg['to'].user, self)
             if not bot.is_vinebot and not msg['from'].bare in constants.admin_users:
-                msg.reply('Sorry, but you can only send messages to vinebots.').send()
+                msg.reply('Sorry, you can only send messages to vinebots.').send()
             elif self.commands.is_command(msg['body']):
                 msg.reply(self.commands.handle_command(msg['from'], msg['body'], bot)).send()
             elif msg['body'].strip().startswith('/') or msg['from'].bare in constants.admin_users:
@@ -307,9 +307,12 @@ class LeafComponent(ComponentXMPP):
                             self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
                             self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
                         else:
-                            msg.reply('Sorry, but you can\'t join a conversation that hasn\'t started yet.').send()
+                            msg.reply('Sorry, this conversation has ended for now.').send()
                     else:
-                        msg.reply('Sorry, but only friends of participants can join this conversation.').send()
+                        if bot.is_active:
+                            msg.reply('Sorry, only friends of participants can join this conversation.').send()
+                        else:
+                            msg.reply('Sorry, this conversation has ended.').send()
     
     def handle_chatstate(self, msg):
         bot = Bot(msg['to'].user, self)
@@ -349,6 +352,8 @@ class LeafComponent(ComponentXMPP):
     def kick_user(self, kicker, vinebot, kickee):
         if kicker == kickee:
             raise ExecutionError, 'you can\'t kick yourself. Maybe you meant /leave?'
+        if len(vinebot.participants) == 2:
+            raise ExecutionError, 'you can\'t kick someone if it\s just the two of you. Maybe you meant /leave?'
         self.remove_participant(kickee, vinebot, '%s was kicked from the conversation by %s' % (kickee, kicker))
         msg = self.Message()
         msg['body'] = '%s has kicked you from the conversation' % kicker
@@ -892,7 +897,7 @@ class LeafComponent(ComponentXMPP):
         self.db_execute("DELETE FROM topics WHERE vinebot = %(vinebot_id)s", {'vinebot_id': vinebot_uuid.bytes})
         if topic:
             self.db_execute("""INSERT INTO topics (vinebot, body)
-                               VALUES (%(vinebot_id)s, %(body)s)""", {'vinebot_id': vinebot_uuid.bytes, 'body': topic})
+                               VALUES (%(vinebot_id)s, %(body)s)""", {'vinebot_id': vinebot_uuid.bytes, 'body': topic.encode('utf-8')})
     
     def db_fetch_topic(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
