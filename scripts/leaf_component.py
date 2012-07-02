@@ -22,13 +22,13 @@ else:
 
 
 class Bot(object):
-    def __init__(self, user, leaf):
+    def __init__(self, user, leaf, participants=None, is_active=None, is_party=None):
         self.user = user
         self.leaf = leaf
         self.is_vinebot = user.startswith(constants.vinebot_prefix)
-        self._participants = None
-        self._is_active = None
-        self._is_party = None
+        self._participants = participants
+        self._is_active = is_active
+        self._is_party = is_party
         self._topic = None
         self._observers = None
     
@@ -57,6 +57,8 @@ class Bot(object):
                 if self._observers is None:
                     self._observers = self.leaf.db_fetch_observers(self.participants)
                 return self._observers
+            elif name == 'everyone':
+                return self.participants.union(self.observers)
             else:
                 raise AttributeError
         else:
@@ -72,6 +74,24 @@ class Bot(object):
                 return set([])
             else:
                 raise AttributeError
+    
+    def __setattr__(self, name, value):
+        if not self.__dict__.has_key('_attrExample__initialised'):  # this test allows attrs to be set in the __init__ method
+            return dict.__setattr__(self, name, value)
+        if name == 'participants':
+            self.__setitem__('_participants', value)
+        elif name == 'is_active':
+            self.__setitem__('_is_active', value)
+        elif name == 'is_party':
+            self.__setitem__('_is_party', value)
+        elif name == 'topic':
+            self.__setitem__('_topic', value)
+        elif name == 'observers':
+            self.__setitem__('_observers', value)
+        elif name == 'everyone':
+            raise AttributeError("%s is an immutable attribute.")
+        else:
+            dict.__setattr__(self, item, value)
 
 
 class LeafComponent(ComponentXMPP):
@@ -217,12 +237,15 @@ class LeafComponent(ComponentXMPP):
                                        transform_args   = token_or_none,
                                        action           = self.friendships))
         # Add event handlers
-        self.add_event_handler("session_start", self.handle_start)
-        self.del_event_handler('presence_probe', self._handle_probe)
-        self.add_event_handler('presence_probe', self.handle_probe)
-        self.add_event_handler('presence_available', self.handle_presence_available)
+        self.add_event_handler("session_start",        self.handle_start)
+        self.add_event_handler('presence_probe',       self.handle_presence_available)
+        self.add_event_handler('presence_available',   self.handle_presence_available)
+        self.add_event_handler('presence_chat',        self.handle_presence_available)
+        self.add_event_handler('presence_dnd',         self.handle_presence_away)
+        self.add_event_handler('presence_away',        self.handle_presence_away)
+        self.add_event_handler('presence_xa',          self.handle_presence_away)
         self.add_event_handler('presence_unavailable', self.handle_presence_unavailable)
-        self.add_event_handler('message', self.handle_msg)
+        self.add_event_handler('message',              self.handle_msg)
         for state in ['active', 'inactive', 'gone', 'composing', 'paused']:
             self.add_event_handler('chatstate_%s' % state, self.handle_chatstate)
     
@@ -231,7 +254,7 @@ class LeafComponent(ComponentXMPP):
         pair_vinebots = self.db_fetch_all_pair_vinebots()
         party_vinebots = self.db_fetch_all_party_vinebots()
         for vinebot_user, participants, is_active, topic in pair_vinebots + party_vinebots:
-            self.send_presences(vinebot_user, participants, available=False)
+            self.send_presences(vinebot_user, participants, pshow='unavailable')
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
     
@@ -260,31 +283,20 @@ class LeafComponent(ComponentXMPP):
                 self.send_presences(vinebot_user, self.db_fetch_observers(online_participants), topic)
         logging.info("Leaf started with %d pair_vinebots and %d party_vinebots" % (len(pair_vinebots), len(party_vinebots)))
     
-    def handle_probe(self, presence):
-        self.handle_presence_available(presence)
-    
     def handle_presence_available(self, presence):
         bot = Bot(presence['to'].user, self)
-        if bot.is_vinebot:
-            if bot.is_active:  # if it's active, we should always send out the presence
-                if presence['from'].user in bot.participants:
-                    self.send_presences(bot.user, bot.participants, bot.topic)
-                else:
-                    self.send_presences(bot.user, [presence['from'].user], bot.topic)
-            else:  # only pairs are inactive, so make sure both users are online
-                if presence['from'].user in bot.participants:
-                    other_participant = bot.participants.difference([presence['from'].user]).pop()
-                    if self.user_online(other_participant):
-                        self.send_presences(presence['to'].user, bot.participants, bot.topic)
+        if bot.is_vinebot and presence['from'].user in bot.participants:
+            self.broadcast_presence(bot, presence['from'].user)
+    
+    def handle_presence_away(self, presence):
+        bot = Bot(presence['to'].user, self)
+        if bot.is_vinebot and presence['from'].user in bot.participants:
+            self.broadcast_presence(bot, presence['from'].user, pshow=presence['type'])
     
     def handle_presence_unavailable(self, presence):
         bot = Bot(presence['to'].user, self)
-        #NOTE don't call this when users are still online! remember delete_rosteritem triggers presence_unavaible... nasty bugs
-        if bot.is_vinebot and not self.user_online(presence['from'].user):
-            participants = self.remove_participant(presence['from'].user,
-                                                   bot,
-                                                   '%s has disconnected and left the conversation' % presence['from'].user)
-            self.send_presences(bot.user, bot.participants, available=False)
+        if bot.is_vinebot and presence['from'].user in bot.participants:
+            self.broadcast_presence(bot, presence['from'].user, pshow='unavailable')
     
     def handle_msg(self, msg):
         if msg['type'] in ('chat', 'normal'):
@@ -320,8 +332,7 @@ class LeafComponent(ComponentXMPP):
             #LATER try this without using the new_msg to strip the body, see SleekXMPP chat logs
             new_msg = msg.__copy__()
             del new_msg['body']
-            online_observers = filter(self.user_online, bot.observers)
-            self.broadcast_msg(new_msg, bot.participants.union(online_observers), sender=msg['from'].user)
+            self.broadcast_msg(new_msg, bot.participants.union(bot.observers), sender=msg['from'].user)
     
     
     ##### user /commands
@@ -412,7 +423,8 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
         else:
             self.db_set_topic(vinebot.user, topic)
-            self.send_presences(vinebot.user, vinebot.participants.union(vinebot.observers), topic)
+            vinebot.topic = topic
+            self.broadcast_presence(vinebot)
             if topic:
                 self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, topic), vinebot.participants, vinebot.user)
             else:
@@ -433,6 +445,7 @@ class LeafComponent(ComponentXMPP):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
         if vinebot_user:
             participants = set([user1, user2])
+            vinebot = Vinebot(vinebot_user, self, participants=participants, is_active=False, is_party=False)
             self.add_rosteritem(user1, vinebot_user, self.get_nick(participants, user1))
             self.add_rosteritem(user2, vinebot_user, self.get_nick(participants, user2))
             # update observer lists accordingly
@@ -440,7 +453,7 @@ class LeafComponent(ComponentXMPP):
                 self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
             for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
                 self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
-            self.send_presence_for_pair_vinebot(user1, user2, vinebot_user)
+            self.broadcast_presence(vinebot, user1, pshow=self.user_status(user2))  # pretend to send a stanza from user2
     
     def destroy_friendship(self, user1, user2):
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
@@ -508,12 +521,46 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### helper functions
-    def send_presences(self, vinebot_user, recipients, topic=None, available=True):
+    def broadcast_presence(self, vinebot, sender=None, pshow='available'):  # if sender is None, pshow is available, so we don't need it!
+        #NOTE don't remove users who are still online! remember delete_rosteritem triggers presence_unavaible... nasty bugs
+        if vinebot.is_party:  #is_active and is_party
+            if pshow in ['available', 'chat']:
+                self.send_presences(vinebot, vinebot.everyone, pshow)
+            elif pshow in ['away', 'xa', 'dnd']:
+                self.send_presences(vinebot, vinebot.everyone, 'available')
+            elif not self.user_online(sender):
+                self.remove_participant(sender, vinebot, '%s has disconnected and left the conversation' % sender)
+        elif vinebot.is_active:  #is_active but not is_party
+            if pshow in ['available', 'chat']:
+                self.send_presences(vinebot, vinebot.everyone, pshow)
+            elif pshow in ['away', 'xa', 'dnd'] and not self.user_online(sender):
+                self.remove_participant(sender, vinebot)
+                self.send_presences(vinebot, vinebot.participants.difference([sender]), pshow)
+            elif not self.user_online(sender):
+                self.remove_participant(sender, vinebot)
+                self.send_presences(vinebot, vinebot.participants.difference([sender]), 'unavailable')
+        else:  # not is active or is party
+            if pshow in ['available', 'chat']:
+                self.send_presences(vinebot, vinebot.participants, pshow)
+            elif pshow in ['away', 'xa', 'dnd']:
+                other_participant = vinebot.participants.difference([sender]).pop()
+                self.send_presences(vinebot, [other_participant], pshow)
+                self.send_presences(vinebot, [sender], self.user_status(other_participant))
+            else:
+                self.send_presences(vinebot, vinebot.participants.difference([sender]), 'unavailable')
+        
+    def send_presences(vinebot, recipients, pshow):
         for recipient in recipients:
-            self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
+            self.sendPresence(pfrom='%s@%s' % (vinebot.user, self.boundjid.bare),
                                 pto='%s@%s' % (recipient, constants.server),
-                                pshow=None if available else 'unavailable',
-                                pstatus=unicode(topic) if topic else None)
+                                pshow=None if pshow == 'available' else pshow,
+                                pstatus=unicode(vinebot.topic) if vinebot.topic else None)    
+    # def send_presences(self, vinebot_user, recipients, topic=None, pshow='available'):
+    #     for recipient in recipients:
+    #         self.sendPresence(pfrom='%s@%s' % (vinebot_user, self.boundjid.bare),
+    #                             pto='%s@%s' % (recipient, constants.server),
+    #                             pshow=None if pshow == 'available' else pshow,
+    #                             pstatus=unicode(topic) if topic else None)
     
     def get_vinebot_user(self, uuid_or_bytes):
         try:
@@ -564,7 +611,7 @@ class LeafComponent(ComponentXMPP):
         if user1_online and user2_online:
             self.send_presences(vinebot_user, [user1, user2], topic)
         else:
-            self.send_presences(vinebot_user, [user1, user2], available=False)
+            self.send_presences(vinebot_user, [user1, user2], pshow='unavailable')
         return (user1_online, user2_online)
     
     def update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
@@ -587,15 +634,17 @@ class LeafComponent(ComponentXMPP):
     def add_participant(self, user, vinebot, alert_msg):
         if user in vinebot.participants:
             raise ExecutionError, '%s is already part of this conversation!' % user
-        new_participants = vinebot.participants.union([user])
+        old_participants = vinebot.participants.copy()
+        vinebot.participants.add(user)
         if vinebot.is_party:
             self.db_add_participant(user, vinebot.user)
         else:
-            new_pair_vinebot_user = self.db_create_party_vinebot(new_participants, vinebot.user)
-            for participant in vinebot.participants:
-                self.add_rosteritem(participant, new_pair_vinebot_user, vinebot.participants.difference([participant]).pop())
-        self.update_rosters(vinebot.participants, new_participants, vinebot.user, True)
-        self.broadcast_alert(alert_msg, new_participants, vinebot.user)
+            new_pair_vinebot_user = self.db_create_party_vinebot(vinebot.participants, vinebot.user)
+            for old_participant in old_participants:
+                self.add_rosteritem(old_participant, new_pair_vinebot_user, old_participants.difference([old_participant]).pop())
+        self.update_rosters(old_participants, vinebot.participants, vinebot.user, True)
+        self.broadcast_presence(vinebot)
+        self.broadcast_alert(alert_msg, vinebot.participants, vinebot.user)
     
     def remove_participant(self, user, vinebot, alert_msg=''):
         if user in vinebot.participants:
@@ -621,8 +670,6 @@ class LeafComponent(ComponentXMPP):
                     self.db_activate_pair_vinebot(vinebot.user, False)
                     self.db_set_topic(vinebot.user, None)
                     self.update_rosters(vinebot.participants, set([]), vinebot.user, False)
-                return vinebot.participants
-        return []
     
     
     ##### ejabberdctl XML RPC commands
@@ -676,15 +723,21 @@ class LeafComponent(ComponentXMPP):
         return roster
     
     def user_online(self, user):
+        return self.user_status != 'unavailable'
+    
+    def user_status(self, user):
         try:              
             res = self.xmlrpc_command('user_sessions_info', {
                 'user': user,
                 'host': constants.server
             })
-            return len(res['sessions_info']) > 0
+            if len(res['sessions_info']) > 0:
+                return res['sessions_info'][0]['session'][6]['status']
+            else:
+                return 'unavailable'
         except xmlrpclib.ProtocolError, e:
-            logging.error('ProtocolError in is_online, assuming %s is offline: %s' % (user, str(e)))
-            return False
+            logging.error('ProtocolError in is_online, assuming %s is unavailable: %s' % (user, str(e)))
+            return 'unavailable'
     
     def xmlrpc_command(self, command, data):
         fn = getattr(self.xmlrpc_server, command)
