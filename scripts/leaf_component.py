@@ -178,8 +178,8 @@ class LeafComponent(ComponentXMPP):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
         pair_vinebots = self.db_fetch_all_pair_vinebots()
         party_vinebots = self.db_fetch_all_party_vinebots()
-        for vinebot_user, participants, is_active, topic in pair_vinebots + party_vinebots:
-            self.send_presences(vinebot_user, participants, available=False)
+        for vinebot in pair_vinebots + party_vinebots:
+            self.send_presences(vinebot.user, vinebot.participants, available=False)
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
     
@@ -188,24 +188,25 @@ class LeafComponent(ComponentXMPP):
     def handle_start(self, event):
         #LATER check if other leaves are online, since otherwise we don't need to do this.
         pair_vinebots = self.db_fetch_all_pair_vinebots()
-        for vinebot_user, participants, is_active, topic in pair_vinebots:
-            user1_online, user2_online = self.send_presence_for_pair_vinebot(participants[0], participants[1], vinebot_user, topic)
-            if is_active:
+        for vinebot in pair_vinebots:
+            user1, user2 = vinebot.participants
+            user1_online, user2_online = self.send_presence_for_pair_vinebot(user1, user2, vinebot.user, vinebot.topic)
+            if vinebot.is_active:
                 if user1_online and user2_online:
-                    self.send_presences(vinebot_user, self.db_fetch_observers(participants), topic)
+                    self.send_presences(vinebot.user, vinebot.observers, vinebot.topic)
                 else:
-                    self.remove_participant(participants[1] if user1_online else participants[0], vinebot_user)
+                    self.remove_participant(user2 if user1_online else user1, vinebot.user)
         party_vinebots = self.db_fetch_all_party_vinebots()
-        for vinebot_user, participants, is_active, topic in party_vinebots:
+        for vinebot in party_vinebots:
             online_participants = []
-            for participant in participants:
+            for participant in vinebot.participants:
                 if not self.user_online(participant):
-                    self.remove_participant(participant, vinebot_user)
+                    self.remove_participant(participant, vinebot.user)
                 else:
                     online_participants.append(participant)
             if len(online_participants) > 2:
-                self.send_presences(vinebot_user, online_participants, topic)
-                self.send_presences(vinebot_user, self.db_fetch_observers(online_participants), topic)
+                self.send_presences(vinebot.user, online_participants, vinebot.topic)
+                self.send_presences(vinebot.user, vinebot.observers, vinebot.topic)
         logging.info("Leaf started with %d pair_vinebots and %d party_vinebots" % (len(pair_vinebots), len(party_vinebots)))
     
     def handle_probe(self, presence):
@@ -446,12 +447,12 @@ class LeafComponent(ComponentXMPP):
             if len(pair_vinebots) <= 0:
                 return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
             output = 'There are %d friendships:' % len(pair_vinebots)
-            for vinebot_user, participants, is_active, topic in pair_vinebots:
-                output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\t%s' % (participants[0],
-                                                                           participants[1],
-                                                                           vinebot_user,
+            for vinebot in pair_vinebots:
+                output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\t%s' % (vinebot.participants[0],
+                                                                           vinebot.participants[1],
+                                                                           vinebot.user,
                                                                            self.boundjid.bare,
-                                                                           'active' if is_active else 'inactive')
+                                                                           'active' if vinebot.is_active else 'inactive')
         return output
     
     
@@ -722,10 +723,12 @@ class LeafComponent(ComponentXMPP):
                                                         LEFT JOIN topics ON pair_vinebots.id = topics.vinebot
                                                         WHERE pair_vinebots.user1 = users_1.id
                                                         AND   pair_vinebots.user2 = users_2.id""")
-        return [(self.get_vinebot_user(pair_vinebot[0]),
-                 [pair_vinebot[1],pair_vinebot[2]],
-                 (pair_vinebot[3] == 1),
-                 pair_vinebot[4] or ''
+        return [Bot(self.get_vinebot_user(pair_vinebot[0]),
+                    self,
+                    participants=set([pair_vinebot[1], pair_vinebot[2]]),
+                    is_active=(pair_vinebot[3] == 1),
+                    is_party=False,
+                    topic=pair_vinebot[4] or ''
                 ) for pair_vinebot in pair_vinebots]
     
     def db_fetch_all_party_vinebots(self):
@@ -733,10 +736,12 @@ class LeafComponent(ComponentXMPP):
                                                          FROM users, party_vinebots
                                                          LEFT JOIN topics ON party_vinebots.id = topics.vinebot
                                                          WHERE party_vinebots.user = users.id""")
-        return [(self.get_vinebot_user(party_vinebot[0]),
-                 party_vinebot[1].split(','),
-                 True,
-                 party_vinebots[2] if len(party_vinebots) > 2 and party_vinebots[2] else ''
+        return [Bot(self.get_vinebot_user(party_vinebot[0]),
+                    self,
+                    participants=party_vinebot[1].split(','),
+                    is_active=True,
+                    is_party=True,
+                    topic=(party_vinebots[2] if len(party_vinebots) > 2 and party_vinebots[2] else '')
                 ) for party_vinebot in party_vinebots if party_vinebot and party_vinebot[0]]  # the query returns (None, None) if no rows are found
     
     def db_activate_pair_vinebot(self, vinebot_user, is_active):

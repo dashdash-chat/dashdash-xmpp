@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import sys
 import logging
+import constants
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -10,14 +12,14 @@ else:
 
 
 class Bot(object):
-    def __init__(self, user, leaf, participants=None, is_active=None, is_party=None):
+    def __init__(self, user, leaf, participants=None, is_active=None, is_party=None, topic=None):
         self.user = user
         self.leaf = leaf
         self.is_vinebot = user.startswith(constants.vinebot_prefix)
         self._participants = participants
         self._is_active = is_active
         self._is_party = is_party
-        self._topic = None
+        self._topic = topic
         self._observers = None
     
     def _fetch_basic_data(self):
@@ -62,3 +64,21 @@ class Bot(object):
                 return set([])
             else:
                 raise AttributeError
+                
+    def __setattr__(self, name, value):
+        if not self.__dict__.has_key('_attrExample__initialised'):  # this test allows attrs to be set in the __init__ method
+            return dict.__setattr__(self, name, value)
+        if name == 'participants':
+            self.__setitem__('_participants', value)
+        elif name == 'is_active':
+            self.__setitem__('_is_active', value)
+        elif name == 'is_party':
+            self.__setitem__('_is_party', value)
+        elif name == 'topic':
+            self.__setitem__('_topic', value)
+        elif name == 'observers':
+            self.__setitem__('_observers', value)
+        elif name == 'everyone':
+            raise AttributeError("%s is an immutable attribute.")
+        else:
+            dict.__setattr__(self, item, value)
