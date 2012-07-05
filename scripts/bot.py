@@ -22,6 +22,13 @@ class Bot(object):
         self._topic = topic
         self._observers = None
     
+    def other_participant(self, user):
+        if not self.is_party and len(self.participants) == 2:
+            return self.participants.difference([user]).pop()
+        else:
+            raise Exception, 'Improper use of method: must use on pair bot with two participants.' + \
+                ' user=%s, is_party=%s, participants=%s' % (self.user, self.is_party, self.participants)
+    
     def _fetch_basic_data(self):
         self._participants, self._is_active, self._is_party = self.leaf.db_fetch_vinebot(self.user)
     
