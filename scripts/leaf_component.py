@@ -267,7 +267,10 @@ class LeafComponent(ComponentXMPP):
                     if not bot.is_active:
                         self.db_activate_pair_vinebot(bot.user, True)
                         self.update_rosters(set([]), bot.participants, bot.user, False)
-                        self.send_presences(bot, bot.everyone)
+                        user1, user2 = bot.participants  # in case one user is away
+                        self.send_presences(bot, [user1], pshow=self.user_status(user2))
+                        self.send_presences(bot, [user2], pshow=self.user_status(user1))
+                        self.send_presences(bot, bot.observers)
                     self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
                 else:
                     if msg['from'].user in bot.observers:
@@ -644,7 +647,7 @@ class LeafComponent(ComponentXMPP):
         return roster
     
     def user_online(self, user):
-        return self.user_status != 'unavailable'  # this function useful for list filters
+        return self.user_status != 'unavailable'  # this function is useful for list filters
     
     def user_status(self, user):
         try:              
