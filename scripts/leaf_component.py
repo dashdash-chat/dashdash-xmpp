@@ -223,8 +223,8 @@ class LeafComponent(ComponentXMPP):
             if presence['from'].user in bot.participants:
                 if bot.is_active:  # either pair or party, and active bots always have both participants online
                     self.send_presences(bot, bot.everyone)
-                else:
-                    self.send_presences(bot, filter(self.user_online, bot.participants))
+                elif self.user_online(bot.participants.difference([presence['from'].user]).pop()):
+                    self.send_presences(bot, bot.participants)
             elif presence['from'].user in bot.observers:
                 if bot.is_active:
                     self.send_presences(bot, [presence['from'].user])
@@ -647,7 +647,7 @@ class LeafComponent(ComponentXMPP):
         return roster
     
     def user_online(self, user):
-        return self.user_status != 'unavailable'  # this function is useful for list filters
+        return self.user_status(user) != 'unavailable'  # this function is useful for list filters
     
     def user_status(self, user):
         try:              
