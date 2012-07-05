@@ -221,10 +221,10 @@ class LeafComponent(ComponentXMPP):
         bot = Bot(presence['to'].user, self)
         if bot.is_vinebot:
             if presence['from'].user in bot.participants:
-                if bot.is_active:  # either pair or party
+                if bot.is_active:  # either pair or party, and active bots always have both participants online
                     self.send_presences(bot, bot.everyone)
                 else:
-                    self.send_presences(bot, bot.participants)
+                    self.send_presences(bot, filter(self.user_online, bot.participants))
             elif presence['from'].user in bot.observers:
                 if bot.is_active:
                     self.send_presences(bot, [presence['from'].user])
