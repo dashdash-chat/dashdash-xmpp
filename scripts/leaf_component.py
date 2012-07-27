@@ -108,9 +108,9 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_to_vinebot,
                                        transform_args   = sender_vinebot,
                                        action           = self.list_participants))
-        self.commands.add(SlashCommand(command_name     = 'observers',  #LATER change to /nearby/ or similar?
+        self.commands.add(SlashCommand(command_name     = 'nearby',
                                        text_arg_format  = '',
-                                       text_description = 'List the observers of this conversation.',
+                                       text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
                                        validate_sender  = admin_or_participant_to_vinebot,
                                        transform_args   = sender_vinebot,
                                        action           = self.list_observers))
@@ -229,6 +229,12 @@ class LeafComponent(ComponentXMPP):
                 if bot.is_active:
                     self.send_presences(bot, [presence['from'].user])
     
+    #TODO fix bug where sending someone a message makes them come back, even if not really back
+    #TODO add bug so that it tells you if you senda message to someone offline
+    #TODO bug with three people in conver, one leaves, other two werent talking, but contacts dont consolidate for both users, only for one, 
+    #TODO bug where /topic to offline bot makes it look online
+    #TODO timestamp topics
+    #TODO clear topic when proxybot shifts from party back down to pair?
     def handle_presence_away(self, presence):
         bot = Bot(presence['to'].user, self)
         if bot.is_vinebot and presence['from'].user in bot.participants:
@@ -475,6 +481,7 @@ class LeafComponent(ComponentXMPP):
                 return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
             output = 'There are %d friendships:' % len(pair_vinebots)
             for vinebot in pair_vinebots:
+                #TODO vinebot.participants is a set and does not support indexing
                 output += '\n\t%s\n\t%s\n\t\t\t\t\t%s@%s\n\t\t\t\t\t%s' % (vinebot.participants[0],
                                                                            vinebot.participants[1],
                                                                            vinebot.user,

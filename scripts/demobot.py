@@ -27,7 +27,7 @@ class DemoBot(sleekxmpp.ClientXMPP):
     def message(self, msg):
         if msg['type'] in ('chat', 'normal') and msg['body'].startswith('[') and not msg['body'].startswith('/me '):
             body = msg['body'].split(']')[1].strip()
-            if self.last_message != body:  # prevent infinite loops between demobots 
+            if self.last_message != body:  # prevent infinite loops between demobots
                 msg.reply(body).send()
                 self.last_message = body
 
