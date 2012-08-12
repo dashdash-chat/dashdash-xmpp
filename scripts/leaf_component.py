@@ -235,6 +235,7 @@ class LeafComponent(ComponentXMPP):
     #TODO bug where /topic to offline bot makes it look online
     #TODO timestamp topics
     #TODO clear topic when proxybot shifts from party back down to pair?
+    #TODO only broadcast chat states when message is not a slash command!
     def handle_presence_away(self, presence):
         bot = Bot(presence['to'].user, self)
         if bot.is_vinebot and presence['from'].user in bot.participants:
