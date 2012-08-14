@@ -37,6 +37,7 @@ Development Setup
   * `cd xmlrpc-1.13/src`
   * `make`
   * `sudo cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
+  * `sudo ejabberdctl restart`
 0. Create the xmpp-env virtualenv 
   * `cd /vagrant`
   * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice
