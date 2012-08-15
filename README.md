@@ -38,6 +38,11 @@ Development Setup
   * `make`
   * `sudo cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
   * `sudo ejabberdctl restart`
+0. Create admin users and open ejabberd dashboard
+  * `sudo ejabberdctl admin1 dev.vine.im [password]`
+  * `sudo ejabberdctl admin2 dev.vine.im [password]`
+  * Visit http://dev.vine.im:5280/admin in a browser and explore
+  * (I tend to use http://dev.vine.im:5280/admin/server/dev.vine.im/users/ the most)
 0. Create the xmpp-env virtualenv 
   * `cd /vagrant`
   * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice
@@ -58,7 +63,10 @@ Development Setup
   * `cd xmpp`
   * `sudo cp shared/ejabberd.cfg /etc/ejabberd && sudo ejabberdctl restart`
   * `../bin/python ./scripts/leaf_component.py -i 1`
-  * Test Vine using local dev accounts in standard XMPP clients
+  * Connect as either admin user in your XMPP client of choice using 'admin1@dev.vine.im'
+  * Send a message to the account 'leaf1.dev.vine.im' (note there is no username or '@' in this JID!)
+  * Experiment with the various commands to modify users and their relationships, but remember new users should be created through the web UI
+  * Connect as the users you create using other XMPP clients, and experiment with sending messages between them.
   * Control-c to stop the XMPP component server
   * `cd ..`
   * `deactivate`
