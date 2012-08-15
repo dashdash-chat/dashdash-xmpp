@@ -689,8 +689,8 @@ class LeafComponent(ComponentXMPP):
         try:
             self.db_execute("""INSERT INTO pair_vinebots (id, user1, user2)
                                VALUES (%(id)s,
-                                       (SELECT id FROM users WHERE user = %(user1)s LIMIT 1),
-                                       (SELECT id FROM users WHERE user = %(user2)s LIMIT 1)
+                                       (SELECT id FROM users WHERE name = %(user1)s LIMIT 1),
+                                       (SELECT id FROM users WHERE name = %(user2)s LIMIT 1)
                                       )""", {'id': vinebot_uuid.bytes, 'user1': user1, 'user2': user2})
             return self.get_vinebot_user(vinebot_uuid)
         except IntegrityError:
@@ -727,14 +727,14 @@ class LeafComponent(ComponentXMPP):
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""INSERT INTO party_vinebots (id, user)
                            VALUES (%(id)s, (SELECT id FROM users 
-                                            WHERE user = %(user)s 
+                                            WHERE name = %(user)s 
                                             LIMIT 1))""", {'id': vinebot_uuid.bytes, 'user': user})
     
     def db_remove_participant(self, user, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("""DELETE FROM party_vinebots 
-                           WHERE user = (SELECT id FROM users WHERE user = %(user)s)
+                           WHERE user = (SELECT id FROM users WHERE name = %(user)s)
                            AND id = %(id)s""", {'id': vinebot_uuid.bytes, 'user': user})
     
     def db_fold_party_into_pair(self, party_vinebot_user, pair_vinebot_user):
@@ -750,8 +750,8 @@ class LeafComponent(ComponentXMPP):
     
     def db_fetch_all_pair_vinebots(self):
         pair_vinebots = self.db_execute_and_fetchall("""SELECT  pair_vinebots.id,
-                                                                users_1.user,
-                                                                users_2.user,
+                                                                users_1.name,
+                                                                users_2.name,
                                                                 pair_vinebots.is_active,
                                                                 topics.body
                                                         FROM users AS users_1, users AS users_2, pair_vinebots
@@ -767,7 +767,7 @@ class LeafComponent(ComponentXMPP):
                 ) for pair_vinebot in pair_vinebots]
     
     def db_fetch_all_party_vinebots(self):
-        party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.user), topics.body
+        party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.name), topics.body
                                                          FROM users, party_vinebots
                                                          LEFT JOIN topics ON party_vinebots.id = topics.vinebot
                                                          WHERE party_vinebots.user = users.id""")
@@ -792,7 +792,7 @@ class LeafComponent(ComponentXMPP):
         if vinebot_user.startswith(constants.vinebot_prefix):
             vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
             vinebot_uuid = shortuuid.decode(vinebot_id)
-            pair_vinebot = self.db_execute_and_fetchall("""SELECT users_1.user, users_2.user, pair_vinebots.is_active
+            pair_vinebot = self.db_execute_and_fetchall("""SELECT users_1.name, users_2.name, pair_vinebots.is_active
                               FROM users AS users_1, users AS users_2, pair_vinebots
                               WHERE pair_vinebots.id = %(id)s AND pair_vinebots.user1 = users_1.id AND pair_vinebots.user2 = users_2.id
                               LIMIT 1""", {'id': vinebot_uuid.bytes})
@@ -801,7 +801,7 @@ class LeafComponent(ComponentXMPP):
                 is_active = (pair_vinebot[0][2] == 1)
                 is_party = False
             else:
-                party_vinebot = self.db_execute_and_fetchall("""SELECT users.user FROM users, party_vinebots
+                party_vinebot = self.db_execute_and_fetchall("""SELECT users.name FROM users, party_vinebots
                                   WHERE party_vinebots.id = %(id)s 
                                   AND party_vinebots.user = users.id""", {'id': vinebot_uuid.bytes}, strip_pairs=True)
                 if len(party_vinebot) > 0:
@@ -813,10 +813,10 @@ class LeafComponent(ComponentXMPP):
     def db_fetch_pair_vinebot(self, user1, user2):
         pair_vinebot = self.db_execute_and_fetchall("""SELECT pair_vinebots.id, pair_vinebots.is_active
             FROM users AS users_1, users AS users_2, pair_vinebots
-            WHERE (pair_vinebots.user1 = users_1.id AND users_1.user = %(user1)s
-               AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user2)s)
-               OR (pair_vinebots.user1 = users_1.id AND users_1.user = %(user2)s
-               AND pair_vinebots.user2 = users_2.id AND users_2.user = %(user1)s)
+            WHERE (pair_vinebots.user1 = users_1.id AND users_1.name = %(user1)s
+               AND pair_vinebots.user2 = users_2.id AND users_2.name = %(user2)s)
+               OR (pair_vinebots.user1 = users_1.id AND users_1.name = %(user2)s
+               AND pair_vinebots.user2 = users_2.id AND users_2.name = %(user1)s)
             """, {'user1': user1, 'user2': user2})
         if pair_vinebot and pair_vinebot[0]:
             if len(pair_vinebot) > 1:
@@ -832,20 +832,20 @@ class LeafComponent(ComponentXMPP):
         return observers.difference(participants)
     
     def db_fetch_user_friends(self, user):
-        return self.db_execute_and_fetchall("""SELECT users.user FROM users, pair_vinebots
-                    WHERE (pair_vinebots.user1 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
+        return self.db_execute_and_fetchall("""SELECT users.name FROM users, pair_vinebots
+                    WHERE (pair_vinebots.user1 = (SELECT id FROM users  WHERE name = %(user)s LIMIT 1)
                        AND pair_vinebots.user2 = users.id)
-                    OR    (pair_vinebots.user2 = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)
+                    OR    (pair_vinebots.user2 = (SELECT id FROM users  WHERE name = %(user)s LIMIT 1)
                        AND pair_vinebots.user1 = users.id)""", {'user': user}, strip_pairs=True)
     
     def db_fetch_user_pair_vinebots(self, user, is_active=True):
-        pair_vinebots = self.db_execute_and_fetchall("""SELECT users_1.user, users_2.user, pair_vinebots.id
+        pair_vinebots = self.db_execute_and_fetchall("""SELECT users_1.name, users_2.name, pair_vinebots.id
                                                       FROM users AS users_1, users AS users_2, pair_vinebots
                                                      WHERE pair_vinebots.is_active = %(is_active)s
                                                        AND pair_vinebots.user1 = users_1.id 
                                                        AND pair_vinebots.user2 = users_2.id
-                                                      AND (users_1.user = %(user)s 
-                                                        OR users_2.user = %(user)s)""", {'user': user, 'is_active': is_active})
+                                                      AND (users_1.name = %(user)s 
+                                                        OR users_2.name = %(user)s)""", {'user': user, 'is_active': is_active})
         active_vinebots = [(set([pair_vinebot[0], pair_vinebot[1]]), 
                             self.get_vinebot_user(pair_vinebot[2])
                            ) for pair_vinebot in pair_vinebots]
@@ -855,7 +855,7 @@ class LeafComponent(ComponentXMPP):
     def db_fetch_user_party_vinebots(self, user):
         party_vinebots = []
         party_vinebot_ids = self.db_execute_and_fetchall("""SELECT party_vinebots.id FROM party_vinebots
-            WHERE party_vinebots.user = (SELECT id FROM users  WHERE user = %(user)s LIMIT 1)""", {'user': user}, strip_pairs=True)
+            WHERE party_vinebots.user = (SELECT id FROM users  WHERE name = %(user)s LIMIT 1)""", {'user': user}, strip_pairs=True)
         for party_vinebot_id in party_vinebot_ids:
             party_vinebot_user = self.get_vinebot_user(party_vinebot_id)
             participants, is_active, is_party = self.db_fetch_vinebot(party_vinebot_user)
@@ -864,7 +864,7 @@ class LeafComponent(ComponentXMPP):
     
     def db_create_user(self, user):
         try:
-            self.db_execute("INSERT INTO users (user) VALUES (%(user)s)", {'user': user})
+            self.db_execute("INSERT INTO users (name) VALUES (%(user)s)", {'user': user})
         except IntegrityError:
             raise ExecutionError, 'there was an IntegrityError - are you sure the user doesn\'t already exist?'
     
@@ -875,7 +875,7 @@ class LeafComponent(ComponentXMPP):
             for party_vinebot_uuid in self.db_fetch_user_party_vinebots(user):
                 vinebot_user = self.get_vinebot_user(party_vinebot_uuid)
                 self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
-            self.db_execute("DELETE FROM users WHERE user = %(user)s", {'user': user})
+            self.db_execute("DELETE FROM users WHERE name = %(user)s", {'user': user})
         except IntegrityError:
             raise ExecutionError, 'there was an IntegrityError - are you sure the user doesn\'t already exist?'
     

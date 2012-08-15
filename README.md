@@ -56,6 +56,7 @@ Development Setup
   * `cd xmpp-env`
   * `git clone git@github.com:lehrblogger/vine-xmpp.git xmpp`
   * `cd xmpp`
+  * `sudo cp shared/ejabberd.cfg /etc/ejabberd && sudo ejabberdctl restart`
   * `../bin/python ./scripts/leaf_component.py -i 1`
   * Test Vine using local dev accounts in standard XMPP clients
   * Control-c to stop the XMPP component server
