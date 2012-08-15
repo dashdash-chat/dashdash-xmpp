@@ -229,13 +229,6 @@ class LeafComponent(ComponentXMPP):
                 if bot.is_active:
                     self.send_presences(bot, [presence['from'].user])
     
-    #TODO fix bug where sending someone a message makes them come back, even if not really back
-    #TODO add bug so that it tells you if you senda message to someone offline
-    #TODO bug with three people in conver, one leaves, other two werent talking, but contacts dont consolidate for both users, only for one, 
-    #TODO bug where /topic to offline bot makes it look online
-    #TODO timestamp topics
-    #TODO clear topic when proxybot shifts from party back down to pair?
-    #TODO only broadcast chat states when message is not a slash command!
     def handle_presence_away(self, presence):
         bot = Bot(presence['to'].user, self)
         if bot.is_vinebot and presence['from'].user in bot.participants:
