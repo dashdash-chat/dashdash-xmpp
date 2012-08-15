@@ -76,5 +76,5 @@ Development Setup
 
 To Run the Leaf Component
 ------
-  * `../bin/python ./scripts/leaf_component.py -i 1`
-  * `nohup python ./scripts/leaf_component.py -i 1 >> /var/log/vine/leaf1.log &`
+  * `../bin/python leaf_component.py -i 1`
+  * `nohup python leaf_component.py -i 1 >> /var/log/vine/leaf1.log &`
