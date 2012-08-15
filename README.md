@@ -66,8 +66,8 @@ Development Setup
   * `../bin/python ./scripts/leaf_component.py -i 1`
   * Connect as either admin user in your XMPP client of choice using 'admin1@dev.vine.im'
   * Send a message to the account 'leaf1.dev.vine.im' (note there is no username or '@' in this JID!)
-  * Experiment with the various commands to modify users and their relationships, but remember new users should be created through the web UI
-  * Connect as the users you create using other XMPP clients, and experiment with sending messages between them.
+  * Experiment with the various commands to modify users and their relationships
+  * Connect as the users you create using other XMPP clients, and try sending messages between them
   * Control-c to stop the XMPP component server
   * `cd ..`
   * `deactivate`
