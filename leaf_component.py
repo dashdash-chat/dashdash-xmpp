@@ -386,7 +386,14 @@ class LeafComponent(ComponentXMPP):
         else:
             self.db_set_topic(vinebot.user, topic)
             vinebot.topic = topic
-            self.send_presences(vinebot, vinebot.participants)
+            if vinebot.is_active:
+                self.send_presences(vinebot, vinebot.participants)
+            else:
+                user1, user2 = vinebot.participants
+                user1_status = self.user_status(user1)
+                user2_status = self.user_status(user2)
+                self.send_presences(vinebot, [user1], pshow=user2_status)
+                self.send_presences(vinebot, [user2], pshow=user1_status)
             if topic:
                 self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, topic), vinebot.participants, vinebot.user)
             else:
