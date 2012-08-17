@@ -386,7 +386,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
         else:
             self.db_set_topic(vinebot.user, topic)
-            vinebot.topic = (topic, datetime.now())
+            vinebot.topic = ((topic, datetime.now()) if topic else None)
             if vinebot.is_active:
                 self.send_presences(vinebot, vinebot.participants)
             else:
