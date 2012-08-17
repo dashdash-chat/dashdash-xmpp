@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
+from datetime import datetime
 import MySQLdb
 from MySQLdb import IntegrityError, OperationalError
 import logging
@@ -385,7 +386,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
         else:
             self.db_set_topic(vinebot.user, topic)
-            vinebot.topic = topic
+            vinebot.topic = (topic, datetime.now())
             if vinebot.is_active:
                 self.send_presences(vinebot, vinebot.participants)
             else:
@@ -394,8 +395,8 @@ class LeafComponent(ComponentXMPP):
                 user2_status = self.user_status(user2)
                 self.send_presences(vinebot, [user1], pshow=user2_status)
                 self.send_presences(vinebot, [user2], pshow=user1_status)
-            if topic:
-                self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, topic), vinebot.participants, vinebot.user)
+            if vinebot.topic:
+                self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, vinebot.topic), vinebot.participants, vinebot.user)
             else:
                 self.broadcast_alert('%s has cleared the topic of conversation.' % sender, vinebot.participants, vinebot.user)
             return ''
@@ -753,7 +754,8 @@ class LeafComponent(ComponentXMPP):
                                                                 users_1.name,
                                                                 users_2.name,
                                                                 pair_vinebots.is_active,
-                                                                topics.body
+                                                                topics.body,
+                                                                topics.created
                                                         FROM users AS users_1, users AS users_2, pair_vinebots
                                                         LEFT JOIN topics ON pair_vinebots.id = topics.vinebot
                                                         WHERE pair_vinebots.user1 = users_1.id
@@ -763,11 +765,11 @@ class LeafComponent(ComponentXMPP):
                     participants=set([pair_vinebot[1], pair_vinebot[2]]),
                     is_active=(pair_vinebot[3] == 1),
                     is_party=False,
-                    topic=pair_vinebot[4] or ''
+                    topic=(pair_vinebot[-2:] if pair_vinebot[4] else '')
                 ) for pair_vinebot in pair_vinebots]
     
     def db_fetch_all_party_vinebots(self):
-        party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.name), topics.body
+        party_vinebots = self.db_execute_and_fetchall("""SELECT party_vinebots.id, GROUP_CONCAT(users.name), topics.body, topics.created
                                                          FROM users, party_vinebots
                                                          LEFT JOIN topics ON party_vinebots.id = topics.vinebot
                                                          WHERE party_vinebots.user = users.id""")
@@ -776,7 +778,7 @@ class LeafComponent(ComponentXMPP):
                     participants=set(party_vinebot[1].split(',')),
                     is_active=True,
                     is_party=True,
-                    topic=(party_vinebots[2] if len(party_vinebots) > 2 and party_vinebots[2] else '')
+                    topic=(party_vinebot[-2:] if len(party_vinebot) > 3 and party_vinebot[3] else '')
                 ) for party_vinebot in party_vinebots if party_vinebot and party_vinebot[0]]  # the query returns (None, None) if no rows are found
     
     def db_activate_pair_vinebot(self, vinebot_user, is_active):
@@ -890,12 +892,12 @@ class LeafComponent(ComponentXMPP):
     def db_fetch_topic(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
-        topic = self.db_execute_and_fetchall("SELECT body FROM topics WHERE vinebot = %(vinebot_id)s LIMIT 1",
-                                     {'vinebot_id': vinebot_uuid.bytes}, strip_pairs=True)
+        topic = self.db_execute_and_fetchall("SELECT body, created FROM topics WHERE vinebot = %(vinebot_id)s LIMIT 1",
+                                     {'vinebot_id': vinebot_uuid.bytes})
         if topic and len(topic) > 0:
             return topic[0]
         else:
-            return topic or None
+            return None
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
