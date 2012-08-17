@@ -265,29 +265,35 @@ class LeafComponent(ComponentXMPP):
             else:
                 if msg['from'].user in bot.participants:
                     if not bot.is_active:
-                        self.db_activate_pair_vinebot(bot.user, True)
-                        self.update_rosters(set([]), bot.participants, bot.user, False)
-                        user1, user2 = bot.participants  # in case one user is away
-                        self.send_presences(bot, [user1], pshow=self.user_status(user2))
-                        self.send_presences(bot, [user2], pshow=self.user_status(user1))
-                        self.send_presences(bot, bot.observers)
-                    self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
-                else:
-                    if msg['from'].user in bot.observers:
-                        if bot.is_active:
-                            self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
+                        user1, user2 = bot.participants  # in case one user is away or offline
+                        user1_status = self.user_status(user1)
+                        user2_status = self.user_status(user2)
+                        self.send_presences(bot, [user1], pshow=user2_status)
+                        self.send_presences(bot, [user2], pshow=user1_status)
+                        if user1_status != 'unavailable' and user2_status != 'unavailable':
+                            self.db_activate_pair_vinebot(bot.user, True)
+                            self.update_rosters(set([]), bot.participants, bot.user, False)
+                            self.send_presences(bot, bot.observers)
                             self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
                         else:
-                            msg.reply('Sorry, this conversation has ended for now.').send()
+                            msg.reply('Sorry, this users is offline.').send()
                     else:
-                        if bot.is_active:
-                            msg.reply('Sorry, only friends of participants can join this conversation.').send()
-                        else:
-                            msg.reply('Sorry, this conversation has ended.').send()
+                        self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
+                elif msg['from'].user in bot.observers:
+                    if bot.is_active:
+                        self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
+                        self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
+                    else:
+                        msg.reply('Sorry, this conversation has ended for now.').send()
+                else:
+                    if bot.is_active:
+                        msg.reply('Sorry, only friends of participants can join this conversation.').send()
+                    else:
+                        msg.reply('Sorry, this conversation has ended.').send()
     
     def handle_chatstate(self, msg):
         bot = Bot(msg['to'].user, self)
-        if bot.is_vinebot and msg['from'].user in bot.participants:
+        if bot.is_vinebot and msg['from'].user in bot.participants and bot.is_active:
             #LATER try this without using the new_msg to strip the body, see SleekXMPP chat logs
             new_msg = msg.__copy__()
             del new_msg['body']
