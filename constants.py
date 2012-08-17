@@ -17,7 +17,7 @@ leaf_mysql_password = env_vars.leaf_mysql_password
 db_name = 'vine'
 
 vinebot_prefix = 'vinebot_'
-roster_group = env_vars.roster_group or 'Vine Conversations'
+roster_group = env_vars.roster_group
 
 admin_users = env_vars.admin_users
 
