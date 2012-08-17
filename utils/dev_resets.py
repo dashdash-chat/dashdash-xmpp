@@ -5,6 +5,9 @@ import MySQLdb
 import uuid
 import shortuuid
 import xmlrpclib
+import os
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.sys.path.insert(0,parentdir) 
 import constants
 
 if sys.version_info < (3, 0):
@@ -56,12 +59,12 @@ if __name__ == '__main__':
     cursor.execute("DELETE FROM party_vinebots")
     cursor.execute("UPDATE pair_vinebots SET is_active = 0")
     
-    cursor.execute("SELECT user FROM users")
+    cursor.execute("SELECT name FROM users")
     users = [result[0] for result in cursor.fetchall()]
     for user in users:
         for rosteritem in get_roster(user):
             delete_proxy_rosteritem(user, rosteritem['contact'][0]['jid'].split('@')[0])
-    cursor.execute("""SELECT pair_vinebots.id, users_1.user, users_2.user
+    cursor.execute("""SELECT pair_vinebots.id, users_1.name, users_2.name
                       FROM users AS users_1, users AS users_2, pair_vinebots
                       WHERE pair_vinebots.user1 = users_1.id AND pair_vinebots.user2 = users_2.id""")
     
