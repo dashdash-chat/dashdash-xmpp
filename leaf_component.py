@@ -255,13 +255,15 @@ class LeafComponent(ComponentXMPP):
     
     def handle_msg(self, msg):
         if msg['type'] in ('chat', 'normal'):
+            # Note: because all logical paths result in the sending of a msg, I don't need to log the msg that was received.
+            # i.e. All the messages for which a user is the author is always all of the messages that user sent.
             bot = Bot(msg['to'].user, self)
             if not bot.is_vinebot and not msg['from'].bare in constants.admin_users:
-                msg.reply('Sorry, you can only send messages to vinebots.').send()
-            elif self.commands.is_command(msg['body']):
-                msg.reply(self.commands.handle_command(msg['from'], msg['body'], bot)).send()
-            elif msg['body'].strip().startswith('/') or msg['from'].bare in constants.admin_users:
-                msg.reply(self.commands.handle_command(msg['from'], '/help', bot)).send()
+                self.send_reply(msg, 'Sorry, you can only send messages to vinebots.')
+            elif self.commands.is_command(msg['body']):    
+                self.send_reply(msg, self.commands.handle_command(msg['from'], msg['body'], bot))
+            elif msg['body'].strip().startswith('/') or msg['from'].bare in constants.admin_users:    
+                self.send_reply(msg, self.commands.handle_command(msg['from'], '/help', bot))
             else:
                 if msg['from'].user in bot.participants:
                     if not bot.is_active:
@@ -276,20 +278,20 @@ class LeafComponent(ComponentXMPP):
                             self.send_presences(bot, bot.observers)
                             self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
                         else:
-                            msg.reply('Sorry, this users is offline.').send()
+                            self.send_reply(msg, 'Sorry, this users is offline.')
                     else:
                         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
                 elif msg['from'].user in bot.observers:
                     if bot.is_active:
                         self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
                         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
-                    else:
-                        msg.reply('Sorry, this conversation has ended for now.').send()
+                    else:    
+                        self.send_reply(msg, 'Sorry, this conversation has ended for now.')
                 else:
                     if bot.is_active:
-                        msg.reply('Sorry, only friends of participants can join this conversation.').send()
+                        self.send_reply(msg, 'Sorry, only friends of participants can join this conversation.')
                     else:
-                        msg.reply('Sorry, this conversation has ended.').send()
+                        self.send_reply(msg, 'Sorry, this conversation has ended.')
     
     def handle_chatstate(self, msg):
         bot = Bot(msg['to'].user, self)
@@ -336,10 +338,12 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, 'you can\'t kick someone if it\s just the two of you. Maybe you meant /leave?'
         self.remove_participant(kickee, vinebot, '%s was kicked from the conversation by %s' % (kickee, kicker))
         msg = self.Message()
-        msg['body'] = '%s has kicked you from the conversation' % kicker
+        body = '%s has kicked you from the conversation' % kicker
+        msg['body'] = body
         msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
         msg['to'] = '%s@%s' % (kickee, constants.server)
         msg.send()
+        self.db_log_message(vinebot.user, None, body, [kickee])
         return ''
     
     def list_participants(self, user, vinebot):
@@ -382,6 +386,7 @@ class LeafComponent(ComponentXMPP):
         self.send_message(mto=recipient_jid,
                           mfrom='%s@%s' % (vinebot.user, self.boundjid.bare),
                           mbody='[%s, whispering] %s' % (sender, body))
+        self.db_log_message(vinebot.user, sender, body, [recipient], is_whisper=True)
         if len(vinebot.participants) == 2:
             return 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
         else:
@@ -513,19 +518,24 @@ class LeafComponent(ComponentXMPP):
             return '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=uuid_or_bytes)))
     
     def broadcast_msg(self, msg, participants, sender=None):
+        body = msg['body']
+        vinebot_jid = msg['to']
         del msg['id']
         del msg['html'] #LATER fix html, but it's a pain with reformatting
-        msg['from'] = msg['to']
-        if msg['body'] and msg['body'] != '':
+        msg['from'] = vinebot_jid
+        if body and body != '':
             if sender:
-                msg['body'] = '[%s] %s' % (sender, msg['body'])
+                msg['body'] = '[%s] %s' % (sender, body)
             else:
-                msg['body'] = '*** %s' % (msg['body'])
+                msg['body'] = '*** %s' % (body)
+        recipients = []
         for participant in participants:
             if not sender or sender != participant:
                 new_msg = msg.__copy__()
                 new_msg['to'] = '%s@%s' % (participant, constants.server)
                 new_msg.send()
+                recipients.append(participant)
+        self.db_log_message(vinebot_jid.user, sender, body, recipients)
     
     def broadcast_alert(self, body, participants, vinebot_user):
         msg = self.Message()
@@ -533,6 +543,10 @@ class LeafComponent(ComponentXMPP):
         msg['to'] = '%s@%s' % (vinebot_user, self.boundjid.bare)  # this will get moved to 'from' in broadcast_msg
         self.broadcast_msg(msg, participants)
     
+    def send_reply(self, msg, body):
+        msg.reply(body).send()
+        self.db_log_message(msg['from'].user, None, body, [msg['to'].user])
+        
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
         if len(participants) < 2:
             return 'error'
@@ -905,6 +919,26 @@ class LeafComponent(ComponentXMPP):
         else:
             return None
     
+    def db_log_message(self, vinebot_user, author, body, recipients, is_whisper=False):
+        if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't log them
+            return
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_uuid = shortuuid.decode(vinebot_id)
+        if author:
+            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, is_whisper)
+                                        SELECT %(vinebot_id)s AS vinebot_id, id AS author_id, %(body)s AS body, %(is_whisper)s AS is_whisper
+                                        FROM users WHERE name = %(author)s""",
+                                        {'vinebot_id': vinebot_uuid.bytes, 'author': author, 'body': body, 'is_whisper': is_whisper})
+        else:
+            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body)
+                                        VALUES (%(vinebot_id)s, %(author_id)s, %(body)s)""",
+                                        {'vinebot_id': vinebot_uuid.bytes, 'author_id': None, 'body': body})
+        for recipient in recipients:
+            self.db_execute("""INSERT INTO log_recipients (log_id, recipient_id)
+                               SELECT %(log_id)s AS log_id, id AS recipeint_id
+                               FROM users WHERE name = %(recipient)s""",
+                               {'log_id': log_id, 'recipient': recipient})
+        
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
         fetched = self.cursor.fetchall()
@@ -927,6 +961,7 @@ class LeafComponent(ComponentXMPP):
             logging.info('Database OperationalError %s for query, will retry: %s' % (e, query % data))
             self.db_connect()  # Try again, but only once
             self.cursor.execute(query, data)
+        return self.db.insert_id()
     
     def db_connect(self):
         try:
