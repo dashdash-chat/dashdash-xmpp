@@ -965,7 +965,7 @@ class LeafComponent(ComponentXMPP):
     
     def db_connect(self):
         try:
-            self.db = MySQLdb.connect('localhost',
+            self.db = MySQLdb.connect(constants.db_host,
                                       '%s%s' % (constants.leaf_name, self.id),
                                       constants.leaf_mysql_password,
                                       constants.db_name)
