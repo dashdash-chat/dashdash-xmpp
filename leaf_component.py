@@ -928,7 +928,7 @@ class LeafComponent(ComponentXMPP):
             log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, is_whisper)
                                         SELECT %(vinebot_id)s AS vinebot_id, id AS author_id, %(body)s AS body, %(is_whisper)s AS is_whisper
                                         FROM users WHERE name = %(author)s""",
-                                        {'vinebot_id': vinebot_uuid.bytes, 'author': author, 'body': body, 'is_whisper': is_whisper})
+                                        {'vinebot_id': vinebot_uuid.bytes, 'author': author, 'body': body.encode('utf-8'), 'is_whisper': is_whisper})
         else:
             log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body)
                                         VALUES (%(vinebot_id)s, %(author_id)s, %(body)s)""",
