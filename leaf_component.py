@@ -262,6 +262,7 @@ class LeafComponent(ComponentXMPP):
             bot = Bot(msg['to'].user, self)
             if not bot.is_vinebot and not msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
                 self.send_reply(msg, 'Sorry, you can only send messages to vinebots.')
+                #NOTE The received message is not logged. This prevents malicious users from sending too many messages to the leaves and filling the logs.
             elif self.commands.is_command(msg['body']):    
                 self.send_reply(msg, self.commands.handle_command(msg['from'], msg['body'], bot))
             elif msg['body'].strip().startswith('/') or msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):    
@@ -939,7 +940,7 @@ class LeafComponent(ComponentXMPP):
         else:
             log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body)
                                         VALUES (%(vinebot_id)s, %(author_id)s, %(body)s)""",
-                                        {'vinebot_id': vinebot_bytes, 'author_id': None, 'body': body})
+                                        {'vinebot_id': vinebot_bytes, 'author_id': None, 'body': body.encode('utf-8')})
         for recipient in recipients:
             self.db_execute("""INSERT INTO log_recipients (log_id, recipient_id)
                                SELECT %(log_id)s AS log_id, id AS recipeint_id
