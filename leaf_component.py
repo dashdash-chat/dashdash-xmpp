@@ -728,6 +728,7 @@ class LeafComponent(ComponentXMPP):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("DELETE FROM pair_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
+        self.db_execute("DELETE FROM topics WHERE vinebot = %(vinebot_id)s", {'vinebot_id': vinebot_uuid.bytes})
         return (vinebot_user, is_active)
     
     def db_create_party_vinebot(self, participants, vinebot_user):
@@ -743,7 +744,8 @@ class LeafComponent(ComponentXMPP):
     def db_delete_party_vinebot(self, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
-        self.db_execute("""DELETE FROM party_vinebots WHERE id = %(id)s""", {'id': vinebot_uuid.bytes})
+        self.db_execute("DELETE FROM party_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
+        self.db_execute("DELETE FROM topics WHERE vinebot = %(vinebot_id)s", {'vinebot_id': vinebot_uuid.bytes})
     
     def db_add_participant(self, user, vinebot_user):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
@@ -770,6 +772,7 @@ class LeafComponent(ComponentXMPP):
             'old_id': pair_vinebot_uuid.bytes,
             'activate': True})
         self.db_execute("DELETE FROM party_vinebots WHERE id = %(id)s", {'id': party_vinebot_uuid.bytes})
+        self.db_execute("DELETE FROM topics WHERE vinebot = %(vinebot_id)s", {'vinebot_id': pair_vinebot_uuid.bytes})
     
     def db_fetch_all_pair_vinebots(self):
         pair_vinebots = self.db_execute_and_fetchall("""SELECT  pair_vinebots.id,
