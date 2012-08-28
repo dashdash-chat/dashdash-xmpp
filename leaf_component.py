@@ -548,7 +548,7 @@ class LeafComponent(ComponentXMPP):
     def send_reply(self, msg, body):
         msg.reply(body).send()
         self.db_log_message(msg['from'].user, None, body, [msg['to'].user])
-        
+    
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
         if len(participants) < 2:
             return 'error'
@@ -924,17 +924,19 @@ class LeafComponent(ComponentXMPP):
     def db_log_message(self, vinebot_user, author, body, recipients, is_whisper=False):
         if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't log them
             return
-        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
-        vinebot_uuid = shortuuid.decode(vinebot_id)
+        vinebot_bytes = None
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+            vinebot_bytes = shortuuid.decode(vinebot_id).bytes
         if author:
             log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, is_whisper)
                                         SELECT %(vinebot_id)s AS vinebot_id, id AS author_id, %(body)s AS body, %(is_whisper)s AS is_whisper
                                         FROM users WHERE name = %(author)s""",
-                                        {'vinebot_id': vinebot_uuid.bytes, 'author': author, 'body': body.encode('utf-8'), 'is_whisper': is_whisper})
+                                        {'vinebot_id': vinebot_bytes, 'author': author, 'body': body.encode('utf-8'), 'is_whisper': is_whisper})
         else:
             log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body)
                                         VALUES (%(vinebot_id)s, %(author_id)s, %(body)s)""",
-                                        {'vinebot_id': vinebot_uuid.bytes, 'author_id': None, 'body': body})
+                                        {'vinebot_id': vinebot_bytes, 'author_id': None, 'body': body})
         for recipient in recipients:
             self.db_execute("""INSERT INTO log_recipients (log_id, recipient_id)
                                SELECT %(log_id)s AS log_id, id AS recipeint_id
