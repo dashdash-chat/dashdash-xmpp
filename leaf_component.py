@@ -41,6 +41,8 @@ class LeafComponent(ComponentXMPP):
             return sender.bare in constants.admin_users and bot.is_vinebot
         def admin_to_leaf(sender, bot):
             return sender.bare in constants.admin_users and not bot.is_vinebot
+        def admin_or_graph_to_leaf(sender, bot):
+            return sender.bare in (constants.admin_users + [constants.graph_xmpp_user]) and not bot.is_vinebot
         def participant_to_vinebot(sender, bot):
             return sender.user in bot.participants and bot.is_vinebot
         def observer_to_vinebot(sender, bot):
@@ -144,13 +146,13 @@ class LeafComponent(ComponentXMPP):
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
-                                       validate_sender  = admin_to_leaf,
+                                       validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = token_token,
                                        action           = self.create_friendship))
         self.commands.add(SlashCommand(command_name     = 'del_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Delete a friendship between two users.',
-                                       validate_sender  = admin_to_leaf,
+                                       validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = token_token,
                                        action           = self.destroy_friendship))
         self.commands.add(SlashCommand(command_name     = 'prune',
@@ -258,11 +260,11 @@ class LeafComponent(ComponentXMPP):
             # Note: because all logical paths result in the sending of a msg, I don't need to log the msg that was received.
             # i.e. All the messages for which a user is the author is always all of the messages that user sent.
             bot = Bot(msg['to'].user, self)
-            if not bot.is_vinebot and not msg['from'].bare in constants.admin_users:
+            if not bot.is_vinebot and not msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
                 self.send_reply(msg, 'Sorry, you can only send messages to vinebots.')
             elif self.commands.is_command(msg['body']):    
                 self.send_reply(msg, self.commands.handle_command(msg['from'], msg['body'], bot))
-            elif msg['body'].strip().startswith('/') or msg['from'].bare in constants.admin_users:    
+            elif msg['body'].strip().startswith('/') or msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):    
                 self.send_reply(msg, self.commands.handle_command(msg['from'], '/help', bot))
             else:
                 if msg['from'].user in bot.participants:
@@ -938,7 +940,7 @@ class LeafComponent(ComponentXMPP):
                                SELECT %(log_id)s AS log_id, id AS recipeint_id
                                FROM users WHERE name = %(recipient)s""",
                                {'log_id': log_id, 'recipient': recipient})
-        
+    
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
         fetched = self.cursor.fetchall()
@@ -973,7 +975,7 @@ class LeafComponent(ComponentXMPP):
             self.cursor = self.db.cursor()
             logging.info("Database connection created")
         except MySQLdb.Error, e:
-            logging.error('Database connection and/orcursor creation failed with %d: %s' % (e.args[0], e.args[1]))
+            logging.error('Database connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
     
     def cleanup(self):
