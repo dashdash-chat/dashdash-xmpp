@@ -39,9 +39,9 @@ Development Setup
   * `sudo cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
   * `sudo ejabberdctl restart`
 0. Create admin users and open ejabberd dashboard
-  * `sudo ejabberdctl admin1 dev.vine.im [password]`
-  * `sudo ejabberdctl admin2 dev.vine.im [password]`
-  * `sudo ejabberdctl _leaf1 dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L9))
+  * `sudo ejabberdctl register admin1 dev.vine.im [password]`
+  * `sudo ejabberdctl register admin2 dev.vine.im [password]`
+  * `sudo ejabberdctl register _leaf1 dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L9))
   * Visit http://dev.vine.im:5280/admin in a browser and explore
   * (I tend to use http://dev.vine.im:5280/admin/server/dev.vine.im/users/ the most)
 0. Create the xmpp-env virtualenv 
