@@ -51,7 +51,8 @@ class SlashCommand(object):
             return self._text_arg_format
         elif name == 'description':
             return self._text_description
-            
+    
+
 class SlashCommandRegistry(object):
     def __init__(self):
         self.slash_commands = {}
