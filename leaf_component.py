@@ -273,6 +273,9 @@ class LeafComponent(ComponentXMPP):
                 #NOTE The received message is not logged. This prevents malicious users from sending too many messages to the leaves and filling the logs.
             elif self.commands.is_command(msg['body']):
                 logged_command_id, response = self.commands.handle_command(msg['from'], msg['body'], bot)
+                if not logged_command_id:
+                    command_name, arg_string = self.commands.parse_command(msg['body'])
+                    logged_command_id = self.db_log_command(bot.user, msg['from'].user, command_name, None, arg_string, is_valid=False)
                 self.send_reply(msg, response, logged_command_id=logged_command_id)
             elif msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):    
                 self.send_reply(msg, 'Sorry, this leaf only accepts /commands from admins.')
@@ -967,20 +970,27 @@ class LeafComponent(ComponentXMPP):
                                FROM urs WHERE name = %(recipient)s""",
                                {'log_id': log_id, 'recipient': recipient})
     
-    def db_log_command(self, vinebot_user, sender, command_name, token, string):
+    def db_log_command(self, vinebot_user, sender, command_name, token, string, is_valid=True):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_bytes = shortuuid.decode(vinebot_id).bytes
         if string:
             string = string.encode('utf-8')
-        return self.db_execute("""INSERT INTO logged_commands (vinebot_id, sender_id, command, token, string)
+        return self.db_execute("""INSERT INTO logged_commands (vinebot_id, sender_id, command_name, is_valid, token, string)
                                   VALUES (
                                       %(vinebot_id)s,
                                       (SELECT id AS sender_id FROM users WHERE name = %(sender)s),
-                                      %(command)s,
+                                      %(command_name)s,
+                                      %(is_valid)s,
                                       %(token)s,
                                       %(string)s
-                                  )""",
-                                  {'vinebot_id': vinebot_bytes, 'sender':  sender, 'command': command_name, 'token': token, 'string': string})
+                                  )""", {
+                                      'vinebot_id': vinebot_bytes,
+                                      'sender':  sender,
+                                      'command_name': command_name,
+                                      'is_valid': is_valid,
+                                      'token': token,
+                                      'string': string
+                                  })
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)

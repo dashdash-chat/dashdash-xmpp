@@ -32,10 +32,12 @@ class SlashCommand(object):
     def execute(self, sender, arg_string, bot):
         if not self.validate_sender(sender, bot):
             raise PermissionError
-        # pass the sender to transform_args in case the args depend on it or in case it *should* be an arg
+        # pass the command_name to to transform_args so that it can be properly logged
+        # and the sender in case the args depend on it or in case it *should* be an arg
         # and the recipient so that the leaf can figure out which vinebot this command was for
         # and the original string in case not all of the tokens in the list should be treated as individual arguments
         # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
+        # note that, if successful, this will also return the logged_command_id, to be used by the command's action method
         arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
         args = self.transform_args(self.name, sender, bot, arg_string, arg_tokens)
         if args is False:
@@ -57,14 +59,14 @@ class SlashCommandRegistry(object):
     def is_command(self, message):
         message = message.lstrip()
         return message.startswith('/') and len(message.lstrip('/')) > 0
+        
+    def parse_command(self, message):
+        message = message.strip().lstrip('/')
+        command_name, _, arg_string = message.partition(' ')
+        return command_name.lower(), arg_string
     
     def handle_command(self, sender, message, bot):
-        message = message.strip().lstrip('/')
-        try:
-            command_name, _, arg_string = message.partition(' ')
-            command_name = command_name.lower()
-        except ValueError:
-            return 'Sorry, that command wasn\'t formatted properly. Try separating the command from the arguments with a single space.'
+        command_name, arg_string = self.parse_command(message)
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
