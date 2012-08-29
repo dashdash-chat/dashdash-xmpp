@@ -994,17 +994,19 @@ class LeafComponent(ComponentXMPP):
     
     def db_execute(self, query, data={}):
         if not self.db or not self.cursor:
-            logging.info("Database connection missing, attempting to reconnect and retry query")
+            logging.info("MySQL connection missing, attempting to reconnect and retry query")
             if self.db:
                 self.db.close()
             self.db_connect()
-        #TODO don't hide the error message when permissions dont match
-        #try:
-        self.cursor.execute(query, data)
-        # except MySQLdb.OperationalError, e:
-        #             logging.info('Database OperationalError %s for query, will retry: %s' % (e, query % data))
-        #             self.db_connect()  # Try again, but only once
-        #             self.cursor.execute(query, data)
+        try:
+            self.cursor.execute(query, data)
+        except MySQLdb.OperationalError, e:
+            if e[0] > 2000:  # error codes at http://dev.mysql.com/doc/refman/5.5/en/error-handling.html
+                logging.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
+                self.db_connect()  # Try again, but only once
+                self.cursor.execute(query, data)
+            else:
+                raise e
         return self.db.insert_id()
     
     def db_connect(self):
@@ -1015,9 +1017,9 @@ class LeafComponent(ComponentXMPP):
                                       constants.db_name)
             self.db.autocommit(True)
             self.cursor = self.db.cursor()
-            logging.info("Database connection created")
+            logging.info("MySQL connection created")
         except MySQLdb.Error, e:
-            logging.error('Database connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
+            logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
     
     def cleanup(self):
