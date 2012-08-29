@@ -37,7 +37,7 @@ class SlashCommand(object):
         # and the original string in case not all of the tokens in the list should be treated as individual arguments
         # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
         arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
-        args = self.transform_args(sender, bot, arg_string, arg_tokens)
+        args = self.transform_args(self.name, sender, bot, arg_string, arg_tokens)
         if args is False:
             raise ArgFormatError
         return self._action(*args)
@@ -68,17 +68,17 @@ class SlashCommandRegistry(object):
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
-                result_message = slash_command.execute(sender, arg_string, bot)
+                logged_command_id, result_message = slash_command.execute(sender, arg_string, bot)
                 if result_message is not None:  # this way we can return an empty string to send no response
-                    return result_message
+                    return logged_command_id, result_message
                 else:
-                    return 'Your /%s command was successful.' % slash_command.name
+                    return logged_command_id, 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
-                return 'Sorry, %s' % error
+                return None, 'Sorry, %s' % error
             except PermissionError:
-                return 'Sorry, you don\'t have permission to use this command.'
+                return None, 'Sorry, you don\'t have permission to use this command.'
             except ArgFormatError:
-                return 'Sorry, that format wasn\'t quite right. Try:\n\t/%s %s' % \
+                return None, 'Sorry, that format wasn\'t quite right. Try:\n\t/%s %s' % \
                     (slash_command.name, slash_command.arg_format)
         elif command_name == 'help':
             command_string = ''
@@ -89,9 +89,9 @@ class SlashCommandRegistry(object):
                     else:
                         command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
-                return 'You do not have permission to send any commands to this vinebot.'
+                return None, 'You do not have permission to send any commands to this vinebot.'
             else:
-                return 'The available commands are:\n' + command_string
+                return None, 'The available commands are:\n' + command_string
         else:
             return 'Sorry, /%s isn\'t a registered command. Type /help to see a full list.' % command_name
     

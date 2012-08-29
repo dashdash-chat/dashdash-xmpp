@@ -50,84 +50,92 @@ class LeafComponent(ComponentXMPP):
         def admin_or_participant_to_vinebot(sender, bot):
             return admin_to_vinebot(sender, bot) or participant_to_vinebot(sender, bot)
         # Argument transformations for /commands
-        def has_none(sender, bot, arg_string, arg_tokens):
-            if len(arg_tokens) == 0:
-                return []
-            return False
-        def sender_vinebot(sender, bot, arg_string, arg_tokens):
+        def logid_sender_vinebot(command_name, sender, bot, arg_string, arg_tokens):
             if bot.is_vinebot and len(arg_tokens) == 0:
-                return [sender.user, bot]
+                logged_command_id = self.db_log_command(bot.user, sender.user, command_name, None, None)
+                return [logged_command_id, sender.user, bot]
             return False
-        def sender_vinebot_token(sender, bot, arg_string, arg_tokens):
+        def logid_sender_vinebot_token(command_name, sender, bot, arg_string, arg_tokens):
             if bot.is_vinebot and len(arg_tokens) == 1:
-                return [sender.user, bot, arg_tokens[0]]
+                token = arg_tokens[0]
+                logged_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
+                return [logged_command_id, sender.user, bot, token]
             return False
-        def sender_vinebot_string_or_none(sender, bot, arg_string, arg_tokens):
+        def logid_sender_vinebot_string_or_none(command_name, sender, bot, arg_string, arg_tokens):
             if bot.is_vinebot:
-                return [sender.user, bot, arg_string if len(arg_string.strip()) > 0 else None]
+                string_or_none = arg_string if len(arg_string.strip()) > 0 else None
+                logged_command_id = self.db_log_command(bot.user, sender.user, command_name, None, string_or_none)
+                return [logged_command_id, sender.user, bot, string_or_none]
             return False
-        def sender_vinebot_token_string(sender, bot, arg_string, arg_tokens):
+        def logid_sender_vinebot_token_string(command_name, sender, bot, arg_string, arg_tokens):
             if bot.is_vinebot and len(arg_tokens) >= 2:
-                return [sender.user, bot, arg_tokens[0], arg_string.partition(arg_tokens[0])[2].strip()]
+                token = arg_tokens[0]
+                string = arg_string.partition(arg_tokens[0])[2].strip()
+                logged_command_id = self.db_log_command(bot.user, sender.user, command_name, token, string)
+                return [logged_command_id, sender.user, bot, token, string]
             return False
-        def token(sender, bot, arg_string, arg_tokens):
+        def none_has_none(command_name, sender, bot, arg_string, arg_tokens):
+            if len(arg_tokens) == 0:
+                return [None]
+            return False
+        def none_token(command_name, sender, bot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
-                return [arg_tokens[0]]
+                return [None, arg_tokens[0]]
             return False
-        def token_or_none(sender, bot, arg_string, arg_tokens):
-            return token(sender, bot, arg_string, arg_tokens) or has_none(sender, bot, arg_string, arg_tokens)
-        def token_token(sender, bot, arg_string, arg_tokens):
+        def none_token_or_none(command_name, sender, bot, arg_string, arg_tokens):
+            return token(command_name, sender, bot, arg_string, arg_tokens) or has_none(command_name, sender, bot, arg_string, arg_tokens)
+        def none_token_token(command_name, sender, bot, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
-                return [arg_tokens[0], arg_tokens[1]]
+                return [None, arg_tokens[0], arg_tokens[1]]
             return False
         # Register vinebot commands
         self.commands.add(SlashCommand(command_name     = 'join',
                                        text_arg_format  = '',
                                        text_description = 'Join this conversation without interrupting.',
                                        validate_sender  = observer_to_vinebot,
-                                       transform_args   = sender_vinebot,
+                                       transform_args   = logid_sender_vinebot,
                                        action           = self.user_joined))    
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
                                        validate_sender  = participant_to_vinebot,
-                                       transform_args   = sender_vinebot,
+                                       transform_args   = logid_sender_vinebot,
                                        action           = self.user_left))                  
         self.commands.add(SlashCommand(command_name     = 'invite',
                                        text_arg_format  = '<username>',
                                        text_description = 'Invite a user to this conversation.',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot_token,
+                                       transform_args   = logid_sender_vinebot_token,
                                        action           = self.invite_user))
         self.commands.add(SlashCommand(command_name     = 'kick',
                                        text_arg_format  = '<username>',
                                        text_description = 'Kick a user out of this conversation.',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot_token,
+                                       transform_args   = logid_sender_vinebot_token,
                                        action           = self.kick_user))
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
                                        text_description = 'List the participants in this conversation.',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot,
+                                       transform_args   = logid_sender_vinebot,
                                        action           = self.list_participants))
         self.commands.add(SlashCommand(command_name     = 'nearby',
                                        text_arg_format  = '',
                                        text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot,
+                                       transform_args   = logid_sender_vinebot,
                                        action           = self.list_observers))
         self.commands.add(SlashCommand(command_name     = 'whisper',
                                        text_arg_format  = '<username> <message text>',
                                        text_description = 'Whisper a quick message to only one other participant.',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot_token_string,
+                                       transform_args   = logid_sender_vinebot_token_string,
                                        action           = self.whisper_msg))
         self.commands.add(SlashCommand(command_name     = 'topic',
                                        text_arg_format  = '<new topic>',
                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
                                        validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = sender_vinebot_string_or_none,
+                                       transform_args   = logid_sender_vinebot_string_or_none,
                                        action           = self.set_topic))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
@@ -135,37 +143,37 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '<username> <password>',
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = token_token,
+                                       transform_args   = none_token_token,
                                        action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = '<username>',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = token,
+                                       transform_args   = none_token,
                                        action           = self.destroy_user))
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
-                                       transform_args   = token_token,
+                                       transform_args   = none_token_token,
                                        action           = self.create_friendship))
         self.commands.add(SlashCommand(command_name     = 'del_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Delete a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
-                                       transform_args   = token_token,
+                                       transform_args   = none_token_token,
                                        action           = self.destroy_friendship))
         self.commands.add(SlashCommand(command_name     = 'prune',
                                        text_arg_format  = '<username>',
                                        text_description = 'Remove old, unused vinebots from a user\'s roster.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = token,
+                                       transform_args   = none_token,
                                        action           = self.prune_roster))
         self.commands.add(SlashCommand(command_name     = 'friendships',
                                        text_arg_format  = '<username (optional)>',
                                        text_description = 'List all current friendships, or only the specified user\'s friendships.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = token_or_none,
+                                       transform_args   = none_token_or_none,
                                        action           = self.friendships))
         # Add event handlers
         self.add_event_handler("session_start",        self.handle_start)
@@ -263,10 +271,11 @@ class LeafComponent(ComponentXMPP):
             if not bot.is_vinebot and not msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
                 self.send_reply(msg, 'Sorry, you can only send messages to vinebots.')
                 #NOTE The received message is not logged. This prevents malicious users from sending too many messages to the leaves and filling the logs.
-            elif self.commands.is_command(msg['body']):    
-                self.send_reply(msg, self.commands.handle_command(msg['from'], msg['body'], bot))
-            elif msg['body'].strip().startswith('/') or msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):    
-                self.send_reply(msg, self.commands.handle_command(msg['from'], '/help', bot))
+            elif self.commands.is_command(msg['body']):
+                logged_command_id, response = self.commands.handle_command(msg['from'], msg['body'], bot)
+                self.send_reply(msg, response, logged_command_id=logged_command_id)
+            elif msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):    
+                self.send_reply(msg, 'Sorry, this leaf only accepts /commands from admins.')
             else:
                 if msg['from'].user in bot.participants:
                     if not bot.is_active:
@@ -306,23 +315,23 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### user /commands
-    def user_joined(self, user, vinebot):
+    def user_joined(self, logged_command_id, user, vinebot):
         if vinebot.topic:
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user, vinebot.topic)
         else:
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user
         self.add_participant(user, vinebot, alert_msg)
-        return ''
+        return logged_command_id, ''
     
-    def user_left(self, user, vinebot):
+    def user_left(self, logged_command_id, user, vinebot):
         self.remove_participant(user, vinebot, '%s has left the conversation' % user)
         if not vinebot.is_party and vinebot.is_active:  # revert to previous status states
             user1, user2 = vinebot.participants
             self.send_presences(vinebot, [user1], pshow=self.user_status(user2))
             self.send_presences(vinebot, [user2], pshow=self.user_status(user1))
-        return 'You left the conversation.'
+        return logged_command_id, 'You left the conversation.'
     
-    def invite_user(self, inviter, vinebot, invitee):
+    def invite_user(self, logged_command_id, inviter, vinebot, invitee):
         if inviter == invitee:
             raise ExecutionError, 'you can\'t invite yourself.'
         if not self.user_online(invitee):
@@ -332,9 +341,9 @@ class LeafComponent(ComponentXMPP):
         else:
             alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter, invitee)
         self.add_participant(invitee, vinebot, alert_msg)
-        return ''
+        return logged_command_id, ''
     
-    def kick_user(self, kicker, vinebot, kickee):
+    def kick_user(self, logged_command_id, kicker, vinebot, kickee):
         if kicker == kickee:
             raise ExecutionError, 'you can\'t kick yourself. Maybe you meant /leave?'
         if len(vinebot.participants) == 2:
@@ -346,41 +355,42 @@ class LeafComponent(ComponentXMPP):
         msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
         msg['to'] = '%s@%s' % (kickee, constants.server)
         msg.send()
-        self.db_log_message(vinebot.user, None, body, [kickee])
-        return ''
+        #self.db_log_message(vinebot.user, None, [kickee], body)
+        return logged_command_id, ''
     
-    def list_participants(self, user, vinebot):
+    def list_participants(self, logged_command_id, user, vinebot):
         participants = vinebot.participants.copy()
         if user in participants:  # admins aren't participants
             participants.remove(user)
             participants = list(participants)
             participants.append('you')
         if vinebot.topic:
-            return 'The current participants are:\n%s\nThe current topic is:\n\t%s' % (
+            return logged_command_id, 'The current participants are:\n%s\nThe current topic is:\n\t%s' % (
                     ''.join(['\t%s\n' % user for user in participants]).strip('\n'), vinebot.topic)
         else:
-            return 'The current participants are:\n%s\nNo one has set the topic.' % (
+            return logged_command_id, 'The current participants are:\n%s\nNo one has set the topic.' % (
                     ''.join(['\t%s\n' % user for user in participants]).strip('\n'))
     
-    def list_observers(self, user, vinebot):
+    def list_observers(self, logged_command_id, user, vinebot):
         observers = filter(self.user_online, vinebot.observers)
         observer_string = ''.join(['\t%s\n' % user for user in observers]).strip('\n')
         if vinebot.is_active:
             if len(observers) > 1:
-                return 'These users are online and can see this conversation:\n' + observer_string
+                response = 'These users are online and can see this conversation:\n' + observer_string
             elif len(observers) == 1:
-                return '%s is online and can see this conversation.' % observers[0]
+                response = '%s is online and can see this conversation.' % observers[0]
             else:
-                return 'There are no users online that can see this conversaton.'
+                response = 'There are no users online that can see this conversaton.'
         else:
             if len(observers) > 1:
-                return 'If this conversation were active, then these online users would see it:\n' + observer_string
+                response = 'If this conversation were active, then these online users would see it:\n' + observer_string
             elif len(observers) == 1:
-                return 'If this conversation were active, then %s would see it.' % observers[0]
+                response = 'If this conversation were active, then %s would see it.' % observers[0]
             else:
-                return 'There are no users online that can see this conversaton.'
+                response = 'There are no users online that can see this conversaton.'
+        return logged_command_id, response
     
-    def whisper_msg(self, sender, vinebot, recipient, body):
+    def whisper_msg(self, logged_command_id, sender, vinebot, recipient, body):
         if recipient == sender:
             raise ExecutionError, 'you can\'t whisper to youerself.'
         recipient_jid = '%s@%s' % (recipient, constants.server)
@@ -389,13 +399,13 @@ class LeafComponent(ComponentXMPP):
         self.send_message(mto=recipient_jid,
                           mfrom='%s@%s' % (vinebot.user, self.boundjid.bare),
                           mbody='[%s, whispering] %s' % (sender, body))
-        self.db_log_message(vinebot.user, sender, body, [recipient], is_whisper=True)
+        #self.db_log_message(vinebot.user, sender, [recipient], body, is_whisper=True)
         if len(vinebot.participants) == 2:
-            return 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
+            return logged_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
         else:
-            return 'You whispered to %s, and no one noticed!' % recipient
+            return logged_command_id, 'You whispered to %s, and no one noticed!' % recipient
     
-    def set_topic(self, sender, vinebot, topic):
+    def set_topic(self, logged_command_id, sender, vinebot, topic):
         if topic and len(topic) > 100:
             raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
         else:
@@ -413,19 +423,21 @@ class LeafComponent(ComponentXMPP):
                 self.broadcast_alert('%s has set the topic of the conversation:\n\t%s' % (sender, vinebot.topic), vinebot.participants, vinebot.user)
             else:
                 self.broadcast_alert('%s has cleared the topic of conversation.' % sender, vinebot.participants, vinebot.user)
-            return ''
+            return logged_command_id, ''
     
     
     ##### admin /commands
-    def create_user(self, user, password):
+    def create_user(self, logged_command_id, user, password):
         self.db_create_user(user)
         self.register(user, password)
+        return None, ''
     
-    def destroy_user(self, user):
+    def destroy_user(self, logged_command_id, user):
         self.db_destroy_user(user)
         self.unregister(user)
+        return None, ''
     
-    def create_friendship(self, user1, user2):
+    def create_friendship(self, logged_command_id, user1, user2):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
         if vinebot_user:
             participants = set([user1, user2])
@@ -439,8 +451,9 @@ class LeafComponent(ComponentXMPP):
                 self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
             for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
                 self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
+        return None, ''
     
-    def destroy_friendship(self, user1, user2):
+    def destroy_friendship(self, logged_command_id, user1, user2):
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
         self.delete_rosteritem(user1, destroyed_vinebot_user)
         self.delete_rosteritem(user2, destroyed_vinebot_user)
@@ -453,8 +466,9 @@ class LeafComponent(ComponentXMPP):
         for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
             if user2 not in self.db_fetch_observers(active_vinebot[0]):
                 self.delete_rosteritem(user2, active_vinebot[1])
+        return None, ''
     
-    def prune_roster(self, user):
+    def prune_roster(self, logged_command_id, user):
         errors = []
         for roster_user, roster_nick in self.get_roster(user):
             bot = Bot(roster_user, self)
@@ -480,11 +494,11 @@ class LeafComponent(ComponentXMPP):
                     (roster_user, user, bot.participants, bot.is_active, bot.is_party))
                 self.delete_rosteritem(user, roster_user)
         if errors:
-            return '\n'.join(errors)
+            return None, '\n'.join(errors)
         else:
-            return 'No invalid roster items found.'
+            return None, 'No invalid roster items found.'
     
-    def friendships(self, user=None):
+    def friendships(self, logged_command_id, log_user=None):
         if user:
             friends = self.db_fetch_user_friends(user)
             if len(friends) <= 0:
@@ -503,7 +517,7 @@ class LeafComponent(ComponentXMPP):
                                                                            vinebot.user,
                                                                            self.boundjid.bare,
                                                                            'active' if vinebot.is_active else 'inactive')
-        return output
+        return None, output
     
     
     ##### helper functions
@@ -538,7 +552,7 @@ class LeafComponent(ComponentXMPP):
                 new_msg['to'] = '%s@%s' % (participant, constants.server)
                 new_msg.send()
                 recipients.append(participant)
-        self.db_log_message(vinebot_jid.user, sender, body, recipients)
+        #self.db_log_message(vinebot_jid.user, sender, recipients, body, message_type)
     
     def broadcast_alert(self, body, participants, vinebot_user):
         msg = self.Message()
@@ -546,9 +560,15 @@ class LeafComponent(ComponentXMPP):
         msg['to'] = '%s@%s' % (vinebot_user, self.boundjid.bare)  # this will get moved to 'from' in broadcast_msg
         self.broadcast_msg(msg, participants)
     
-    def send_reply(self, msg, body):
+    def send_reply(self, msg, body, logged_command_id=None):
         msg.reply(body).send()
-        self.db_log_message(msg['from'].user, None, body, [msg['to'].user])
+        logging.warning("INSERT INTO logged messages with vinebot_user=%s, logged_command_id=%s, sender=None, body=%s, recipients=%s" % (msg['from'].user, logged_command_id, body, [msg['to'].user]))
+        # insert into logged messages with
+        #   msg['from'].user, which is the vinebot user in the case of a /command, or none
+        #   logged_command_id
+        #   no sender, because this is a vinebot reply
+        #   body if we have it
+        #   [msg['to'].user] as the recipients
     
     def get_nick(self, participants, viewing_participant=None):  # observers all see the same nickname, so this is None for them
         if len(participants) < 2:
@@ -925,27 +945,42 @@ class LeafComponent(ComponentXMPP):
         else:
             return None
     
-    def db_log_message(self, vinebot_user, author, body, recipients, is_whisper=False):
-        if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't log them
+    def db_log_message(self, vinebot_user, sender, recipients, body, logged_command_id):
+        if not message_type or not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't log them
             return
         vinebot_bytes = None
         if vinebot_user.startswith(constants.vinebot_prefix):
             vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
             vinebot_bytes = shortuuid.decode(vinebot_id).bytes
         if author:
-            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, is_whisper)
+            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, message_type)
                                         SELECT %(vinebot_id)s AS vinebot_id, id AS author_id, %(body)s AS body, %(is_whisper)s AS is_whisper
                                         FROM users WHERE name = %(author)s""",
-                                        {'vinebot_id': vinebot_bytes, 'author': author, 'body': body.encode('utf-8'), 'is_whisper': is_whisper})
+                                        {'vinebot_id': vinebot_bytes, 'author':  author, 'body': body.encode('utf-8'), 'message_type': message_type})
         else:
-            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body)
+            log_id = self.db_execute("""INSERT INTO logs (vinebot_id, author_id, body, message_type
                                         VALUES (%(vinebot_id)s, %(author_id)s, %(body)s)""",
-                                        {'vinebot_id': vinebot_bytes, 'author_id': None, 'body': body.encode('utf-8')})
+                                        {'vinebot_id': vinebot_bytes, 'author_id': None, 'body': body.encode('utf-8'), 'message_type': message_type})
         for recipient in recipients:
             self.db_execute("""INSERT INTO log_recipients (log_id, recipient_id)
                                SELECT %(log_id)s AS log_id, id AS recipeint_id
-                               FROM users WHERE name = %(recipient)s""",
+                               FROM urs WHERE name = %(recipient)s""",
                                {'log_id': log_id, 'recipient': recipient})
+    
+    def db_log_command(self, vinebot_user, sender, command_name, token, string):
+        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+        vinebot_bytes = shortuuid.decode(vinebot_id).bytes
+        if string:
+            string = string.encode('utf-8')
+        return self.db_execute("""INSERT INTO logged_commands (vinebot_id, sender_id, command, token, string)
+                                  VALUES (
+                                      %(vinebot_id)s,
+                                      (SELECT id AS sender_id FROM users WHERE name = %(sender)s),
+                                      %(command)s,
+                                      %(token)s,
+                                      %(string)s
+                                  )""",
+                                  {'vinebot_id': vinebot_bytes, 'sender':  sender, 'command': command_name, 'token': token, 'string': string})
     
     def db_execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.db_execute(query, data)
@@ -963,12 +998,13 @@ class LeafComponent(ComponentXMPP):
             if self.db:
                 self.db.close()
             self.db_connect()
-        try:
-            self.cursor.execute(query, data)
-        except MySQLdb.OperationalError, e:
-            logging.info('Database OperationalError %s for query, will retry: %s' % (e, query % data))
-            self.db_connect()  # Try again, but only once
-            self.cursor.execute(query, data)
+        #TODO don't hide the error message when permissions dont match
+        #try:
+        self.cursor.execute(query, data)
+        # except MySQLdb.OperationalError, e:
+        #             logging.info('Database OperationalError %s for query, will retry: %s' % (e, query % data))
+        #             self.db_connect()  # Try again, but only once
+        #             self.cursor.execute(query, data)
         return self.db.insert_id()
     
     def db_connect(self):
