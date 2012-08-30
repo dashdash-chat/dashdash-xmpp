@@ -9,6 +9,8 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
+MAX_COMMAND_LENGTH = 20
+
 
 class ExecutionError(Exception):
     pass
@@ -64,6 +66,13 @@ class SlashCommandRegistry(object):
     def parse_command(self, message):
         message = message.strip().lstrip('/')
         command_name, _, arg_string = message.partition(' ')
+        if len(command_name) > MAX_COMMAND_LENGTH:
+            logging.warning("Max command length of %d exceeded: %s" % (MAX_COMMAND_LENGTH, message))
+            if len(arg_string) > 0:
+                arg_string = command_name[MAX_COMMAND_LENGTH:] + ' ' + arg_string
+            else:
+                arg_string = command_name[MAX_COMMAND_LENGTH:]
+            command_name = command_name[:MAX_COMMAND_LENGTH]  # re-assign command name after setting arg_string
         return command_name.lower(), arg_string
     
     def handle_command(self, sender, message, bot):
@@ -110,7 +119,7 @@ class SlashCommandRegistry(object):
         if command_name in self.slash_commands:
             del self.slash_commands[command_name]
         elif command_name == 'help':
-            logging.error('The /help command is built in and can not be removed.' % command_name)
+            logging.error('The /help command is built-in and can not be removed.' % command_name)
         else:
             logging.error('/%s is not a registered command.' % command_name)
     

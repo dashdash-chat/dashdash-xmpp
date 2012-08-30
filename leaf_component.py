@@ -74,20 +74,31 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, string)
                 return [parent_command_id, sender.user, bot, token, string]
             return False
-        def none_has_none(command_name, sender, bot, arg_string, arg_tokens):
-            if len(arg_tokens) == 0:
-                return [None]
-            return False
-        def none_token(command_name, sender, bot, arg_string, arg_tokens):
+        def logid_token(command_name, sender, bot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
-                return [None, arg_tokens[0]]
+                token = arg_tokens[0]
+                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
+                return [parent_command_id, token]
             return False
-        def none_token_or_none(command_name, sender, bot, arg_string, arg_tokens):
-            return token(command_name, sender, bot, arg_string, arg_tokens) or has_none(command_name, sender, bot, arg_string, arg_tokens)
-        def none_token_token(command_name, sender, bot, arg_string, arg_tokens):
+        def logid_token_or_none(command_name, sender, bot, arg_string, arg_tokens):
+            if len(arg_tokens) == 1:
+                token = arg_tokens[0]
+                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
+                return [parent_command_id, token]
+            elif len(arg_tokens) == 0:
+                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, None, None)
+                return [parent_command_id]
+            return False
+        def logid_token_token(command_name, sender, bot, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
-                return [None, arg_tokens[0], arg_tokens[1]]
+                token1 = arg_tokens[0]
+                token2 = arg_tokens[1]
+                # Please forgive me for storing the second token as the command's string, but ugh I don't want
+                # to add an extra column right now. I'll fix it when I have a second command with two tokens.
+                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token1, token2)
+                return [parent_command_id, token1, token2]
             return False
+        
         # Register vinebot commands
         self.commands.add(SlashCommand(command_name     = 'join',
                                        text_arg_format  = '',
@@ -143,37 +154,37 @@ class LeafComponent(ComponentXMPP):
                                        text_arg_format  = '<username> <password>',
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = none_token_token,
+                                       transform_args   = logid_token_token,
                                        action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = '<username>',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = none_token,
+                                       transform_args   = logid_token,
                                        action           = self.destroy_user))
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
-                                       transform_args   = none_token_token,
+                                       transform_args   = logid_token_token,
                                        action           = self.create_friendship))
         self.commands.add(SlashCommand(command_name     = 'del_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Delete a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
-                                       transform_args   = none_token_token,
+                                       transform_args   = logid_token_token,
                                        action           = self.destroy_friendship))
         self.commands.add(SlashCommand(command_name     = 'prune',
                                        text_arg_format  = '<username>',
                                        text_description = 'Remove old, unused vinebots from a user\'s roster.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = none_token,
+                                       transform_args   = logid_token,
                                        action           = self.prune_roster))
         self.commands.add(SlashCommand(command_name     = 'friendships',
                                        text_arg_format  = '<username (optional)>',
                                        text_description = 'List all current friendships, or only the specified user\'s friendships.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = none_token_or_none,
+                                       transform_args   = logid_token_or_none,
                                        action           = self.friendships))
         # Add event handlers
         self.add_event_handler("session_start",        self.handle_start)
@@ -265,15 +276,13 @@ class LeafComponent(ComponentXMPP):
     
     def handle_msg(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            # Note: because all logical paths result in the sending of a msg, I don't need to log the msg that was received.
-            # i.e. All the messages for which a user is the author is always all of the messages that user sent.
             bot = Bot(msg['to'].user, self)
             if not bot.is_vinebot and not msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
                 parent_message_id = self.db_log_message(msg['to'].user, msg['from'].user, [], msg['body'])
                 self.send_reply(msg, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
             elif self.commands.is_command(msg['body']):
                 parent_command_id, response = self.commands.handle_command(msg['from'], msg['body'], bot)
-                if not parent_command_id:
+                if not parent_command_id:  # if the command has some sort of error
                     command_name, arg_string = self.commands.parse_command(msg['body'])
                     parent_command_id = self.db_log_command(bot.user, msg['from'].user, command_name, None, arg_string, is_valid=False)
                 self.send_reply(msg, response, parent_command_id=parent_command_id)
@@ -443,12 +452,12 @@ class LeafComponent(ComponentXMPP):
     def create_user(self, parent_command_id, user, password):
         self.db_create_user(user)
         self.register(user, password)
-        return None, ''
+        return parent_command_id, None
     
     def destroy_user(self, parent_command_id, user):
         self.db_destroy_user(user)
         self.unregister(user)
-        return None, ''
+        return parent_command_id, None
     
     def create_friendship(self, parent_command_id, user1, user2):
         vinebot_user = self.db_create_pair_vinebot(user1, user2)
@@ -464,7 +473,7 @@ class LeafComponent(ComponentXMPP):
                 self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
             for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
                 self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
-        return None, ''
+        return parent_command_id, None
     
     def destroy_friendship(self, parent_command_id, user1, user2):
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
@@ -479,7 +488,7 @@ class LeafComponent(ComponentXMPP):
         for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
             if user2 not in self.db_fetch_observers(active_vinebot[0]):
                 self.delete_rosteritem(user2, active_vinebot[1])
-        return None, ''
+        return parent_command_id, None
     
     def prune_roster(self, parent_command_id, user):
         errors = []
@@ -507,21 +516,21 @@ class LeafComponent(ComponentXMPP):
                     (roster_user, user, bot.participants, bot.is_active, bot.is_party))
                 self.delete_rosteritem(user, roster_user)
         if errors:
-            return None, '\n'.join(errors)
+            return parent_command_id, '\n'.join(errors)
         else:
-            return None, 'No invalid roster items found.'
+            return parent_command_id, 'No invalid roster items found.'
     
-    def friendships(self, parent_command_id, log_user=None):
+    def friendships(self, parent_command_id, user=None):
         if user:
             friends = self.db_fetch_user_friends(user)
             if len(friends) <= 0:
-                return '%s doesn\'t have any friends.' % user
+                return parent_command_id, '%s doesn\'t have any friends.' % user
             output = '%s has %d friends:\n\t' % (user, len(friends))
             output += '\n\t'.join(friends)
         else:
             pair_vinebots = self.db_fetch_all_pair_vinebots()
             if len(pair_vinebots) <= 0:
-                return 'No pair vinebots found. Use /new_friendship to create one for two users.'    
+                return parent_command_id, 'No pair vinebots found. Use /new_friendship to create one for two users.'    
             output = 'There are %d friendships:' % len(pair_vinebots)
             for vinebot in pair_vinebots:
                 user1, user2 = vinebot.participants
@@ -530,7 +539,7 @@ class LeafComponent(ComponentXMPP):
                                                                            vinebot.user,
                                                                            self.boundjid.bare,
                                                                            'active' if vinebot.is_active else 'inactive')
-        return None, output
+        return parent_command_id, output
     
     
     ##### helper functions
@@ -1006,8 +1015,10 @@ class LeafComponent(ComponentXMPP):
         return log_id
     
     def db_log_command(self, vinebot_user, sender, command_name, token, string, is_valid=True):
-        vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
-        vinebot_bytes = shortuuid.decode(vinebot_id).bytes
+        vinebot_bytes = None
+        if vinebot_user.startswith(constants.vinebot_prefix):
+            vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
+            vinebot_bytes = shortuuid.decode(vinebot_id).bytes
         if string:
             string = string.encode('utf-8')
         return self.db_execute("""INSERT INTO commands (vinebot_id, sender_id, command_name, is_valid, token, string)
