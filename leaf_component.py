@@ -476,6 +476,12 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, None
     
     def destroy_friendship(self, parent_command_id, user1, user2):
+        #TODO fix this. So, if three users A,B,C are all friends with each other and in a conversation
+        # then if the friendship between two of the users is deleted, it will also delete the conversation
+        # this is a problem. what should be happening here, is that it should only delete *inactive*
+        # pair_vinebots and if one is active, it should convert it to a party_vinebot before deleting it.
+        # Also, for some reason db_fetch_user_pair_vinebots also returns active vinebots, and I don't understand why.
+        # This is a small bug and I'll probably refactor this vinebot stuff soon, so i'm not going to fix it now.
         destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
         self.delete_rosteritem(user1, destroyed_vinebot_user)
         self.delete_rosteritem(user2, destroyed_vinebot_user)
@@ -921,7 +927,7 @@ class LeafComponent(ComponentXMPP):
         active_vinebots = [(set([pair_vinebot[0], pair_vinebot[1]]), 
                             self.get_vinebot_user(pair_vinebot[2])
                            ) for pair_vinebot in pair_vinebots]
-        active_vinebots.extend(self.db_fetch_user_party_vinebots(user))
+        active_vinebots.extend(self.db_fetch_user_party_vinebots(user))  #TODO why is it doing this? This seems wrong, from the method name.
         return active_vinebots
     
     def db_fetch_user_party_vinebots(self, user):
