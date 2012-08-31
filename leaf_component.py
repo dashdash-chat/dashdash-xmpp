@@ -452,17 +452,17 @@ class LeafComponent(ComponentXMPP):
     
     ##### admin /commands
     def create_user(self, parent_command_id, user, password):
-        self.db_create_user(user, parent_command_id)
+        self.db_create_user(user, parent_command_id=parent_command_id)
         self.register(user, password)
         return parent_command_id, None
     
     def destroy_user(self, parent_command_id, user):
-        self.db_destroy_user(user, parent_command_id)
+        self.db_destroy_user(user, parent_command_id=parent_command_id)
         self.unregister(user)
         return parent_command_id, None
     
     def create_friendship(self, parent_command_id, user1, user2):
-        vinebot_user = self.db_create_pair_vinebot(user1, user2, parent_command_id)
+        vinebot_user = self.db_create_pair_vinebot(user1, user2, parent_command_id=parent_command_id)
         if vinebot_user:
             participants = set([user1, user2])
             vinebot = Bot(vinebot_user, self, participants=participants, is_active=False, is_party=False)
@@ -484,7 +484,7 @@ class LeafComponent(ComponentXMPP):
         # pair_vinebots and if one is active, it should convert it to a party_vinebot before deleting it.
         # Also, for some reason db_fetch_user_pair_vinebots also returns active vinebots, and I don't understand why.
         # This is a small bug and I'll probably refactor this vinebot stuff soon, so i'm not going to fix it now.
-        destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2, parent_command_id)
+        destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2, parent_command_id=parent_command_id)
         self.delete_rosteritem(user1, destroyed_vinebot_user)
         self.delete_rosteritem(user2, destroyed_vinebot_user)
         if is_active:
