@@ -363,7 +363,9 @@ class LeafComponent(ComponentXMPP):
         if kicker == kickee:
             raise ExecutionError, 'you can\'t kick yourself. Maybe you meant /leave?'
         if len(vinebot.participants) == 2:
-            raise ExecutionError, 'you can\'t kick someone if it\s just the two of you. Maybe you meant /leave?'
+            raise ExecutionError, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?'
+        if not kickee in vinebot.participants:
+            raise ExecutionError, 'you can\'t kick someone who isn\'t a participant in the conversation.'
         self.remove_participant(kickee, vinebot, '%s was kicked from the conversation by %s' % (kickee, kicker), parent_command_id=parent_command_id)
         msg = self.Message()
         body = '%s has kicked you from the conversation' % kicker
