@@ -415,7 +415,6 @@ class LeafComponent(ComponentXMPP):
         self.send_message(mto=recipient_jid,
                           mfrom='%s@%s' % (vinebot.user, self.boundjid.bare),
                           mbody='[%s, whispering] %s' % (sender, body))
-        self.db_log_message(vinebot.user, sender, [recipient], body, parent_command_id=parent_command_id)
         if len(vinebot.participants) == 2:
             return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient
         else:
