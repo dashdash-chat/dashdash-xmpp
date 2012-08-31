@@ -86,7 +86,8 @@ class SlashCommandRegistry(object):
                 else:
                     return parent_command_id, 'Your /%s command was successful.' % slash_command.name
             except ExecutionError, error:
-                return None, 'Sorry, %s' % error
+                parent_command_id, result_message = error
+                return parent_command_id, 'Sorry, %s' % result_message
             except PermissionError:
                 return None, 'Sorry, you don\'t have permission to use this command.'
             except ArgFormatError:

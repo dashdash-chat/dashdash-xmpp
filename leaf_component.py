@@ -349,9 +349,9 @@ class LeafComponent(ComponentXMPP):
     
     def invite_user(self, parent_command_id, inviter, vinebot, invitee):
         if inviter == invitee:
-            raise ExecutionError, 'you can\'t invite yourself.'
+            raise ExecutionError, (parent_command_id, 'you can\'t invite yourself.')
         if not self.user_online(invitee):
-            raise ExecutionError, '%s is offline and can\'t be invited.' % invitee
+            raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee)
         if vinebot.topic:
             alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter, invitee, vinebot.topic)
         else:
@@ -361,11 +361,11 @@ class LeafComponent(ComponentXMPP):
     
     def kick_user(self, parent_command_id, kicker, vinebot, kickee):
         if kicker == kickee:
-            raise ExecutionError, 'you can\'t kick yourself. Maybe you meant /leave?'
+            raise ExecutionError, (parent_command_id, 'you can\'t kick yourself. Maybe you meant /leave?')
         if len(vinebot.participants) == 2:
-            raise ExecutionError, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?'
+            raise ExecutionError, (parent_command_id, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?')
         if not kickee in vinebot.participants:
-            raise ExecutionError, 'you can\'t kick someone who isn\'t a participant in the conversation.'
+            raise ExecutionError, (parent_command_id, 'you can\'t kick someone who isn\'t a participant in the conversation.')
         self.remove_participant(kickee, vinebot, '%s was kicked from the conversation by %s' % (kickee, kicker), parent_command_id=parent_command_id)
         msg = self.Message()
         body = '%s has kicked you from the conversation' % kicker
@@ -410,10 +410,10 @@ class LeafComponent(ComponentXMPP):
     
     def whisper_msg(self, parent_command_id, sender, vinebot, recipient, body):
         if recipient == sender:
-            raise ExecutionError, 'you can\'t whisper to youerself.'
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to youerself.')
         recipient_jid = '%s@%s' % (recipient, constants.server)
         if recipient not in vinebot.participants and recipient_jid not in constants.admin_users:
-            raise ExecutionError, 'you can\'t whisper to someone who isn\'t a participant in this conversation.'
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
         self.send_message(mto=recipient_jid,
                           mfrom='%s@%s' % (vinebot.user, self.boundjid.bare),
                           mbody='[%s, whispering] %s' % (sender, body))
@@ -425,7 +425,7 @@ class LeafComponent(ComponentXMPP):
     
     def set_topic(self, parent_command_id, sender, vinebot, topic):
         if topic and len(topic) > 100:
-            raise ExecutionError, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic)
+            raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
         else:
             self.db_set_topic(vinebot.user, topic)
             vinebot.topic = ((topic, datetime.now()) if topic else None)
@@ -452,17 +452,17 @@ class LeafComponent(ComponentXMPP):
     
     ##### admin /commands
     def create_user(self, parent_command_id, user, password):
-        self.db_create_user(user)
+        self.db_create_user(user, parent_command_id)
         self.register(user, password)
         return parent_command_id, None
     
     def destroy_user(self, parent_command_id, user):
-        self.db_destroy_user(user)
+        self.db_destroy_user(user, parent_command_id)
         self.unregister(user)
         return parent_command_id, None
     
     def create_friendship(self, parent_command_id, user1, user2):
-        vinebot_user = self.db_create_pair_vinebot(user1, user2)
+        vinebot_user = self.db_create_pair_vinebot(user1, user2, parent_command_id)
         if vinebot_user:
             participants = set([user1, user2])
             vinebot = Bot(vinebot_user, self, participants=participants, is_active=False, is_party=False)
@@ -484,7 +484,7 @@ class LeafComponent(ComponentXMPP):
         # pair_vinebots and if one is active, it should convert it to a party_vinebot before deleting it.
         # Also, for some reason db_fetch_user_pair_vinebots also returns active vinebots, and I don't understand why.
         # This is a small bug and I'll probably refactor this vinebot stuff soon, so i'm not going to fix it now.
-        destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2)
+        destroyed_vinebot_user, is_active = self.db_delete_pair_vinebot(user1, user2, parent_command_id)
         self.delete_rosteritem(user1, destroyed_vinebot_user)
         self.delete_rosteritem(user2, destroyed_vinebot_user)
         if is_active:
@@ -637,7 +637,7 @@ class LeafComponent(ComponentXMPP):
     
     def add_participant(self, user, vinebot, alert_msg, parent_command_id=None):
         if user in vinebot.participants:
-            raise ExecutionError, '%s is already part of this conversation!' % user
+            raise ExecutionError, (parent_command_id, '%s is already part of this conversation!' % user)
         old_participants = vinebot.participants.copy()
         vinebot.participants.add(user)
         if vinebot.is_party:
@@ -757,10 +757,10 @@ class LeafComponent(ComponentXMPP):
     
     
     ##### database queries and connection management
-    def db_create_pair_vinebot(self, user1, user2):
+    def db_create_pair_vinebot(self, user1, user2, parent_command_id=None):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
         if vinebot_user:
-            raise ExecutionError, 'these users are already friends.'
+            raise ExecutionError, (parent_command_id, 'these users are already friends.')
         vinebot_uuid = uuid.uuid4()
         try:
             self.db_execute("""INSERT INTO pair_vinebots (id, user1, user2)
@@ -774,10 +774,10 @@ class LeafComponent(ComponentXMPP):
         except OperationalError:
             raise ExecutionError, 'there was an OperationalError - are you sure both users exist?'
     
-    def db_delete_pair_vinebot(self, user1, user2):
+    def db_delete_pair_vinebot(self, user1, user2, parent_command_id=None):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
         if not vinebot_user:
-            raise ExecutionError, 'No friendship found.'
+            raise ExecutionError, (parent_command_id, 'No friendship found.')
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("DELETE FROM pair_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
@@ -942,13 +942,13 @@ class LeafComponent(ComponentXMPP):
             party_vinebots.append((participants, party_vinebot_user))
         return party_vinebots
     
-    def db_create_user(self, user):
+    def db_create_user(self, user, parent_command_id=None):
         try:
             self.db_execute("INSERT INTO users (name) VALUES (%(user)s)", {'user': user})
         except IntegrityError:
-            raise ExecutionError, 'there was an IntegrityError - are you sure the user doesn\'t already exist?'
+            raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
     
-    def db_destroy_user(self, user):
+    def db_destroy_user(self, user, parent_command_id=None):
         try:
             for friend in self.db_fetch_user_friends(user):
                 self.destroy_friendship(user, friend)
@@ -957,7 +957,7 @@ class LeafComponent(ComponentXMPP):
                 self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
             self.db_execute("DELETE FROM users WHERE name = %(user)s", {'user': user})
         except IntegrityError:
-            raise ExecutionError, 'there was an IntegrityError - are you sure the user doesn\'t already exist?'
+            raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
     
     def db_set_topic(self, vinebot_user, topic):
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
