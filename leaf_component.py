@@ -582,7 +582,7 @@ class LeafComponent(ComponentXMPP):
                 new_msg['to'] = '%s@%s' % (participant, constants.server)
                 new_msg.send()
                 recipients.append(participant)
-        self.db_log_message(vinebot_jid.user, sender, recipients, body, parent_command_id)
+        self.db_log_message(vinebot_jid.user, sender, recipients, body, parent_command_id=parent_command_id)
     
     def broadcast_alert(self, body, participants, vinebot_user, parent_command_id):
         msg = self.Message()
