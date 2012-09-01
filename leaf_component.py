@@ -475,7 +475,7 @@ class LeafComponent(ComponentXMPP):
                 self.add_rosteritem(user1, active_vinebot[1], self.get_nick(active_vinebot[0]))
             for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
                 self.add_rosteritem(user2, active_vinebot[1], self.get_nick(active_vinebot[0]))
-        return parent_command_id, None
+        return parent_command_id, '%s and %s are now friends.' % (user1, user2)
     
     def destroy_friendship(self, parent_command_id, user1, user2):
         #TODO fix this. So, if three users A,B,C are all friends with each other and in a conversation
@@ -496,7 +496,7 @@ class LeafComponent(ComponentXMPP):
         for active_vinebot in self.db_fetch_user_pair_vinebots(user1):
             if user2 not in self.db_fetch_observers(active_vinebot[0]):
                 self.delete_rosteritem(user2, active_vinebot[1])
-        return parent_command_id, None
+        return parent_command_id, '%s and %s are no longer friends.' % (user1, user2)
     
     def prune_roster(self, parent_command_id, user):
         errors = []
@@ -760,7 +760,7 @@ class LeafComponent(ComponentXMPP):
     def db_create_pair_vinebot(self, user1, user2, parent_command_id=None):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
         if vinebot_user:
-            raise ExecutionError, (parent_command_id, 'these users are already friends.')
+            raise ExecutionError, (parent_command_id, '%s and %s were already friends.' % (user1, user2))
         vinebot_uuid = uuid.uuid4()
         try:
             self.db_execute("""INSERT INTO pair_vinebots (id, user1, user2)
@@ -777,7 +777,7 @@ class LeafComponent(ComponentXMPP):
     def db_delete_pair_vinebot(self, user1, user2, parent_command_id=None):
         vinebot_user, is_active = self.db_fetch_pair_vinebot(user1, user2)
         if not vinebot_user:
-            raise ExecutionError, (parent_command_id, 'No friendship found.')
+            raise ExecutionError, (parent_command_id, '%s and %s were not already friends.' % (user1, user2))
         vinebot_id = vinebot_user.replace(constants.vinebot_prefix, '')
         vinebot_uuid = shortuuid.decode(vinebot_id)
         self.db_execute("DELETE FROM pair_vinebots WHERE id = %(id)s", {'id': vinebot_uuid.bytes})
