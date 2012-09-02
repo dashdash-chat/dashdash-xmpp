@@ -34,6 +34,7 @@ class LeafComponent(ComponentXMPP):
         self.registerPlugin('xep_0030') # Service Discovery
         self.registerPlugin('xep_0199') # XMPP Ping
         self.registerPlugin('xep_0085') # Chat State Notifications
+        self.acquired_lock_num = None
         self.db = MySQLConnection(constants.leaf_name, constants.leaf_mysql_password)
         self.ejabberdctl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
@@ -202,9 +203,17 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.friendships))
     
     def disconnect(self, *args, **kwargs):
-        # LATER check if other leaves are online, since otherwise we don't need to do this.
-        # for vinebot in all vinebots
-        #    self.send_presences(vinebot, vinebot.everyone, pshow='unavailable')
+        other_leaves_online = False
+        for lock_num_to_check in range(constants.max_leaves):
+            if self.acquired_lock_num != lock_num_to_check:
+                checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                logging.info('%d checked? %s' % (lock_num_to_check, checked_lock))
+                if not checked_lock:
+                    other_leaves_online = True
+                    break
+        logging.info('disconnecting! other leaves online? %s' % other_leaves_online)
+        if not other_leaves_online:
+            logging.warning("TODO: send unavailable from all vinebots")
         self.db.cleanup()
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
@@ -212,14 +221,16 @@ class LeafComponent(ComponentXMPP):
     ##### event handlers
     def handle_start(self, event):
         other_leaves_online = self.register_leaf()
-        # if other_leaves_online: do a bunch of stuff
-        logging.info('other leaves online? %s' % other_leaves_online)
+        if not other_leaves_online:
+            logging.warning("TODO: send available from all vinebots")
+        logging.info('starting! other leaves online? %s' % other_leaves_online)
                 
     def register_leaf(self):
         for lock_num_to_acquire in range(constants.max_leaves):
             acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
             logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
             if acquired_lock:
+                self.acquired_lock_num = lock_num_to_acquire
                 if lock_num_to_acquire > 0:
                     return True
                 for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
@@ -228,7 +239,7 @@ class LeafComponent(ComponentXMPP):
                     if not checked_lock:
                         return True
                 return False
-        return constants.max_leaves > 0  # if there are no locks to acquire
+        return constants.max_leaves > 0  # if there are no locks to acquire, but we have to go through the whole loop to make sure we acquire one ourself
     
     def handle_presence_available(self, presence):
         pass
