@@ -11,7 +11,7 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
-from bot import Bot
+from vinebot import inebot
 import constants
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLConnection

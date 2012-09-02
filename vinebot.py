@@ -12,7 +12,7 @@ else:
     raw_input = input
 
 
-class Bot(object):
+class Vinebot(object):
     def __init__(self, user, leaf, participants=None, is_active=None, is_party=None, topic=None):
         self._user = user
         self._leaf = leaf
