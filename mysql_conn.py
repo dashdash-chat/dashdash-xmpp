@@ -12,6 +12,21 @@ class MySQLConnection(object):
         self.cursor = None
         self.connect()
     
+    
+    
+    def get_lock(self, lock_name, timeout=0):
+        lock = self.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
+                                                'lock_name': lock_name,
+                                                'timeout': timeout
+                                             }, strip_pairs=True)
+        return (lock and (lock[0] == 1))
+    
+    def is_free_lock(self, lock_name):
+        lock = self.execute_and_fetchall("SELECT IS_FREE_LOCK(%(lock_name)s)", {
+                                                'lock_name': lock_name
+                                             }, strip_pairs=True)
+        return (lock and (lock[0] == 1))
+    
     def execute_and_fetchall(self, query, data={}, strip_pairs=False):
         self.execute(query, data)
         fetched = self.cursor.fetchall()
@@ -23,6 +38,7 @@ class MySQLConnection(object):
         return []
     
     def execute(self, query, data={}):
+        #logging.info(query % data)
         if not self.conn or not self.cursor:
             logging.info("MySQL connection missing, attempting to reconnect and retry query")
             self.connect()
@@ -45,7 +61,7 @@ class MySQLConnection(object):
                                         self.password,
                                         constants.db_name)
             #self.conn.autocommit(True)
-            self.cursor = self.db.cursor()
+            self.cursor = self.conn.cursor()
             logging.info("MySQL connection created")
         except MySQLdb.Error, e:
             logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))

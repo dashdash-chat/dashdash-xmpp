@@ -11,7 +11,7 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
-from vinebot import inebot
+from vinebot import Vinebot
 import constants
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLConnection
@@ -35,7 +35,7 @@ class LeafComponent(ComponentXMPP):
         self.registerPlugin('xep_0199') # XMPP Ping
         self.registerPlugin('xep_0085') # Chat State Notifications
         self.db = MySQLConnection(constants.leaf_name, constants.leaf_mysql_password)
-        self.ejabberdctl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaf_xmlrpc_password)
+        self.ejabberdctl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
         self.add_event_handler("session_start",        self.handle_start)
         self.del_event_handler('presence_probe',       self._handle_probe)  # important! see SleekXMPP chat room conversation from June 17, 2012
@@ -205,12 +205,30 @@ class LeafComponent(ComponentXMPP):
         # LATER check if other leaves are online, since otherwise we don't need to do this.
         # for vinebot in all vinebots
         #    self.send_presences(vinebot, vinebot.everyone, pshow='unavailable')
+        self.db.cleanup()
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
     
     ##### event handlers
     def handle_start(self, event):
-        pass
+        other_leaves_online = self.register_leaf()
+        # if other_leaves_online: do a bunch of stuff
+        logging.info('other leaves online? %s' % other_leaves_online)
+                
+    def register_leaf(self):
+        for lock_num_to_acquire in range(constants.max_leaves):
+            acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
+            logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
+            if acquired_lock:
+                if lock_num_to_acquire > 0:
+                    return True
+                for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
+                    checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                    logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
+                    if not checked_lock:
+                        return True
+                return False
+        return constants.max_leaves > 0  # if there are no locks to acquire
     
     def handle_presence_available(self, presence):
         pass
@@ -222,6 +240,7 @@ class LeafComponent(ComponentXMPP):
         pass
     
     def handle_msg(self, msg):
+        logging.info(msg)
         pass
     
     def handle_chatstate(self, msg):
@@ -242,7 +261,6 @@ if __name__ == '__main__':
     xmpp = LeafComponent()
     if xmpp.connect(constants.server_ip, constants.component_port):
         xmpp.process(block=True)
-        xmpp.cleanup()
         logging.info("Done")
     else:    
         logging.error("Unable to connect")
