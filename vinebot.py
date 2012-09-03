@@ -11,17 +11,33 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
+class NotVinebotException(Exception):
+    pass
 
 class Vinebot(object):
-    def __init__(self, user, leaf, participants=None, is_active=None, is_party=None, topic=None):
+    def __init__(self, user, database, ejabberdctl):
+        self._db = database
+        self._ejabberdctl = ejabberdctl
+        if not user.startswith(constants.vinebot_prefix):
+            raise NotVinebotException
         self._user = user
-        self._leaf = leaf
-        self._is_vinebot = user.startswith(constants.vinebot_prefix)
+        _id = self._fetch_id_for_user()
+        if not _id:
+            raise NotVinebotException
+        self._id = _id
+        
         self._participants = participants
         self._is_active = is_active
         self._is_party = is_party
         self._topic = self._format_topic(topic)
         self._observers = None
+    
+    def _fetch_id_for_user(self):
+        _shortuuid = self._user.replace(constants.vinebot_prefix, '')
+        _uuid = shortuuid.decode(_shortuuid)
+        return self._db.execute_and_fetch_all("SELECT id FROM vinebots WHERE uuid = %(uuid)s", {
+                                                 'uuid': _uuid.bytes
+                                             }, strip_pairs=True)
     
     def other_participant(self, user):
         if not self.is_party and len(self.participants) == 2:
@@ -85,7 +101,7 @@ class Vinebot(object):
                 return set([])
             else:
                 raise AttributeError
-                
+    
     def __setattr__(self, name, value):
         if name == 'participants':
             dict.__setattr__(self, '_participants', value)
@@ -101,3 +117,4 @@ class Vinebot(object):
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
+    

@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+
 import sys
 from datetime import datetime
 import MySQLdb
@@ -22,7 +21,6 @@ if sys.version_info < (3, 0):
     sys.setdefaultencoding('utf8')
 else:
     raw_input = input
-
 
 class LeafComponent(ComponentXMPP):
     def __init__(self):
@@ -53,65 +51,65 @@ class LeafComponent(ComponentXMPP):
     
     def add_slash_commands(self):
         # Access filters for /commands
-        def admin_to_vinebot(sender, bot):
-            return sender.bare in constants.admin_users and bot.is_vinebot
-        def admin_to_leaf(sender, bot):
-            return sender.bare in constants.admin_users and not bot.is_vinebot
-        def admin_or_graph_to_leaf(sender, bot):
-            return sender.bare in (constants.admin_users + [constants.graph_xmpp_user]) and not bot.is_vinebot
-        def participant_to_vinebot(sender, bot):
-            return sender.user in bot.participants and bot.is_vinebot
-        def observer_to_vinebot(sender, bot):
-            return sender.user in bot.observers and bot.is_vinebot
-        def admin_or_participant_to_vinebot(sender, bot):
-            return admin_to_vinebot(sender, bot) or participant_to_vinebot(sender, bot)
+        def admin_to_vinebot(sender, vinebot):
+            return sender.bare in constants.admin_users and vinebot
+        def admin_to_leaf(sender, vinebot):
+            return sender.bare in constants.admin_users and not vinebot
+        def admin_or_graph_to_leaf(sender, vinebot):
+            return sender.bare in (constants.admin_users + [constants.graph_xmpp_user]) and not vinebot
+        def participant_to_vinebot(sender, vinebot):
+            return sender.user in bot.participants and vinebot
+        def observer_to_vinebot(sender, vinebot):
+            return sender.user in bot.observers and vinebot
+        def admin_or_participant_to_vinebot(sender, vinebot):
+            return admin_to_vinebot(sender, vinebot) or participant_to_vinebot(sender, vinebot)
         # Argument transformations for /commands
-        def logid_sender_vinebot(command_name, sender, bot, arg_string, arg_tokens):
-            if bot.is_vinebot and len(arg_tokens) == 0:
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, None, None)
-                return [parent_command_id, sender.user, bot]
+        def logid_sender_vinebot(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot and len(arg_tokens) == 0:
+                parent_command_id = self.db.log_command(sender.user, command_name, None, None, vinebot=vinebot)
+                return [parent_command_id, sender.user, vinebot]
             return False
-        def logid_sender_vinebot_token(command_name, sender, bot, arg_string, arg_tokens):
-            if bot.is_vinebot and len(arg_tokens) == 1:
+        def logid_sender_vinebot_token(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot and len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
-                return [parent_command_id, sender.user, bot, token]
+                parent_command_id = self.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
+                return [parent_command_id, sender.user, vinebot, token]
             return False
-        def logid_sender_vinebot_string_or_none(command_name, sender, bot, arg_string, arg_tokens):
-            if bot.is_vinebot:
+        def logid_sender_vinebot_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot:
                 string_or_none = arg_string if len(arg_string.strip()) > 0 else None
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, None, string_or_none)
-                return [parent_command_id, sender.user, bot, string_or_none]
+                parent_command_id = self.db.log_command(sender.user, command_name, None, string_or_none, vinebot=vinebot)
+                return [parent_command_id, sender.user, vinebot, string_or_none]
             return False
-        def logid_sender_vinebot_token_string(command_name, sender, bot, arg_string, arg_tokens):
-            if bot.is_vinebot and len(arg_tokens) >= 2:
+        def logid_sender_vinebot_token_string(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot and len(arg_tokens) >= 2:
                 token = arg_tokens[0]
                 string = arg_string.partition(arg_tokens[0])[2].strip()
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, string)
-                return [parent_command_id, sender.user, bot, token, string]
+                parent_command_id = self.db.log_command(sender.user, command_name, token, string, vinebot=vinebot)
+                return [parent_command_id, sender.user, vinebot, token, string]
             return False
-        def logid_token(command_name, sender, bot, arg_string, arg_tokens):
+        def logid_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
+                parent_command_id = self.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, token]
             return False
-        def logid_token_or_none(command_name, sender, bot, arg_string, arg_tokens):
+        def logid_token_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token, None)
+                parent_command_id = self.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, token]
             elif len(arg_tokens) == 0:
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, None, None)
+                parent_command_id = self.db.log_command(sender.user, command_name, None, None, vinebot=vinebot)
                 return [parent_command_id]
             return False
-        def logid_token_token(command_name, sender, bot, arg_string, arg_tokens):
+        def logid_token_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 2:
                 token1 = arg_tokens[0]
                 token2 = arg_tokens[1]
                 # Please forgive me for storing the second token as the command's string, but ugh I don't want
                 # to add an extra column right now. I'll fix it when I have a second command with two tokens.
-                parent_command_id = self.db_log_command(bot.user, sender.user, command_name, token1, token2)
+                parent_command_id = self.db_log_command(sender.user, command_name, token1, token2, vinebot=vinebot)
                 return [parent_command_id, token1, token2]
             return False
         # Register vinebot commands
@@ -170,13 +168,13 @@ class LeafComponent(ComponentXMPP):
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token_token,
-                                       action           = self.create_user))
+                                       action           = self.new_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = '<username>',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
-                                       action           = self.destroy_user))
+                                       action           = self.delete_user))
         self.commands.add(SlashCommand(command_name     = 'new_friendship',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
@@ -220,26 +218,25 @@ class LeafComponent(ComponentXMPP):
     
     ##### event handlers
     def handle_start(self, event):
-        other_leaves_online = self.register_leaf()
+        def register_leaf(self):  # this is a function because using return makes it cleaner
+            for lock_num_to_acquire in range(constants.max_leaves):
+                acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
+                logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
+                if acquired_lock:
+                    self.acquired_lock_num = lock_num_to_acquire
+                    if lock_num_to_acquire > 0:
+                        return True
+                    for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
+                        checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                        logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
+                        if not checked_lock:
+                            return True
+                    return False
+            return constants.max_leaves > 0  # if there are no locks to acquire, but we have to go through the whole loop to make sure we acquire one ourself
+        other_leaves_online = register_leaf()
         if not other_leaves_online:
             logging.warning("TODO: send available from all vinebots")
         logging.info('starting! other leaves online? %s' % other_leaves_online)
-                
-    def register_leaf(self):
-        for lock_num_to_acquire in range(constants.max_leaves):
-            acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
-            logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
-            if acquired_lock:
-                self.acquired_lock_num = lock_num_to_acquire
-                if lock_num_to_acquire > 0:
-                    return True
-                for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
-                    checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
-                    logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
-                    if not checked_lock:
-                        return True
-                return False
-        return constants.max_leaves > 0  # if there are no locks to acquire, but we have to go through the whole loop to make sure we acquire one ourself
     
     def handle_presence_available(self, presence):
         pass
@@ -251,13 +248,63 @@ class LeafComponent(ComponentXMPP):
         pass
     
     def handle_msg(self, msg):
-        logging.info(msg)
-        pass
+        def handle_command(msg vinebot=None):
+            parent_command_id, response = self.commands.handle_command(msg['from'], msg['body'], vinebot)
+            if not parent_command_id:  # if the command has some sort of error
+                command_name, arg_string = self.commands.parse_command(msg['body'])
+                parent_command_id = self.db.log_command(msg['from'].user, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
+            self.send_reply(msg, response, parent_command_id=parent_command_id)
+        if msg['type'] in ('chat', 'normal'):
+            try:
+                vinebot = Vinebot(msg['to'].user, self)
+                if self.commands.is_command(msg['body']):
+                    handle_command(msg, vinebot)
+                else:
+                    self.send_reply(msg, 'Received: %s' % msg['body'])
+                    # if msg['from'].user in bot.participants:
+                    #     if not bot.is_active:
+                    #         user1, user2 = bot.participants  # in case one user is away or offline
+                    #         user1_status = self.user_status(user1)
+                    #         user2_status = self.user_status(user2)
+                    #         self.send_presences(bot, [user1], pshow=user2_status)
+                    #         self.send_presences(bot, [user2], pshow=user1_status)
+                    #         if user1_status != 'unavailable' and user2_status != 'unavailable':
+                    #             self.db_activate_pair_vinebot(bot.user, True)
+                    #             self.update_rosters(set([]), bot.participants, bot.user, False)
+                    #             self.send_presences(bot, bot.observers)
+                    #             self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
+                    #         else:
+                    #             parent_message_id = self.db_log_message(bot.user, msg['from'].user, [], msg['body'])
+                    #             self.send_reply(msg, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
+                    #     else:
+                    #         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
+                    # elif msg['from'].user in bot.observers:
+                    #     if bot.is_active:
+                    #         self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
+                    #         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
+                    #     else:    
+                    #         parent_message_id = self.db_log_message(bot.user, msg['from'].user, [], msg['body'])
+                    #         self.send_reply(msg, 'Sorry, this conversation has ended for now.', parent_message_id=parent_message_id)
+                    # else:
+                    #     parent_message_id = self.db_log_message(bot.user, msg['from'].user, [], msg['body'])
+                    #     if bot.is_active:
+                    #         self.send_reply(msg, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
+                    #     else:    
+                    #         self.send_reply(msg, 'Sorry, this conversation has ended.', parent_message_id=parent_message_id)
+            except NotVinebotException:
+                if msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
+                    if self.commands.is_command(msg['body']):
+                        handle_command(msg)
+                    else:
+                        parent_message_id = self.db_log_message(msg['from'].user, [], msg['body'])
+                        self.send_reply(msg, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
+                else:
+                    parent_message_id = self.db_log_message(msg['from'].user, [], msg['body'])
+                    self.send_reply(msg, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
     
     def handle_chatstate(self, msg):
         pass
     
-
 
 if __name__ == '__main__':
     optp = OptionParser()

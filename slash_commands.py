@@ -31,8 +31,8 @@ class SlashCommand(object):
         self.transform_args = transform_args  # should return the args as a list if they are valid. an empty arg list shouldn't raise an error!
         self._action = action
     
-    def execute(self, sender, arg_string, bot):
-        if not self.validate_sender(sender, bot):
+    def execute(self, sender, arg_string, vinebot):
+        if not self.validate_sender(sender, vinebot):
             raise PermissionError
         # pass the command_name to to transform_args so that it can be properly logged
         # and the sender in case the args depend on it or in case it *should* be an arg
@@ -41,7 +41,7 @@ class SlashCommand(object):
         # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
         # note that, if successful, this will also return the parent_command_id, to be used by the command's action method
         arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
-        args = self.transform_args(self.name, sender, bot, arg_string, arg_tokens)
+        args = self.transform_args(self.name, sender, vinebot, arg_string, arg_tokens)
         if args is False:
             raise ArgFormatError
         return self._action(*args)
@@ -75,12 +75,12 @@ class SlashCommandRegistry(object):
             command_name = command_name[:MAX_COMMAND_LENGTH]  # re-assign command name after setting arg_string
         return command_name.lower(), arg_string
     
-    def handle_command(self, sender, message, bot):
+    def handle_command(self, sender, message, vinebot):
         command_name, arg_string = self.parse_command(message)
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
             try: 
-                parent_command_id, result_message = slash_command.execute(sender, arg_string, bot)
+                parent_command_id, result_message = slash_command.execute(sender, arg_string, vinebot)
                 if result_message is not None:  # this way we can return an empty string to send no response
                     return parent_command_id, result_message
                 else:
@@ -96,7 +96,7 @@ class SlashCommandRegistry(object):
         elif command_name == 'help':
             command_string = ''
             for slash_command in self.slash_commands.values():
-                if slash_command.validate_sender(sender, bot):
+                if slash_command.validate_sender(sender, vinebot):
                     if slash_command.arg_format == '':
                         command_string += '\t/%s: %s\n' % (slash_command.name, slash_command.description)
                     else:

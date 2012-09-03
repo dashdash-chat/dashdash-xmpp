@@ -14,6 +14,68 @@ class MySQLConnection(object):
     
     
     
+    def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
+        if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
+            return
+        if sender:
+            log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
+                                        VALUES (
+                                            %(vinebot_id)s,
+                                            (SELECT id FROM users WHERE name = %(sender)s),
+                                            %(parent_message_id)s,
+                                            %(parent_command_id)s,
+                                            %(body)s
+                                        )""", {
+                                            'vinebot_id': vinebot.id if vinebot else None,
+                                            'sender':  sender,
+                                            'parent_message_id': parent_message_id,
+                                            'parent_command_id': parent_command_id,
+                                            'body': body.encode('utf-8')
+                                        })
+        else:
+            log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
+                                        VALUES (
+                                            %(vinebot_id)s,
+                                            %(sender_id)s,
+                                            %(parent_message_id)s,
+                                            %(parent_command_id)s,
+                                            %(body)s
+                                        )""", {
+                                            'vinebot_id': vinebot.id if vinebot else None,
+                                            'sender_id':  None,
+                                            'parent_message_id': parent_message_id,
+                                            'parent_command_id': parent_command_id,
+                                            'body': body.encode('utf-8')
+                                        })
+        for recipient in recipients:
+            self.execute("""INSERT INTO message_recipients (message_id, recipient_id)
+                               VALUES (
+                                   %(log_id)s,
+                                   (SELECT id FROM users WHERE name = %(recipient)s)
+                               )""", {'log_id': log_id, 'recipient': recipient})
+        return log_id
+    
+    def log_command(self, sender, command_name, token, string, vinebot=None, is_valid=True):
+        if string:
+            string = string.encode('utf-8')
+        return self.execute("""INSERT INTO commands (vinebot_id, sender_id, command_name, is_valid, token, string)
+                                  VALUES (
+                                      %(vinebot_id)s,
+                                      (SELECT id FROM users WHERE name = %(sender)s),
+                                      %(command_name)s,
+                                      %(is_valid)s,
+                                      %(token)s,
+                                      %(string)s
+                                  )""", {
+                                      'vinebot_id': vinebot.id if vinebot else None,
+                                      'sender':  sender,
+                                      'command_name': command_name,
+                                      'is_valid': is_valid,
+                                      'token': token or None,
+                                      'string': string or None
+                                  })
+
+    
     def get_lock(self, lock_name, timeout=0):
         lock = self.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
                                                 'lock_name': lock_name,
