@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+import uuid
+import shortuuid
 import constants
 from datetime import datetime, timedelta
 
@@ -14,107 +16,142 @@ else:
 class NotVinebotException(Exception):
     pass
 
-class Vinebot(object):
-    def __init__(self, user, database, ejabberdctl):
-        self._db = database
-        self._ejabberdctl = ejabberdctl
-        if not user.startswith(constants.vinebot_prefix):
-            raise NotVinebotException
-        self._user = user
-        _id = self._fetch_id_for_user()
-        if not _id:
-            raise NotVinebotException
-        self._id = _id
+class AbstractVinebot(object):
+    def __init__(self, db, ectl):
+        self._db = db
+        self._ectl = ectl
+        self._edges = []
+        # self._participants = participants
+        # self._is_active = is_active
+        # self._is_party = is_party
+        # self._topic = self._format_topic(topic)
+        # self._observers = None
+    
+    def cleanup(self):
+        pass
+        #TODO release the lock for this vinebot
+    
+    def add_to_roster_of(self, user):
+        self._ectl.add_rosteritem(user.name, self.jiduser, user.name)  #TODO calculate the nickname
+    
+    def remove_from_roster_of(self, user):
+        self._ectl.delete_rosteritem(user.name, self.jiduser)
+    
+    def is_active(self):
+        participant_count = self._db.execute_and_fetch_all("""SELECT COUNT(*)
+                                                              FROM participants
+                                                              WHERE vinebot_id = %(id)s
+                                                           """, {
+                                                               'id': self.id
+                                                           })
+        return participant_count > 0
+    
+    def update_rosters(self):
+        if len(self._edges) == 2:
+            logging.info("update symmetric rosters here")
+        elif len(self._edges) == 1:
+            logging.info("update asymmetric rosters here")
+            # make sure that vinebot isn't on other users roster?
+        else:
+            logging.info("update party rosters")
+    
+    
+    def _update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
+        observer_nick = self.get_nick(new_participants)
+        # First, create the old and new lists of observers
+        old_observers = self.db_fetch_observers(old_participants)
+        new_observers = self.db_fetch_observers(new_participants)
+        # Then, update the participants
+        if participants_changed:
+            for old_participant in old_participants.difference(new_observers).difference(new_participants):
+                self.delete_rosteritem(old_participant, vinebot_user)
+            for new_participant in new_participants:
+                self.add_rosteritem(new_participant, vinebot_user, self.get_nick(new_participants, new_participant))
+        # Finally, update the observers
+        for old_observer in old_observers.difference(new_participants).difference(new_observers):
+            self.delete_rosteritem(old_observer, vinebot_user)
+        for new_observer in new_observers.difference(new_participants):
+            self.add_rosteritem(new_observer, vinebot_user, observer_nick)
+            
+
+class DatabaseVinebot(AbstractVinebot):
+    def __init__(self, db, ectl, dbid=None, edges=None):
+        super(StanzaVinebot, self).__init__(db, ectl)        
+        if edges and len(edges) > 2:
+            raise Exception, 'Vinebots cannot have more than two edges associated with them.'
+        if dbid:
+            _uuid = self._db.execute_and_fetch_all("""SELECT uuid 
+                                                      FROM vinebots
+                                                      WHERE id = %(id)s
+                                                   """, {
+                                                       'id': dbid
+                                                   }, strip_pairs=True)
+            if not _uuid:
+                raise NotVinebotException
+            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+            self.id = dbid
+        else:
+            _uuid = uuid.uuid4()
+            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+            self.id = self._db.execute("""INSERT INTO vinebots (uuid)
+                                          VALUES (%(uuid)s)
+                                       """, {
+                                          'uuid': _uuid
+                                       })
+        if edges:
+            for edge in edges:
+                self.add_database_edge(edge)
+        #TODO get a lock for this vinebot
+    
+    def add_database_edge(self, edge):
+        if edge.vinebot_id != self.id:
+            raise Exception, 'Edge with id %s and vinebot_id %s cannot be added to Vinebot with id %s' % (edge.id, edge.vinebot_id, self.id)
+        if len(self._edges) == 2:
+            raise Exception, "Vinebot %s already has two edges %s and %s" % (self._id, self._edges[0].id, self._edges[1].id)
+        if len(self._edges) == 1:
+            if not (edge.from_user.id == self._edges[0].to_user.id and edge.to_user.id == self._edges[0].from_user.id):
+            raise Exception, "New edge users %s and %s do not match existing edge users %s and %s " % (edge.from_user.id, edge.to_user.id, self._edges[0].from_user.id, self._edges[0].to_user.id)
+        self._edges.append(edge)
         
-        self._participants = participants
-        self._is_active = is_active
-        self._is_party = is_party
-        self._topic = self._format_topic(topic)
-        self._observers = None
+    def delete(self):
+        self._db.execute("""DELETE FROM edges
+                           WHERE vinebot_id = %(id)s
+                        """, {           
+                           'id': self.id
+                        })
+        self._db.execute("""DELETE FROM participants
+                           WHERE vinebot_id = %(id)s
+                        """, {           
+                           'id': self.id
+                        })
+        self._db.execute("""DELETE FROM topics
+                           WHERE vinebot_id = %(id)s
+                        """, {           
+                           'id': self.id
+                        })
+        self._db.execute("""DELETE FROM vinebots
+                           WHERE id = %(id)s
+                        """, {           
+                           'id': self.id
+                        })
+        
     
-    def _fetch_id_for_user(self):
-        _shortuuid = self._user.replace(constants.vinebot_prefix, '')
-        _uuid = shortuuid.decode(_shortuuid)
-        return self._db.execute_and_fetch_all("SELECT id FROM vinebots WHERE uuid = %(uuid)s", {
-                                                 'uuid': _uuid.bytes
-                                             }, strip_pairs=True)
-    
-    def other_participant(self, user):
-        if not self.is_party and len(self.participants) == 2:
-            return self.participants.difference([user]).pop()
-        else:
-            raise Exception, 'Improper use of method: must use on pair bot with two participants.' + \
-                ' user=%s, is_party=%s, participants=%s' % (self.user, self.is_party, self.participants)
-    
-    def _fetch_basic_data(self):
-        self._participants, self._is_active, self._is_party = self.leaf.db_fetch_vinebot(self.user)
-    
-    def _format_topic(self, topic):
-        if topic:
-            body, created = topic
-            return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (set on %b %d at %-I:%M%p EST)'))
-        return None
-    
-    def __getattr__(self, name):
-        if name == 'user':
-            return self._user
-        elif name == 'leaf':
-            return self._leaf
-        elif name == 'is_vinebot':
-            return self._is_vinebot
-        elif self.is_vinebot:
-            if name == 'participants':
-                if self._participants is None:
-                    self._fetch_basic_data()
-                return self._participants
-            elif name == 'is_active':
-                if self._is_active is None:
-                    self._fetch_basic_data()
-                return self._is_active
-            elif name == 'is_party':
-                if self._is_party is None:
-                    self._fetch_basic_data()
-                return self._is_party
-            elif name == 'topic':
-                if self._topic is None:
-                    self._topic = self._format_topic(self.leaf.db_fetch_topic(self.user))
-                return self._topic
-            elif name == 'observers':
-                if self._observers is None:
-                    self._observers = self.leaf.db_fetch_observers(self.participants)
-                return self._observers
-            elif name == 'everyone':
-                return self.participants.union(self.observers)
-            else:
-                logging.error("BLEARGH %s" % name)
-                raise AttributeError
-        else:
-            if name == 'participants':
-                return set([])
-            # elif name == 'is_active':
-            #     return False
-            # elif name == 'is_party':
-            #     return False
-            # elif name == 'topic':
-            #     return ''
-            elif name == 'observers':
-                return set([])
-            else:
-                raise AttributeError
-    
-    def __setattr__(self, name, value):
-        if name == 'participants':
-            dict.__setattr__(self, '_participants', value)
-        elif name == 'is_active':
-            dict.__setattr__(self, '_is_active', value)
-        elif name == 'is_party':
-            dict.__setattr__(self, '_is_party', value)
-        elif name == 'topic':
-            dict.__setattr__(self, '_topic', self._format_topic(value))
-        elif name == 'observers':    
-            dict.__setattr__(self, '_observers', value)
-        elif name in ['user', 'leaf', 'is_vinebot', 'everyone']:
-            raise AttributeError("%s is an immutable attribute." % name)
-        else:
-            dict.__setattr__(self, name, value)
+
+class StanzaVinebot(AbstractVinebot):
+    def __init__(self, db, ectl, jiduser):
+       super(StanzaVinebot, self).__init__(db, ectl)
+       if not jiduser.startswith(constants.vinebot_prefix):
+           raise NotVinebotException
+       _shortuuid = self._jiduser.replace(constants.vinebot_prefix, '')
+       _uuid = shortuuid.decode(_shortuuid)
+       dbid = self._db.execute_and_fetch_all("""SELECT id
+                                               FROM vinebots
+                                               WHERE uuid = %(uuid)s
+                                            """, {
+                                               'uuid': _uuid.bytes
+                                            }, strip_pairs=True)
+       if not dbid:
+           raise NotVinebotException
+       self.jiduser = jiduser
+       self.id = dbid
     

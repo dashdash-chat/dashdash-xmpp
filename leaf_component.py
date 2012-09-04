@@ -10,7 +10,9 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
-from vinebot import Vinebot
+from user import User
+from edge import DatabaseEdge, StanzaEdge, NotEdgeException
+from vinebot import DatabaseVinebot, StanzaVinebot, NotVinebotException
 import constants
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLConnection
@@ -34,7 +36,7 @@ class LeafComponent(ComponentXMPP):
         self.registerPlugin('xep_0085') # Chat State Notifications
         self.acquired_lock_num = None
         self.db = MySQLConnection(constants.leaf_name, constants.leaf_mysql_password)
-        self.ejabberdctl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
+        self.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
         self.add_event_handler("session_start",        self.handle_start)
         self.del_event_handler('presence_probe',       self._handle_probe)  # important! see SleekXMPP chat room conversation from June 17, 2012
@@ -168,25 +170,25 @@ class LeafComponent(ComponentXMPP):
                                        text_description = 'Create a new user in both ejabberd and the Vine database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token_token,
-                                       action           = self.new_user))
+                                       action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = '<username>',
                                        text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.delete_user))
-        self.commands.add(SlashCommand(command_name     = 'new_friendship',
+        self.commands.add(SlashCommand(command_name     = 'new_edge',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token_token,
-                                       action           = self.create_friendship))
-        self.commands.add(SlashCommand(command_name     = 'del_friendship',
+                                       action           = self.create_edge))
+        self.commands.add(SlashCommand(command_name     = 'del_edge',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Delete a friendship between two users.',
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token_token,
-                                       action           = self.destroy_friendship))
+                                       action           = self.delete_edge))
         self.commands.add(SlashCommand(command_name     = 'prune',
                                        text_arg_format  = '<username>',
                                        text_description = 'Remove old, unused vinebots from a user\'s roster.',
@@ -304,6 +306,78 @@ class LeafComponent(ComponentXMPP):
     
     def handle_chatstate(self, msg):
         pass
+
+    ##### admin /commands
+    def create_user(self, parent_command_id, user, password):
+        try:
+            self.db.execute("INSERT INTO users (name) VALUES (%(user)s)", {'user': user})
+            self.ectl.register(user, password)
+        except IntegrityError:
+            raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
+        return parent_command_id, None
+    
+    def delete_user(self, parent_command_id, user):
+        try:
+            #TODO implement this
+            # for friend in self.db_fetch_user_friends(user):
+            #     self.delete_friendship(user, friend)
+            # for party_vinebot_uuid in self.db_fetch_user_party_vinebots(user):
+            #     vinebot_user = self.get_vinebot_user(party_vinebot_uuid)
+            #     self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
+            self.db.execute("DELETE FROM users WHERE name = %(user)s", {'user': user})
+            self.ectl.unregister(user)
+        except IntegrityError:
+            raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user already exists?')
+        return parent_command_id, None
+    
+    def create_edge(self, parent_command_id, from_username, to_username):
+        try:
+            f_user = User(self.db, self.ectl, name=from_username)
+            t_user = User(self.db, self.ectl, name=to_username)
+        except NotUserException, e:
+            raise ExecutionError, (parent_command, e)
+        try:
+            FetchedEdge(f_user, t_user)
+            raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge connecting them.' % (f_user.name, t_user.name))
+        except NotEdgeException:  # no edge was found in the database, so we can continue
+            pass
+        reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
+        if reverse_edge:
+            vinebot = DatabaseVinebot(self.db, self.ectl, dbid=reverse_edge.vinebot_id, edges=[reverse_edge])
+            f_user.note_visible_active_vinebots()
+            t_user.note_visible_active_vinebots()
+            InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
+            f_user.update_visible_active_vinebots()
+            t_user.update_visible_active_vinebots()
+        else:
+            vinebot = DatabaseVinebot(self.db, self.ectl)
+            InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
+        vinebot.add_to_roster_of(f_user)
+        vinebot.cleanup()
+    
+    def delete_edge(self, parent_command_id, from_username, to_username):
+        try:
+            f_user = User(self.db, self.ectl, name=from_username)
+            t_user = User(self.db, self.ectl, name=to_username)
+        except NotUserException, e:
+            raise ExecutionError, (parent_command, e)
+        try:
+            edge = FetchedEdge(f_user, t_user)
+        except NotEdgeException:
+            raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
+        vinebot = DatabaseVinebot(self.db, self.ectl, dbid=edge.vinebot_id)
+        try:
+            reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
+            f_user.note_visible_active_vinebots()
+            t_user.note_visible_active_vinebots()
+            edge.delete()
+            f_user.update_visible_active_vinebots()
+            t_user.update_visible_active_vinebots()
+        except NotEdgeException:
+            if not vinebot.is_active()
+                vinebot.delete()
+        vinebot.remove_from_roster_of(f_user)
+        vinebot.cleanup()
     
 
 if __name__ == '__main__':
@@ -322,11 +396,6 @@ if __name__ == '__main__':
         logging.info("Done")
     else:    
         logging.error("Unable to connect")
-
-
-
-
-
 
 
 
