@@ -27,8 +27,8 @@ class User(object):
                                                      WHERE name = %(name)s
                                                      LIMIT 1
                                                   """, {
-                                                     'name' = name
-                                                  } strip_pairs=True)
+                                                     'name': name
+                                                  }, strip_pairs=True)
         elif dbid:
             self.id   = dbid
             self.name = self.execute_and_fetchall("""SELECT name
@@ -36,8 +36,8 @@ class User(object):
                                                      WHERE id = %(id)s
                                                      LIMIT 1
                                                   """, {
-                                                     'id' = dbid
-                                                  } strip_pairs=True)
+                                                     'id': dbid
+                                                  }, strip_pairs=True)
         else:
             raise Exception, 'User objects must be initialized with either a name or id.'
         if not self.id or not self.name:
@@ -52,7 +52,7 @@ class User(object):
                                             AND outgoing.to_id = incoming.from_id
                                             AND participants.user_id = outgoing.to_id
                                          """, {
-                                            'id' = self.id
+                                            'id': self.id
                                          }, strip_pairs=True)
     
     def note_visible_active_vinebots(self):
@@ -63,10 +63,10 @@ class User(object):
             raise Exception, 'User\'s noted visible active vinebots must be fetched before they are updated!'
         current_vinebot_ids = set(self.fetch_visible_active_vinebots())
         for vinebot_id in self._noted_vinebot_ids.difference(current_vinebot_ids):
-            vinbot = DatabaseVinebot(self._db, self._ectl, dbid=reverse_edge.vinebot_id, 
+            vinebot = DatabaseVinebot(self._db, self._ectl, dbid=reverse_edge.vinebot_id)
             self._ectl.delete_rosteritem(self.name, vinbot.jiduser)
         for vinebot_id in current_vinebot_ids.difference(self._noted_vinebot_ids):
-            vinbot = DatabaseVinebot(self._db, self.ectl, dbid=reverse_edge.vinebot_id, 
+            vinebot = DatabaseVinebot(self._db, self.ectl, dbid=reverse_edge.vinebot_id)
             self._ectl.add_rosteritem(self.name, vinbot.jiduser, vinbot.jiduser)  #TODO calculate nick
         self._noted_vinebot_ids = None
     
@@ -76,7 +76,7 @@ class User(object):
                                                    WHERE user_id = %(id)s
                                                    LIMIT 1
                                                 """, {
-                                                   'id' = self.id
+                                                   'id': self.id
                                                 }, strip_pairs=True)
         return [DatabaseVinebot(self._db, self._ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
     

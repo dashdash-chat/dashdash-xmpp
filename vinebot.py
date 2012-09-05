@@ -26,6 +26,11 @@ class AbstractVinebot(object):
         # self._is_party = is_party
         # self._topic = self._format_topic(topic)
         # self._observers = None
+        #TODO
+        #TODO
+        #TODO get a lock for this vinebot
+        #TODO
+        #TODO
     
     def cleanup(self):
         pass
@@ -55,62 +60,31 @@ class AbstractVinebot(object):
         else:
             logging.info("update party rosters")
     
+    # def _update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
+    #     observer_nick = self.get_nick(new_participants)
+    #     # First, create the old and new lists of observers
+    #     old_observers = self.db_fetch_observers(old_participants)
+    #     new_observers = self.db_fetch_observers(new_participants)
+    #     # Then, update the participants
+    #     if participants_changed:
+    #         for old_participant in old_participants.difference(new_observers).difference(new_participants):
+    #             self.delete_rosteritem(old_participant, vinebot_user)
+    #         for new_participant in new_participants:
+    #             self.add_rosteritem(new_participant, vinebot_user, self.get_nick(new_participants, new_participant))
+    #     # Finally, update the observers
+    #     for old_observer in old_observers.difference(new_participants).difference(new_observers):
+    #         self.delete_rosteritem(old_observer, vinebot_user)
+    #     for new_observer in new_observers.difference(new_participants):
+    #         self.add_rosteritem(new_observer, vinebot_user, observer_nick)
     
-    def _update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
-        observer_nick = self.get_nick(new_participants)
-        # First, create the old and new lists of observers
-        old_observers = self.db_fetch_observers(old_participants)
-        new_observers = self.db_fetch_observers(new_participants)
-        # Then, update the participants
-        if participants_changed:
-            for old_participant in old_participants.difference(new_observers).difference(new_participants):
-                self.delete_rosteritem(old_participant, vinebot_user)
-            for new_participant in new_participants:
-                self.add_rosteritem(new_participant, vinebot_user, self.get_nick(new_participants, new_participant))
-        # Finally, update the observers
-        for old_observer in old_observers.difference(new_participants).difference(new_observers):
-            self.delete_rosteritem(old_observer, vinebot_user)
-        for new_observer in new_observers.difference(new_participants):
-            self.add_rosteritem(new_observer, vinebot_user, observer_nick)
-            
-
-class DatabaseVinebot(AbstractVinebot):
-    def __init__(self, db, ectl, dbid=None, edges=None):
-        super(StanzaVinebot, self).__init__(db, ectl)        
-        if edges and len(edges) > 2:
-            raise Exception, 'Vinebots cannot have more than two edges associated with them.'
-        if dbid:
-            _uuid = self._db.execute_and_fetch_all("""SELECT uuid 
-                                                      FROM vinebots
-                                                      WHERE id = %(id)s
-                                                   """, {
-                                                       'id': dbid
-                                                   }, strip_pairs=True)
-            if not _uuid:
-                raise NotVinebotException
-            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
-            self.id = dbid
-        else:
-            _uuid = uuid.uuid4()
-            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
-            self.id = self._db.execute("""INSERT INTO vinebots (uuid)
-                                          VALUES (%(uuid)s)
-                                       """, {
-                                          'uuid': _uuid
-                                       })
-        if edges:
-            for edge in edges:
-                self.add_database_edge(edge)
-        #TODO get a lock for this vinebot
-    
-    def add_database_edge(self, edge):
+    def add_fetched_edge(self, edge):
         if edge.vinebot_id != self.id:
             raise Exception, 'Edge with id %s and vinebot_id %s cannot be added to Vinebot with id %s' % (edge.id, edge.vinebot_id, self.id)
         if len(self._edges) == 2:
             raise Exception, "Vinebot %s already has two edges %s and %s" % (self._id, self._edges[0].id, self._edges[1].id)
         if len(self._edges) == 1:
             if not (edge.from_user.id == self._edges[0].to_user.id and edge.to_user.id == self._edges[0].from_user.id):
-            raise Exception, "New edge users %s and %s do not match existing edge users %s and %s " % (edge.from_user.id, edge.to_user.id, self._edges[0].from_user.id, self._edges[0].to_user.id)
+                raise Exception, "New edge users %s and %s do not match existing edge users %s and %s " % (edge.from_user.id, edge.to_user.id, self._edges[0].from_user.id, self._edges[0].to_user.id)
         self._edges.append(edge)
         
     def delete(self):
@@ -134,24 +108,54 @@ class DatabaseVinebot(AbstractVinebot):
                         """, {           
                            'id': self.id
                         })
-        
     
 
-class StanzaVinebot(AbstractVinebot):
-    def __init__(self, db, ectl, jiduser):
-       super(StanzaVinebot, self).__init__(db, ectl)
-       if not jiduser.startswith(constants.vinebot_prefix):
-           raise NotVinebotException
-       _shortuuid = self._jiduser.replace(constants.vinebot_prefix, '')
-       _uuid = shortuuid.decode(_shortuuid)
-       dbid = self._db.execute_and_fetch_all("""SELECT id
-                                               FROM vinebots
-                                               WHERE uuid = %(uuid)s
-                                            """, {
-                                               'uuid': _uuid.bytes
-                                            }, strip_pairs=True)
-       if not dbid:
-           raise NotVinebotException
-       self.jiduser = jiduser
-       self.id = dbid
+class InsertedVinebot(AbstractVinebot):
+    def __init__(self, db, ectl, ):
+        super(InsertedVinebot, self).__init__(db, ectl)
+        _uuid = uuid.uuid4()
+        self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+        self.id = self._db.execute("""INSERT INTO vinebots (uuid)
+                                      VALUES (%(uuid)s)
+                                   """, {
+                                      'uuid': _uuid
+                                   })
     
+
+class FetchedVinebot(AbstractVinebot):
+    def __init__(self, db, ectl, jiduser=None, dbid=None, edges=None):
+       super(FetchedVinebot, self).__init__(db, ectl)
+       if edges and len(edges) > 2:
+           raise Exception, 'Vinebots cannot have more than two edges associated with them.'
+       if dbid:
+           _uuid = self._db.execute_and_fetch_all("""SELECT uuid 
+                                                     FROM vinebots
+                                                     WHERE id = %(id)s
+                                                  """, {
+                                                      'id': dbid
+                                                  }, strip_pairs=True)
+           if not _uuid:
+               raise NotVinebotException
+           self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+           self.id = dbid
+       elif jiduser:
+           if not jiduser.startswith(constants.vinebot_prefix):
+               raise NotVinebotException
+           _shortuuid = self._jiduser.replace(constants.vinebot_prefix, '')
+           _uuid = shortuuid.decode(_shortuuid)
+           dbid = self._db.execute_and_fetch_all("""SELECT id
+                                                   FROM vinebots
+                                                   WHERE uuid = %(uuid)s
+                                                """, {
+                                                   'uuid': _uuid.bytes
+                                                }, strip_pairs=True)
+           self.jiduser = jiduser
+           self.id = dbid
+       elif jiduser == '':  # because the leaf itself has no username, and we want to fail gracefully
+           raise NotVinebotException
+       else:
+           raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
+       if edges:
+           for edge in edges:
+               self.add_fetched_edge(edge)
+   

@@ -11,8 +11,8 @@ import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from user import User
-from edge import DatabaseEdge, StanzaEdge, NotEdgeException
-from vinebot import DatabaseVinebot, StanzaVinebot, NotVinebotException
+from edge import FetchedEdge, InsertedEdge, NotEdgeException
+from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
 import constants
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLConnection
@@ -220,7 +220,7 @@ class LeafComponent(ComponentXMPP):
     
     ##### event handlers
     def handle_start(self, event):
-        def register_leaf(self):  # this is a function because using return makes it cleaner
+        def register_leaf():  # this is a function because using return makes it cleaner
             for lock_num_to_acquire in range(constants.max_leaves):
                 acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
                 logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
@@ -250,19 +250,19 @@ class LeafComponent(ComponentXMPP):
         pass
     
     def handle_msg(self, msg):
-        def handle_command(msg vinebot=None):
+        def handle_command(msg, vinebot=None):
             parent_command_id, response = self.commands.handle_command(msg['from'], msg['body'], vinebot)
-            if not parent_command_id:  # if the command has some sort of error
+            if parent_command_id is None:  # if the command has some sort of error
                 command_name, arg_string = self.commands.parse_command(msg['body'])
                 parent_command_id = self.db.log_command(msg['from'].user, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
-            self.send_reply(msg, response, parent_command_id=parent_command_id)
+            self.send_reply(msg, vinebot, response, parent_command_id=parent_command_id)
         if msg['type'] in ('chat', 'normal'):
             try:
-                vinebot = Vinebot(msg['to'].user, self)
+                vinebot = FetchedVinebot(self.db, self.ectl, jiduser=msg['to'].user)
                 if self.commands.is_command(msg['body']):
                     handle_command(msg, vinebot)
                 else:
-                    self.send_reply(msg, 'Received: %s' % msg['body'])
+                    self.send_reply(msg, vinebot, 'Received: %s' % msg['body'])
                     # if msg['from'].user in bot.participants:
                     #     if not bot.is_active:
                     #         user1, user2 = bot.participants  # in case one user is away or offline
@@ -298,14 +298,27 @@ class LeafComponent(ComponentXMPP):
                     if self.commands.is_command(msg['body']):
                         handle_command(msg)
                     else:
-                        parent_message_id = self.db_log_message(msg['from'].user, [], msg['body'])
-                        self.send_reply(msg, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
+                        parent_message_id = self.db.log_message(msg['from'].user, [], msg['body'])
+                        self.send_reply(msg, None, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
                 else:
-                    parent_message_id = self.db_log_message(msg['from'].user, [], msg['body'])
-                    self.send_reply(msg, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
+                    parent_message_id = self.db.log_message(msg['from'].user, [], msg['body'])
+                    self.send_reply(msg, None, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
     
     def handle_chatstate(self, msg):
         pass
+
+
+    def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
+        msg.reply(body).send()
+        if parent_message_id is None and parent_command_id is None:
+            logging.error('Attempted to send reply "%s" with no parent. msg=%s' % (body, msg))
+        else:
+            self.db.log_message(None,
+                                [msg['to'].user],
+                                body,
+                                vinebot=vinebot,
+                                parent_message_id=parent_message_id,
+                                parent_command_id=parent_command_id)
 
     ##### admin /commands
     def create_user(self, parent_command_id, user, password):
@@ -318,6 +331,7 @@ class LeafComponent(ComponentXMPP):
     
     def delete_user(self, parent_command_id, user):
         try:
+            
             #TODO implement this
             # for friend in self.db_fetch_user_friends(user):
             #     self.delete_friendship(user, friend)
@@ -343,14 +357,14 @@ class LeafComponent(ComponentXMPP):
             pass
         reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
         if reverse_edge:
-            vinebot = DatabaseVinebot(self.db, self.ectl, dbid=reverse_edge.vinebot_id, edges=[reverse_edge])
+            vinebot = FetchedVinebot(self.db, self.ectl, dbid=reverse_edge.vinebot_id, edges=[reverse_edge])
             f_user.note_visible_active_vinebots()
             t_user.note_visible_active_vinebots()
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
             f_user.update_visible_active_vinebots()
             t_user.update_visible_active_vinebots()
         else:
-            vinebot = DatabaseVinebot(self.db, self.ectl)
+            vinebot = InsertedVinebot(self.db, self.ectl)
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
         vinebot.add_to_roster_of(f_user)
         vinebot.cleanup()
@@ -365,7 +379,7 @@ class LeafComponent(ComponentXMPP):
             edge = FetchedEdge(f_user, t_user)
         except NotEdgeException:
             raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
-        vinebot = DatabaseVinebot(self.db, self.ectl, dbid=edge.vinebot_id)
+        vinebot = FetchedVinebot(self.db, self.ectl, dbid=edge.vinebot_id)
         try:
             reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
             f_user.note_visible_active_vinebots()
@@ -374,7 +388,7 @@ class LeafComponent(ComponentXMPP):
             f_user.update_visible_active_vinebots()
             t_user.update_visible_active_vinebots()
         except NotEdgeException:
-            if not vinebot.is_active()
+            if not vinebot.is_active():
                 vinebot.delete()
         vinebot.remove_from_roster_of(f_user)
         vinebot.cleanup()

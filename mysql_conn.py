@@ -12,8 +12,6 @@ class MySQLConnection(object):
         self.cursor = None
         self.connect()
     
-    
-    
     def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
         if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
             return
