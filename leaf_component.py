@@ -266,10 +266,46 @@ class LeafComponent(ComponentXMPP):
             return
     
     def handle_presence_away(self, presence):
-        pass
+        try:
+            vinebot = FetchedVinebot(jiduser=presence['to'].user)
+            user = User(name=presence['from'].user)
+            participants = vinebot.fetch_participants()
+            if user in participants:  # [] if vinebot is not active
+                if len(participants) > 2:
+                    observers = vinebot.fetch_observers()
+                    self.send_presences(vinebot, participants + observers)
+                else:  # elif len(participants) == 2:
+                    vinebot.remove_participant(user)  # this deactivates the vinebot
+                    remaining_user = participants.difference([user])
+                    self.send_presences(vinebot, [user], pshow=remaining_user.status())
+                    self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
+            else:
+                edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
+                if edge_t_user:
+                    self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
+        except NotVinebotException:
+            return
+        except NotUserException:
+            return
     
     def handle_presence_unavailable(self, presence):
-        pass
+        try:
+            vinebot = FetchedVinebot(jiduser=presence['to'].user)
+            user = User(name=presence['from'].user)
+            participants = vinebot.fetch_participants()
+            if user in participants:  # [] if vinebot is not active
+                vinebot.remove_participant(user)   
+                if len(participants) > 2:
+                    observers = vinebot.fetch_observers()
+                    self.send_presences(vinebot, participants + observers)
+                    
+                else:  # elif len(participants) == 2:
+                    remaining_user = participants.difference([user])
+                    self.send_presences(vinebot, [remaining_user], pshow='unavailable')
+        except NotVinebotException:
+            return
+        except NotUserException:
+            return
     
     def handle_msg(self, msg):
         def handle_command(msg, vinebot=None):

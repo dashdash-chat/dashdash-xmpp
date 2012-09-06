@@ -44,37 +44,40 @@ class AbstractVinebot(object):
     
     def is_active(self):
         participant_count = g.db.execute_and_fetchall("""SELECT COUNT(*)
-                                                             FROM participants
-                                                             WHERE vinebot_id = %(id)s
-                                                          """, {
-                                                              'id': self.id
-                                                          })
+                                                         FROM participants
+                                                         WHERE vinebot_id = %(id)s
+                                                      """, {
+                                                          'id': self.id
+                                                      })
         return participant_count[0][0] > 0
     
     def fetch_participants(self):
         participants = g.db.execute_and_fetchall("""SELECT users.name, users.id
-                                                        FROM participants, users
-                                                        WHERE participants.vinebot_id = %(id)s
-                                                        AND participants.user_id = users.id
-                                                     """, {
-                                                         'id': self.id
-                                                     })
+                                                    FROM participants, users
+                                                    WHERE participants.vinebot_id = %(id)s
+                                                    AND participants.user_id = users.id
+                                                 """, {
+                                                     'id': self.id
+                                                 })
         return set([User(name=participant[0], dbid=participant[1]) for participant in participants])
     
     def fetch_observers(self):
         if not self.is_active():
             return set([])
         observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
-                                                     FROM participants, edges AS outgoing, edges AS incoming, users
-                                                     WHERE participants.vinebot_id = %(id)s
-                                                     AND participants.user_id = users.id
-                                                     AND participants.user_id = incoming.to_id
-                                                     AND participants.user_id = outgoing.from_id
-                                                     AND incoming.from_id = outgoing.to_id
-                                                  """, {
-                                                      'id': self.id
-                                                  })
+                                                 FROM participants, edges AS outgoing, edges AS incoming, users
+                                                 WHERE participants.vinebot_id = %(id)s
+                                                 AND participants.user_id = users.id
+                                                 AND participants.user_id = incoming.to_id
+                                                 AND participants.user_id = outgoing.from_id
+                                                 AND incoming.from_id = outgoing.to_id
+                                              """, {
+                                                  'id': self.id
+                                              })
         return set([User(name=observer[0], dbid=observer[1]) for observer in observers])
+    
+    def remove_participant(self):
+        logging.info("TODO implement remove participant")
     
     def update_rosters(self):
         if len(self._edges) == 2:
