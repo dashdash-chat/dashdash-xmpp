@@ -31,30 +31,30 @@ class AbstractEdge(object):
 class InsertedEdge(AbstractEdge):
     def __init__(self, db, ectl, f_user, t_user, vinebot_id):
         super(InsertedEdge, self).__init__(db, ectl, f_user, t_user)
-        dbid = self._db.execute("""INSERT INTO edges (f_id, t_id, vinebot_id)
-                                   VALUES (%(t_id)s, %(f_id)s, (%(vinebot_id)s))
+        dbid = self._db.execute("""INSERT INTO edges (from_id, to_id, vinebot_id)
+                                   VALUES (%(f_id)s, %(t_id)s, (%(vinebot_id)s))
                                 """, {           
                                    't_id': t_user.id, 
                                    'f_id': f_user.id,
-                                   'vinebot_id': vinebot.id
+                                   'vinebot_id': vinebot_id
                                 })
-        self._vinebot_id = vinebot_id
-        self._id = dbid
+        self.vinebot_id = vinebot_id
+        self.id = dbid
     
 
 class FetchedEdge(AbstractEdge):
     def __init__(self, db, ectl, f_user, t_user):
         super(FetchedEdge, self).__init__(db, ectl, f_user, t_user)
-        dbid, vinebot_id = self._db.execute_and_fetchall("""SELECT id, vinebot_id
+        result = self._db.execute_and_fetchall("""SELECT id, vinebot_id
                                                             FROM edges
-                                                            WHERE t_id = %(t_id)s
-                                                            AND f_id = %(f_id)s
+                                                            WHERE to_id = %(t_id)s
+                                                            AND from_id = %(f_id)s
                                                          """, {
                                                             't_id': t_user.id, 
                                                             'f_id': f_user.id
                                                          })
-        if not dbid or not vinebot_id:
+        if len(result) == 0:
             raise NotEdgeException
-        self._vinebot_id = vinebot_id
-        self._id = dbid
+        self.id = result[0][0]
+        self.vinebot_id = result[0][1]
     

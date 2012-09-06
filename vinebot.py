@@ -43,13 +43,13 @@ class AbstractVinebot(object):
         self._ectl.delete_rosteritem(user.name, self.jiduser)
     
     def is_active(self):
-        participant_count = self._db.execute_and_fetch_all("""SELECT COUNT(*)
+        participant_count = self._db.execute_and_fetchall("""SELECT COUNT(*)
                                                               FROM participants
                                                               WHERE vinebot_id = %(id)s
                                                            """, {
                                                                'id': self.id
                                                            })
-        return participant_count > 0
+        return participant_count[0][0] > 0
     
     def update_rosters(self):
         if len(self._edges) == 2:
@@ -118,7 +118,7 @@ class InsertedVinebot(AbstractVinebot):
         self.id = self._db.execute("""INSERT INTO vinebots (uuid)
                                       VALUES (%(uuid)s)
                                    """, {
-                                      'uuid': _uuid
+                                      'uuid': _uuid.bytes
                                    })
     
 
@@ -128,22 +128,23 @@ class FetchedVinebot(AbstractVinebot):
        if edges and len(edges) > 2:
            raise Exception, 'Vinebots cannot have more than two edges associated with them.'
        if dbid:
-           _uuid = self._db.execute_and_fetch_all("""SELECT uuid 
-                                                     FROM vinebots
-                                                     WHERE id = %(id)s
-                                                  """, {
-                                                      'id': dbid
-                                                  }, strip_pairs=True)
+           _uuid = self._db.execute_and_fetchall("""SELECT uuid 
+                                                    FROM vinebots
+                                                    WHERE id = %(id)s
+                                                 """, {
+                                                     'id': dbid
+                                                 }, strip_pairs=True)
            if not _uuid:
                raise NotVinebotException
-           self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+          
+           self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid[0])))
            self.id = dbid
        elif jiduser:
            if not jiduser.startswith(constants.vinebot_prefix):
                raise NotVinebotException
            _shortuuid = self._jiduser.replace(constants.vinebot_prefix, '')
            _uuid = shortuuid.decode(_shortuuid)
-           dbid = self._db.execute_and_fetch_all("""SELECT id
+           dbid = self._db.execute_and_fetchall("""SELECT id
                                                    FROM vinebots
                                                    WHERE uuid = %(uuid)s
                                                 """, {

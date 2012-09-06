@@ -10,7 +10,7 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
-from user import User
+from user import User, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
 from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
 import constants
@@ -38,6 +38,7 @@ class LeafComponent(ComponentXMPP):
         self.db = MySQLConnection(constants.leaf_name, constants.leaf_mysql_password)
         self.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
+        self.add_slash_commands()
         self.add_event_handler("session_start",        self.handle_start)
         self.del_event_handler('presence_probe',       self._handle_probe)  # important! see SleekXMPP chat room conversation from June 17, 2012
         self.add_event_handler('presence_probe',       self.handle_presence_available)  # this prevents invisibility from working! it's a misleading thing to support, since other people can enter conversations with you
@@ -111,58 +112,58 @@ class LeafComponent(ComponentXMPP):
                 token2 = arg_tokens[1]
                 # Please forgive me for storing the second token as the command's string, but ugh I don't want
                 # to add an extra column right now. I'll fix it when I have a second command with two tokens.
-                parent_command_id = self.db_log_command(sender.user, command_name, token1, token2, vinebot=vinebot)
+                parent_command_id = self.db.log_command(sender.user, command_name, token1, token2, vinebot=vinebot)
                 return [parent_command_id, token1, token2]
             return False
         # Register vinebot commands
-        self.commands.add(SlashCommand(command_name     = 'join',
-                                       text_arg_format  = '',
-                                       text_description = 'Join this conversation without interrupting.',
-                                       validate_sender  = observer_to_vinebot,
-                                       transform_args   = logid_sender_vinebot,
-                                       action           = self.user_joined))    
-        self.commands.add(SlashCommand(command_name     = 'leave',
-                                       text_arg_format  = '',
-                                       text_description = 'Leave this conversation.',
-                                       validate_sender  = participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot,
-                                       action           = self.user_left))                  
-        self.commands.add(SlashCommand(command_name     = 'invite',
-                                       text_arg_format  = '<username>',
-                                       text_description = 'Invite a user to this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot_token,
-                                       action           = self.invite_user))
-        self.commands.add(SlashCommand(command_name     = 'kick',
-                                       text_arg_format  = '<username>',
-                                       text_description = 'Kick a user out of this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot_token,
-                                       action           = self.kick_user))
-        self.commands.add(SlashCommand(command_name     = 'list',
-                                       text_arg_format  = '',
-                                       text_description = 'List the participants in this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot,
-                                       action           = self.list_participants))
-        self.commands.add(SlashCommand(command_name     = 'nearby',
-                                       text_arg_format  = '',
-                                       text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot,
-                                       action           = self.list_observers))
-        self.commands.add(SlashCommand(command_name     = 'whisper',
-                                       text_arg_format  = '<username> <message text>',
-                                       text_description = 'Whisper a quick message to only one other participant.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot_token_string,
-                                       action           = self.whisper_msg))
-        self.commands.add(SlashCommand(command_name     = 'topic',
-                                       text_arg_format  = '<new topic>',
-                                       text_description = 'Set the topic for the conversation, which friends of participants can see.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
-                                       transform_args   = logid_sender_vinebot_string_or_none,
-                                       action           = self.set_topic))
+        # self.commands.add(SlashCommand(command_name     = 'join',
+        #                                        text_arg_format  = '',
+        #                                        text_description = 'Join this conversation without interrupting.',
+        #                                        validate_sender  = observer_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot,
+        #                                        action           = self.user_joined))    
+        #         self.commands.add(SlashCommand(command_name     = 'leave',
+        #                                        text_arg_format  = '',
+        #                                        text_description = 'Leave this conversation.',
+        #                                        validate_sender  = participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot,
+        #                                        action           = self.user_left))                  
+        #         self.commands.add(SlashCommand(command_name     = 'invite',
+        #                                        text_arg_format  = '<username>',
+        #                                        text_description = 'Invite a user to this conversation.',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot_token,
+        #                                        action           = self.invite_user))
+        #         self.commands.add(SlashCommand(command_name     = 'kick',
+        #                                        text_arg_format  = '<username>',
+        #                                        text_description = 'Kick a user out of this conversation.',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot_token,
+        #                                        action           = self.kick_user))
+        #         self.commands.add(SlashCommand(command_name     = 'list',
+        #                                        text_arg_format  = '',
+        #                                        text_description = 'List the participants in this conversation.',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot,
+        #                                        action           = self.list_participants))
+        #         self.commands.add(SlashCommand(command_name     = 'nearby',
+        #                                        text_arg_format  = '',
+        #                                        text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot,
+        #                                        action           = self.list_observers))
+        #         self.commands.add(SlashCommand(command_name     = 'whisper',
+        #                                        text_arg_format  = '<username> <message text>',
+        #                                        text_description = 'Whisper a quick message to only one other participant.',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot_token_string,
+        #                                        action           = self.whisper_msg))
+        #         self.commands.add(SlashCommand(command_name     = 'topic',
+        #                                        text_arg_format  = '<new topic>',
+        #                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
+        #                                        validate_sender  = admin_or_participant_to_vinebot,
+        #                                        transform_args   = logid_sender_vinebot_string_or_none,
+        #                                        action           = self.set_topic))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -189,29 +190,29 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token_token,
                                        action           = self.delete_edge))
-        self.commands.add(SlashCommand(command_name     = 'prune',
-                                       text_arg_format  = '<username>',
-                                       text_description = 'Remove old, unused vinebots from a user\'s roster.',
-                                       validate_sender  = admin_to_leaf,
-                                       transform_args   = logid_token,
-                                       action           = self.prune_roster))
-        self.commands.add(SlashCommand(command_name     = 'friendships',
-                                       text_arg_format  = '<username (optional)>',
-                                       text_description = 'List all current friendships, or only the specified user\'s friendships.',
-                                       validate_sender  = admin_to_leaf,
-                                       transform_args   = logid_token_or_none,
-                                       action           = self.friendships))
+        # self.commands.add(SlashCommand(command_name     = 'prune',
+        #                                text_arg_format  = '<username>',
+        #                                text_description = 'Remove old, unused vinebots from a user\'s roster.',
+        #                                validate_sender  = admin_to_leaf,
+        #                                transform_args   = logid_token,
+        #                                action           = self.prune_roster))
+        # self.commands.add(SlashCommand(command_name     = 'friendships',
+        #                                text_arg_format  = '<username (optional)>',
+        #                                text_description = 'List all current friendships, or only the specified user\'s friendships.',
+        #                                validate_sender  = admin_to_leaf,
+        #                                transform_args   = logid_token_or_none,
+        #                                action           = self.friendships))
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
         for lock_num_to_check in range(constants.max_leaves):
             if self.acquired_lock_num != lock_num_to_check:
                 checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
-                logging.info('%d checked? %s' % (lock_num_to_check, checked_lock))
+                #logging.info('%d checked? %s' % (lock_num_to_check, checked_lock))
                 if not checked_lock:
                     other_leaves_online = True
                     break
-        logging.info('disconnecting! other leaves online? %s' % other_leaves_online)
+        #logging.info('disconnecting! other leaves online? %s' % other_leaves_online)
         if not other_leaves_online:
             logging.warning("TODO: send unavailable from all vinebots")
         self.db.cleanup()
@@ -223,14 +224,14 @@ class LeafComponent(ComponentXMPP):
         def register_leaf():  # this is a function because using return makes it cleaner
             for lock_num_to_acquire in range(constants.max_leaves):
                 acquired_lock = self.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
-                logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
+                #logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
                 if acquired_lock:
                     self.acquired_lock_num = lock_num_to_acquire
                     if lock_num_to_acquire > 0:
                         return True
                     for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
                         checked_lock = self.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
-                        logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
+                        #logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
                         if not checked_lock:
                             return True
                     return False
@@ -238,7 +239,7 @@ class LeafComponent(ComponentXMPP):
         other_leaves_online = register_leaf()
         if not other_leaves_online:
             logging.warning("TODO: send available from all vinebots")
-        logging.info('starting! other leaves online? %s' % other_leaves_online)
+        #logging.info('starting! other leaves online? %s' % other_leaves_online)
     
     def handle_presence_available(self, presence):
         pass
@@ -349,25 +350,26 @@ class LeafComponent(ComponentXMPP):
             f_user = User(self.db, self.ectl, name=from_username)
             t_user = User(self.db, self.ectl, name=to_username)
         except NotUserException, e:
-            raise ExecutionError, (parent_command, e)
+            raise ExecutionError, (parent_command_id, e)
         try:
-            FetchedEdge(f_user, t_user)
+            FetchedEdge(self.db, self.ectl, f_user, t_user)
             raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge connecting them.' % (f_user.name, t_user.name))
         except NotEdgeException:  # no edge was found in the database, so we can continue
             pass
-        reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
-        if reverse_edge:
+        try:
+            reverse_edge = FetchedEdge(self.db, self.ectl, t_user, f_user)
             vinebot = FetchedVinebot(self.db, self.ectl, dbid=reverse_edge.vinebot_id, edges=[reverse_edge])
             f_user.note_visible_active_vinebots()
             t_user.note_visible_active_vinebots()
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
             f_user.update_visible_active_vinebots()
             t_user.update_visible_active_vinebots()
-        else:
+        except NotEdgeException:
             vinebot = InsertedVinebot(self.db, self.ectl)
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
         vinebot.add_to_roster_of(f_user)
         vinebot.cleanup()
+        return parent_command_id, '%s and %s now have a directed edge between them.' % (f_user.name, t_user.name)
     
     def delete_edge(self, parent_command_id, from_username, to_username):
         try:
@@ -376,7 +378,7 @@ class LeafComponent(ComponentXMPP):
         except NotUserException, e:
             raise ExecutionError, (parent_command, e)
         try:
-            edge = FetchedEdge(f_user, t_user)
+            edge = FetchedEdge(self.db, self.ectl, f_user, t_user)
         except NotEdgeException:
             raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
         vinebot = FetchedVinebot(self.db, self.ectl, dbid=edge.vinebot_id)
@@ -387,11 +389,13 @@ class LeafComponent(ComponentXMPP):
             edge.delete()
             f_user.update_visible_active_vinebots()
             t_user.update_visible_active_vinebots()
-        except NotEdgeException:
+        except NotEdgeException:    
+            edge.delete()
             if not vinebot.is_active():
                 vinebot.delete()
         vinebot.remove_from_roster_of(f_user)
         vinebot.cleanup()
+        return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
 
 if __name__ == '__main__':

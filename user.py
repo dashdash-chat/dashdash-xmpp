@@ -21,30 +21,30 @@ class User(object):
             self.name = name
             self.id = dbid
         elif name:
+            dbid = self._db.execute_and_fetchall("""SELECT id
+                                                    FROM users
+                                                    WHERE name = %(name)s
+                                                 """, {
+                                                    'name': name
+                                                 }, strip_pairs=True)
+            self.id = dbid[0] if len(dbid) == 1 else None
             self.name = name
-            self.id   = self.execute_and_fetchall("""SELECT id
-                                                     FROM users
-                                                     WHERE name = %(name)s
-                                                     LIMIT 1
-                                                  """, {
-                                                     'name': name
-                                                  }, strip_pairs=True)
         elif dbid:
+            name = self._db.execute_and_fetchall("""SELECT name
+                                                         FROM users
+                                                         WHERE id = %(id)s
+                                                      """, {
+                                                         'id': dbid
+                                                      }, strip_pairs=True)
             self.id   = dbid
-            self.name = self.execute_and_fetchall("""SELECT name
-                                                     FROM users
-                                                     WHERE id = %(id)s
-                                                     LIMIT 1
-                                                  """, {
-                                                     'id': dbid
-                                                  }, strip_pairs=True)
+            self.name = name[0] if len(name) == 1 else None
         else:
             raise Exception, 'User objects must be initialized with either a name or id.'
         if not self.id or not self.name:
             raise NotUserException, 'both of these users were not found in the database.'
     
     def fetch_visible_active_vinebots(self):
-        return self.execute_and_fetchall("""SELECT participants.vinebot_id
+        return self._db.execute_and_fetchall("""SELECT participants.vinebot_id
                                             FROM edges AS outgoing, edges AS incoming, participants
                                             WHERE outgoing.vinebot_id = incoming.vinebot_id
                                             AND outgoing.from_id = %(id)s
@@ -59,7 +59,7 @@ class User(object):
         self._noted_vinebot_ids = set(self.fetch_visible_active_vinebots())
     
     def update_visible_active_vinebots(self):
-        if _noted_vinebot_ids == None:
+        if self._noted_vinebot_ids == None:
             raise Exception, 'User\'s noted visible active vinebots must be fetched before they are updated!'
         current_vinebot_ids = set(self.fetch_visible_active_vinebots())
         for vinebot_id in self._noted_vinebot_ids.difference(current_vinebot_ids):
@@ -71,7 +71,7 @@ class User(object):
         self._noted_vinebot_ids = None
     
     def get_active_vinebots(self):
-        vinebot_ids = self.execute_and_fetchall("""SELECT vinebot_id
+        vinebot_ids = self._db.execute_and_fetchall("""SELECT vinebot_id
                                                    FROM participants
                                                    WHERE user_id = %(id)s
                                                    LIMIT 1
