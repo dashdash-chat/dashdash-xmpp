@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+from user import User
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -16,8 +17,8 @@ class AbstractEdge(object):
     def __init__(self, db, ectl, f_user, t_user):
         self._db = db
         self._ectl = ectl
-        self.f_user = f_user  # from
-        self.t_user = t_user  # to
+        self.f_user = None  # from
+        self.t_user = None  # to
         self.vinebot_id = None
         self.id = None
     
@@ -43,18 +44,53 @@ class InsertedEdge(AbstractEdge):
     
 
 class FetchedEdge(AbstractEdge):
-    def __init__(self, db, ectl, f_user, t_user):
+    def __init__(self, db, ectl, f_user=None, t_user=None, vinebot=None):
         super(FetchedEdge, self).__init__(db, ectl, f_user, t_user)
-        result = self._db.execute_and_fetchall("""SELECT id, vinebot_id
-                                                            FROM edges
-                                                            WHERE to_id = %(t_id)s
-                                                            AND from_id = %(f_id)s
-                                                         """, {
-                                                            't_id': t_user.id, 
-                                                            'f_id': f_user.id
-                                                         })
-        if len(result) == 0:
-            raise NotEdgeException
-        self.id = result[0][0]
-        self.vinebot_id = result[0][1]
+        if f_user and t_user and vinebot is None:
+            result = self._db.execute_and_fetchall("""SELECT id, vinebot_id
+                                                                FROM edges
+                                                                WHERE to_id = %(t_id)s
+                                                                AND from_id = %(f_id)s
+                                                             """, {
+                                                                't_id': t_user.id, 
+                                                                'f_id': f_user.id
+                                                             })
+            if len(result) == 0:
+                raise NotEdgeException
+            self.f_user = f_user
+            self.t_user = t_user
+            self.id = result[0][0]
+            self.vinebot_id = result[0][1]
+        elif vinebot and f_user and t_user is None:
+            result = self._db.execute_and_fetchall("""SELECT id, to_id
+                                                      FROM edges
+                                                      WHERE vinebot_id = %(vinebot_id)s
+                                                      AND from_id = %(f_id)s
+                                                  """, {
+                                                      'vinebot_id': vinebot.id, 
+                                                      'f_id': f_user.id
+                                                  })
+            if len(result) == 0:
+                raise NotEdgeException
+            self.f_user = f_user
+            self.t_user = User(self._db, self._ectl, dbid=result[0][1])
+            self.id = result[0][0]
+            self.vinebot_id = vinebot.id
+        elif vinebot and t_user and f_user is None:
+            result = self._db.execute_and_fetchall("""SELECT id, from_id
+                                                      FROM edges
+                                                      WHERE vinebot_id = %(vinebot_id)s
+                                                      AND to_id = %(t_id)s
+                                                  """, {
+                                                      'vinebot_id': vinebot.id, 
+                                                      't_id': t_user.id
+                                                  })
+            if len(result) == 0:
+                raise NotEdgeException
+            self.f_user = User(self._db, self._ectl, dbid=result[0][1])
+            self.t_user = t_user
+            self.id = result[0][0]
+            self.vinebot_id = vinebot.id
+        else:
+            raise Exception, 'FechedEdges require either both users or a vinebot and either user as parameters.'
     

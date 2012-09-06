@@ -242,7 +242,27 @@ class LeafComponent(ComponentXMPP):
         #logging.info('starting! other leaves online? %s' % other_leaves_online)
     
     def handle_presence_available(self, presence):
-        pass
+        try:
+            vinebot = FetchedVinebot(self.db, self.ectl, jiduser=presence['to'].user)
+            user = User(self.db, self.ectl, name=presence['from'].user)
+            if vinebot.is_active():
+                participants = vinebot.fetch_participants()
+                observers = vinebot.fetch_observers()
+                if user in participants:
+                    self.send_presences(vinebot, participants + observers)
+                elif user in observers:
+                    self.send_presences(vinebot, [user])
+            else:
+                edge_t_user = FetchedEdge(self.db, self.ectl, t_user=user, vinebot=vinebot)
+                edge_f_user = FetchedEdge(self.db, self.ectl, f_user=user, vinebot=vinebot)
+                if edge_t_user:
+                    self.send_presences(vinebot, [edge_t_user.f_user])
+                if edge_f_user:
+                    self.send_presences(vinebot, [user], edge_f_user.t_user.status())
+        except NotVinebotException:
+            return
+        except NotUserException:
+            return
     
     def handle_presence_away(self, presence):
         pass
@@ -308,7 +328,14 @@ class LeafComponent(ComponentXMPP):
     def handle_chatstate(self, msg):
         pass
 
-
+    ##### helper functions
+    def send_presences(self, vinebot, recipients, pshow='available'):
+        for recipient in recipients:
+            self.sendPresence(pfrom='%s@%s' % (vinebot.jiduser, self.boundjid.bare),
+                                pto='%s@%s' % (recipient.name, constants.server),
+                                pshow=None if pshow == 'available' else pshow,
+                                pstatus=unicode(vinebot.topic) if vinebot.topic else None)
+    
     def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
         msg.reply(body).send()
         if parent_message_id is None and parent_command_id is None:
@@ -364,9 +391,11 @@ class LeafComponent(ComponentXMPP):
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
             f_user.update_visible_active_vinebots()
             t_user.update_visible_active_vinebots()
+            #TODO send presences to observers?
         except NotEdgeException:
             vinebot = InsertedVinebot(self.db, self.ectl)
             InsertedEdge(self.db, self.ectl, f_user, t_user, vinebot_id=vinebot.id)
+        self.send_presences(vinebot, [f_user], pshow=t_user.status())
         vinebot.add_to_roster_of(f_user)
         vinebot.cleanup()
         return parent_command_id, '%s and %s now have a directed edge between them.' % (f_user.name, t_user.name)

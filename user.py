@@ -43,6 +43,12 @@ class User(object):
         if not self.id or not self.name:
             raise NotUserException, 'both of these users were not found in the database.'
     
+    def status(self):
+        return self._ectl.user_status(self.name)
+    
+    def is_online(self):
+        return self.user_status() != 'unavailable'  # this function is useful for list filterss
+    
     def fetch_visible_active_vinebots(self):
         return self._db.execute_and_fetchall("""SELECT participants.vinebot_id
                                             FROM edges AS outgoing, edges AS incoming, participants
@@ -64,10 +70,10 @@ class User(object):
         current_vinebot_ids = set(self.fetch_visible_active_vinebots())
         for vinebot_id in self._noted_vinebot_ids.difference(current_vinebot_ids):
             vinebot = DatabaseVinebot(self._db, self._ectl, dbid=reverse_edge.vinebot_id)
-            self._ectl.delete_rosteritem(self.name, vinbot.jiduser)
+            self._ectl.delete_rosteritem(self.name, vinebot.jiduser)
         for vinebot_id in current_vinebot_ids.difference(self._noted_vinebot_ids):
             vinebot = DatabaseVinebot(self._db, self.ectl, dbid=reverse_edge.vinebot_id)
-            self._ectl.add_rosteritem(self.name, vinbot.jiduser, vinbot.jiduser)  #TODO calculate nick
+            self._ectl.add_rosteritem(self.name, vinebot.jiduser, vinebot.jiduser)  #TODO calculate nick
         self._noted_vinebot_ids = None
     
     def get_active_vinebots(self):
@@ -79,4 +85,10 @@ class User(object):
                                                    'id': self.id
                                                 }, strip_pairs=True)
         return [DatabaseVinebot(self._db, self._ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
+    
+    def __eq__(self, other):
+        if not isinstance(other, User):
+            return False
+    
+        return (self.id == other.id and self.name == other.name)
     

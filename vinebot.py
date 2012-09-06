@@ -21,6 +21,7 @@ class AbstractVinebot(object):
         self._db = db
         self._ectl = ectl
         self._edges = []
+        self.topic = None
         # self._participants = participants
         # self._is_active = is_active
         # self._is_party = is_party
@@ -44,12 +45,37 @@ class AbstractVinebot(object):
     
     def is_active(self):
         participant_count = self._db.execute_and_fetchall("""SELECT COUNT(*)
-                                                              FROM participants
-                                                              WHERE vinebot_id = %(id)s
-                                                           """, {
-                                                               'id': self.id
-                                                           })
+                                                             FROM participants
+                                                             WHERE vinebot_id = %(id)s
+                                                          """, {
+                                                              'id': self.id
+                                                          })
         return participant_count[0][0] > 0
+    
+    def fetch_participants(self):
+        participants = self._db.execute_and_fetchall("""SELECT users.name, users.id
+                                                        FROM participants, users
+                                                        WHERE participants.vinebot_id = %(id)s
+                                                        AND participants.user_id = users.id
+                                                     """, {
+                                                         'id': self.id
+                                                     })
+        return set([User(name=participant[0], dbid=participant[1]) for participant in participants])
+    
+    def fetch_observers(self):
+        if not self.is_active():
+            return set([])
+        observers = self._db.execute_and_fetchall("""SELECT users.name, users.id
+                                                     FROM participants, edges AS outgoing, edges AS incoming, users
+                                                     WHERE participants.vinebot_id = %(id)s
+                                                     AND participants.user_id = users.id
+                                                     AND participants.user_id = incoming.to_id
+                                                     AND participants.user_id = outgoing.from_id
+                                                     AND incoming.from_id = outgoing.to_id
+                                                  """, {
+                                                      'id': self.id
+                                                  })
+        return set([User(name=observer[0], dbid=observer[1]) for observer in observers])
     
     def update_rosters(self):
         if len(self._edges) == 2:
@@ -59,23 +85,6 @@ class AbstractVinebot(object):
             # make sure that vinebot isn't on other users roster?
         else:
             logging.info("update party rosters")
-    
-    # def _update_rosters(self, old_participants, new_participants, vinebot_user, participants_changed):
-    #     observer_nick = self.get_nick(new_participants)
-    #     # First, create the old and new lists of observers
-    #     old_observers = self.db_fetch_observers(old_participants)
-    #     new_observers = self.db_fetch_observers(new_participants)
-    #     # Then, update the participants
-    #     if participants_changed:
-    #         for old_participant in old_participants.difference(new_observers).difference(new_participants):
-    #             self.delete_rosteritem(old_participant, vinebot_user)
-    #         for new_participant in new_participants:
-    #             self.add_rosteritem(new_participant, vinebot_user, self.get_nick(new_participants, new_participant))
-    #     # Finally, update the observers
-    #     for old_observer in old_observers.difference(new_participants).difference(new_observers):
-    #         self.delete_rosteritem(old_observer, vinebot_user)
-    #     for new_observer in new_observers.difference(new_participants):
-    #         self.add_rosteritem(new_observer, vinebot_user, observer_nick)
     
     def add_fetched_edge(self, edge):
         if edge.vinebot_id != self.id:
@@ -124,39 +133,38 @@ class InsertedVinebot(AbstractVinebot):
 
 class FetchedVinebot(AbstractVinebot):
     def __init__(self, db, ectl, jiduser=None, dbid=None, edges=None):
-       super(FetchedVinebot, self).__init__(db, ectl)
-       if edges and len(edges) > 2:
-           raise Exception, 'Vinebots cannot have more than two edges associated with them.'
-       if dbid:
-           _uuid = self._db.execute_and_fetchall("""SELECT uuid 
+        super(FetchedVinebot, self).__init__(db, ectl)
+        if edges and len(edges) > 2:
+            raise Exception, 'Vinebots cannot have more than two edges associated with them.'
+        if dbid:
+            _uuid = self._db.execute_and_fetchall("""SELECT uuid 
+                                                     FROM vinebots
+                                                     WHERE id = %(id)s
+                                                  """, {
+                                                      'id': dbid
+                                                  }, strip_pairs=True)
+            if not _uuid:
+                raise NotVinebotException
+            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid[0])))
+            self.id = dbid
+        elif jiduser:
+            if not jiduser.startswith(constants.vinebot_prefix):
+                raise NotVinebotException
+            _shortuuid = jiduser.replace(constants.vinebot_prefix, '')
+            _uuid = shortuuid.decode(_shortuuid)
+            dbid = self._db.execute_and_fetchall("""SELECT id
                                                     FROM vinebots
-                                                    WHERE id = %(id)s
+                                                    WHERE uuid = %(uuid)s
                                                  """, {
-                                                     'id': dbid
+                                                    'uuid': _uuid.bytes
                                                  }, strip_pairs=True)
-           if not _uuid:
-               raise NotVinebotException
-          
-           self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid[0])))
-           self.id = dbid
-       elif jiduser:
-           if not jiduser.startswith(constants.vinebot_prefix):
-               raise NotVinebotException
-           _shortuuid = self._jiduser.replace(constants.vinebot_prefix, '')
-           _uuid = shortuuid.decode(_shortuuid)
-           dbid = self._db.execute_and_fetchall("""SELECT id
-                                                   FROM vinebots
-                                                   WHERE uuid = %(uuid)s
-                                                """, {
-                                                   'uuid': _uuid.bytes
-                                                }, strip_pairs=True)
-           self.jiduser = jiduser
-           self.id = dbid
-       elif jiduser == '':  # because the leaf itself has no username, and we want to fail gracefully
-           raise NotVinebotException
-       else:
-           raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
-       if edges:
-           for edge in edges:
-               self.add_fetched_edge(edge)
-   
+            self.jiduser = jiduser
+            self.id = dbid[0]
+        elif jiduser == '':  # because the leaf itself has no username, and we want to fail gracefully
+            raise NotVinebotException
+        else:
+            raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
+        if edges:
+            for edge in edges:
+                self.add_fetched_edge(edge)
+    
