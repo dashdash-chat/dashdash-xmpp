@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+from constants import g
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -13,15 +14,13 @@ class NotUserException(Exception):
     pass
 
 class User(object):
-    def __init__(self, db, ectl, name=None, dbid=None):
-        self._db = db
-        self._ectl = ectl
+    def __init__(self, name=None, dbid=None):
         self._noted_vinebot_ids = None
         if name and dbid:
             self.name = name
             self.id = dbid
         elif name:
-            dbid = self._db.execute_and_fetchall("""SELECT id
+            dbid = g.db.execute_and_fetchall("""SELECT id
                                                     FROM users
                                                     WHERE name = %(name)s
                                                  """, {
@@ -30,7 +29,7 @@ class User(object):
             self.id = dbid[0] if len(dbid) == 1 else None
             self.name = name
         elif dbid:
-            name = self._db.execute_and_fetchall("""SELECT name
+            name = g.db.execute_and_fetchall("""SELECT name
                                                          FROM users
                                                          WHERE id = %(id)s
                                                       """, {
@@ -44,13 +43,13 @@ class User(object):
             raise NotUserException, 'both of these users were not found in the database.'
     
     def status(self):
-        return self._ectl.user_status(self.name)
+        return g.ectl.user_status(self.name)
     
     def is_online(self):
         return self.user_status() != 'unavailable'  # this function is useful for list filterss
     
     def fetch_visible_active_vinebots(self):
-        return self._db.execute_and_fetchall("""SELECT participants.vinebot_id
+        return g.db.execute_and_fetchall("""SELECT participants.vinebot_id
                                             FROM edges AS outgoing, edges AS incoming, participants
                                             WHERE outgoing.vinebot_id = incoming.vinebot_id
                                             AND outgoing.from_id = %(id)s
@@ -69,22 +68,22 @@ class User(object):
             raise Exception, 'User\'s noted visible active vinebots must be fetched before they are updated!'
         current_vinebot_ids = set(self.fetch_visible_active_vinebots())
         for vinebot_id in self._noted_vinebot_ids.difference(current_vinebot_ids):
-            vinebot = DatabaseVinebot(self._db, self._ectl, dbid=reverse_edge.vinebot_id)
-            self._ectl.delete_rosteritem(self.name, vinebot.jiduser)
+            vinebot = DatabaseVinebot(g.db, g.ectl, dbid=reverse_edge.vinebot_id)
+            g.ectl.delete_rosteritem(self.name, vinebot.jiduser)
         for vinebot_id in current_vinebot_ids.difference(self._noted_vinebot_ids):
-            vinebot = DatabaseVinebot(self._db, self.ectl, dbid=reverse_edge.vinebot_id)
-            self._ectl.add_rosteritem(self.name, vinebot.jiduser, vinebot.jiduser)  #TODO calculate nick
+            vinebot = DatabaseVinebot(g.db, self.ectl, dbid=reverse_edge.vinebot_id)
+            g.ectl.add_rosteritem(self.name, vinebot.jiduser, vinebot.jiduser)  #TODO calculate nick
         self._noted_vinebot_ids = None
     
     def get_active_vinebots(self):
-        vinebot_ids = self._db.execute_and_fetchall("""SELECT vinebot_id
+        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
                                                    FROM participants
                                                    WHERE user_id = %(id)s
                                                    LIMIT 1
                                                 """, {
                                                    'id': self.id
                                                 }, strip_pairs=True)
-        return [DatabaseVinebot(self._db, self._ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
+        return [DatabaseVinebot(g.db, g.ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
     
     def __eq__(self, other):
         if not isinstance(other, User):

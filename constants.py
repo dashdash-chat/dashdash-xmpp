@@ -28,6 +28,10 @@ graph_xmpp_user = '%s@%s' % ('_graph', server)
 client_port = env_vars.client_port
 default_user_password = env_vars.default_user_password
 
+# global variables to save the hassle of passing around the values
+class g(object):
+    db = None 
+    ectl = None
 
 
 # leaf_name = "leaf"

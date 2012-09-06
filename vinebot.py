@@ -6,6 +6,7 @@ import uuid
 import shortuuid
 import constants
 from datetime import datetime, timedelta
+from constants import g
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -17,9 +18,7 @@ class NotVinebotException(Exception):
     pass
 
 class AbstractVinebot(object):
-    def __init__(self, db, ectl):
-        self._db = db
-        self._ectl = ectl
+    def __init__(self):
         self._edges = []
         self.topic = None
         # self._participants = participants
@@ -38,13 +37,13 @@ class AbstractVinebot(object):
         #TODO release the lock for this vinebot
     
     def add_to_roster_of(self, user):
-        self._ectl.add_rosteritem(user.name, self.jiduser, user.name)  #TODO calculate the nickname
+        g.ectl.add_rosteritem(user.name, self.jiduser, user.name)  #TODO calculate the nickname
     
     def remove_from_roster_of(self, user):
-        self._ectl.delete_rosteritem(user.name, self.jiduser)
+        g.ectl.delete_rosteritem(user.name, self.jiduser)
     
     def is_active(self):
-        participant_count = self._db.execute_and_fetchall("""SELECT COUNT(*)
+        participant_count = g.db.execute_and_fetchall("""SELECT COUNT(*)
                                                              FROM participants
                                                              WHERE vinebot_id = %(id)s
                                                           """, {
@@ -53,7 +52,7 @@ class AbstractVinebot(object):
         return participant_count[0][0] > 0
     
     def fetch_participants(self):
-        participants = self._db.execute_and_fetchall("""SELECT users.name, users.id
+        participants = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                         FROM participants, users
                                                         WHERE participants.vinebot_id = %(id)s
                                                         AND participants.user_id = users.id
@@ -65,7 +64,7 @@ class AbstractVinebot(object):
     def fetch_observers(self):
         if not self.is_active():
             return set([])
-        observers = self._db.execute_and_fetchall("""SELECT users.name, users.id
+        observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                      FROM participants, edges AS outgoing, edges AS incoming, users
                                                      WHERE participants.vinebot_id = %(id)s
                                                      AND participants.user_id = users.id
@@ -97,22 +96,22 @@ class AbstractVinebot(object):
         self._edges.append(edge)
         
     def delete(self):
-        self._db.execute("""DELETE FROM edges
+        g.db.execute("""DELETE FROM edges
                            WHERE vinebot_id = %(id)s
                         """, {           
                            'id': self.id
                         })
-        self._db.execute("""DELETE FROM participants
+        g.db.execute("""DELETE FROM participants
                            WHERE vinebot_id = %(id)s
                         """, {           
                            'id': self.id
                         })
-        self._db.execute("""DELETE FROM topics
+        g.db.execute("""DELETE FROM topics
                            WHERE vinebot_id = %(id)s
                         """, {           
                            'id': self.id
                         })
-        self._db.execute("""DELETE FROM vinebots
+        g.db.execute("""DELETE FROM vinebots
                            WHERE id = %(id)s
                         """, {           
                            'id': self.id
@@ -120,11 +119,11 @@ class AbstractVinebot(object):
     
 
 class InsertedVinebot(AbstractVinebot):
-    def __init__(self, db, ectl, ):
-        super(InsertedVinebot, self).__init__(db, ectl)
+    def __init__(self):
+        super(InsertedVinebot, self).__init__()
         _uuid = uuid.uuid4()
         self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
-        self.id = self._db.execute("""INSERT INTO vinebots (uuid)
+        self.id = g.db.execute("""INSERT INTO vinebots (uuid)
                                       VALUES (%(uuid)s)
                                    """, {
                                       'uuid': _uuid.bytes
@@ -132,12 +131,12 @@ class InsertedVinebot(AbstractVinebot):
     
 
 class FetchedVinebot(AbstractVinebot):
-    def __init__(self, db, ectl, jiduser=None, dbid=None, edges=None):
-        super(FetchedVinebot, self).__init__(db, ectl)
+    def __init__(self, jiduser=None, dbid=None, edges=None):
+        super(FetchedVinebot, self).__init__()
         if edges and len(edges) > 2:
             raise Exception, 'Vinebots cannot have more than two edges associated with them.'
         if dbid:
-            _uuid = self._db.execute_and_fetchall("""SELECT uuid 
+            _uuid = g.db.execute_and_fetchall("""SELECT uuid 
                                                      FROM vinebots
                                                      WHERE id = %(id)s
                                                   """, {
@@ -152,7 +151,7 @@ class FetchedVinebot(AbstractVinebot):
                 raise NotVinebotException
             _shortuuid = jiduser.replace(constants.vinebot_prefix, '')
             _uuid = shortuuid.decode(_shortuuid)
-            dbid = self._db.execute_and_fetchall("""SELECT id
+            dbid = g.db.execute_and_fetchall("""SELECT id
                                                     FROM vinebots
                                                     WHERE uuid = %(uuid)s
                                                  """, {
