@@ -63,7 +63,7 @@ Development Setup
   * `git clone git@github.com:lehrblogger/vine-xmpp.git xmpp`
   * `cd xmpp`
   * `sudo cp shared/ejabberd.cfg /etc/ejabberd && sudo ejabberdctl restart`
-  * `../bin/python ./scripts/leaf_component.py -i 1`
+  * `../bin/python ./scripts/leaf_component.py`
   * Connect as either admin user in your XMPP client of choice using 'admin1@dev.vine.im'
   * Send a message to the account 'leaf1.dev.vine.im' (note there is no username or '@' in this JID!)
   * Experiment with the various commands to modify users and their relationships
