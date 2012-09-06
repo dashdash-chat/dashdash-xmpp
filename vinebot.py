@@ -7,6 +7,7 @@ import shortuuid
 import constants
 from datetime import datetime, timedelta
 from constants import g
+from user import FetchedUser
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -59,7 +60,7 @@ class AbstractVinebot(object):
                                                  """, {
                                                      'id': self.id
                                                  })
-        return set([User(name=participant[0], dbid=participant[1]) for participant in participants])
+        return set([FetchedUser(name=participant[0], dbid=participant[1]) for participant in participants])
     
     def fetch_observers(self):
         if not self.is_active():
@@ -74,7 +75,7 @@ class AbstractVinebot(object):
                                               """, {
                                                   'id': self.id
                                               })
-        return set([User(name=observer[0], dbid=observer[1]) for observer in observers])
+        return set([FetchedUser(name=observer[0], dbid=observer[1]) for observer in observers])
     
     def remove_participant(self):
         logging.info("TODO implement remove participant")
@@ -99,6 +100,7 @@ class AbstractVinebot(object):
         self._edges.append(edge)
         
     def delete(self):
+        #TODO remove from rosters?
         g.db.execute("""DELETE FROM edges
                            WHERE vinebot_id = %(id)s
                         """, {           

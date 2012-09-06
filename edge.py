@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
-from user import User
 from constants import g
+from user import FetchedUser
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -74,7 +74,7 @@ class FetchedEdge(AbstractEdge):
             if len(result) == 0:
                 raise NotEdgeException
             self.f_user = f_user
-            self.t_user = User(dbid=result[0][1])
+            self.t_user = FetchedUser(dbid=result[0][1])
             self.id = result[0][0]
             self.vinebot_id = vinebot.id
         elif vinebot and t_user and f_user is None:
@@ -88,7 +88,7 @@ class FetchedEdge(AbstractEdge):
                                                   })
             if len(result) == 0:
                 raise NotEdgeException
-            self.f_user = User(dbid=result[0][1])
+            self.f_user = FetchedUser(dbid=result[0][1])
             self.t_user = t_user
             self.id = result[0][0]
             self.vinebot_id = vinebot.id

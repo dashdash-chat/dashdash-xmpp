@@ -13,34 +13,9 @@ else:
 class NotUserException(Exception):
     pass
 
-class User(object):
+class AbstractUser(object):
     def __init__(self, name=None, dbid=None):
         self._noted_vinebot_ids = None
-        if name and dbid:
-            self.name = name
-            self.id = dbid
-        elif name:
-            dbid = g.db.execute_and_fetchall("""SELECT id
-                                                    FROM users
-                                                    WHERE name = %(name)s
-                                                 """, {
-                                                    'name': name
-                                                 }, strip_pairs=True)
-            self.id = dbid[0] if len(dbid) == 1 else None
-            self.name = name
-        elif dbid:
-            name = g.db.execute_and_fetchall("""SELECT name
-                                                         FROM users
-                                                         WHERE id = %(id)s
-                                                      """, {
-                                                         'id': dbid
-                                                      }, strip_pairs=True)
-            self.id   = dbid
-            self.name = name[0] if len(name) == 1 else None
-        else:
-            raise Exception, 'User objects must be initialized with either a name or id.'
-        if not self.id or not self.name:
-            raise NotUserException, 'both of these users were not found in the database.'
     
     def status(self):
         return g.ectl.user_status(self.name)
@@ -85,9 +60,60 @@ class User(object):
                                                 }, strip_pairs=True)
         return [DatabaseVinebot(g.db, g.ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
     
+    def delete(self):
+        g.db.execute("""DELETE FROM users
+                        WHERE id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.ectl.unregister(self.name)
+    
     def __eq__(self, other):
         if not isinstance(other, User):
             return False
     
         return (self.id == other.id and self.name == other.name)
+    
+
+class InsertedUser(AbstractUser):
+    def __init__(self, name, password):
+        super(InsertedUser, self).__init__()
+        dbid = g.db.execute("""INSERT INTO users (name)
+                               VALUES (%(name)s)
+                            """, {
+                               'name': name
+                            })
+        g.ectl.register(name, password)
+        self.id = dbid
+        self.name = name
+    
+
+class FetchedUser(AbstractUser):
+    def __init__(self, name=None, dbid=None):
+        super(FetchedUser, self).__init__()
+        if name and dbid:
+            self.id = dbid
+            self.name = name
+        elif name:
+            dbid = g.db.execute_and_fetchall("""SELECT id
+                                                    FROM users
+                                                    WHERE name = %(name)s
+                                                 """, {
+                                                    'name': name
+                                                 }, strip_pairs=True)
+            self.id = dbid[0] if len(dbid) == 1 else None
+            self.name = name
+        elif dbid:
+            name = g.db.execute_and_fetchall("""SELECT name
+                                                         FROM users
+                                                         WHERE id = %(id)s
+                                                      """, {
+                                                         'id': dbid
+                                                      }, strip_pairs=True)
+            self.id   = dbid
+            self.name = name[0] if len(name) == 1 else None
+        else:
+            raise Exception, 'User objects must be initialized with either a name or id.'
+        if not self.id or not self.name:
+            raise NotUserException, 'both of these users were not found in the database.'
     

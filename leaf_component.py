@@ -10,14 +10,14 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
-from user import User, NotUserException
-from edge import FetchedEdge, InsertedEdge, NotEdgeException
-from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
 import constants
 from constants import g
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLConnection
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
+from user import FetchedUser, InsertedUser, NotUserException
+from edge import FetchedEdge, InsertedEdge, NotEdgeException
+from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -245,7 +245,7 @@ class LeafComponent(ComponentXMPP):
     def handle_presence_available(self, presence):
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
-            user = User(name=presence['from'].user)
+            user = FetchedUser(name=presence['from'].user)
             if vinebot.is_active():
                 participants = vinebot.fetch_participants()
                 observers = vinebot.fetch_observers()
@@ -268,7 +268,7 @@ class LeafComponent(ComponentXMPP):
     def handle_presence_away(self, presence):
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
-            user = User(name=presence['from'].user)
+            user = FetchedUser(name=presence['from'].user)
             participants = vinebot.fetch_participants()
             if user in participants:  # [] if vinebot is not active
                 if len(participants) > 2:
@@ -291,7 +291,7 @@ class LeafComponent(ComponentXMPP):
     def handle_presence_unavailable(self, presence):
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
-            user = User(name=presence['from'].user)
+            user = FetchedUser(name=presence['from'].user)
             participants = vinebot.fetch_participants()
             if user in participants:  # [] if vinebot is not active
                 vinebot.remove_participant(user)   
@@ -364,7 +364,7 @@ class LeafComponent(ComponentXMPP):
     
     def handle_chatstate(self, msg):
         pass
-
+    
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
         for recipient in recipients:
@@ -384,35 +384,33 @@ class LeafComponent(ComponentXMPP):
                                 vinebot=vinebot,
                                 parent_message_id=parent_message_id,
                                 parent_command_id=parent_command_id)
-
+    
     ##### admin /commands
-    def create_user(self, parent_command_id, user, password):
+    def create_user(self, parent_command_id, username, password):
         try:
-            g.db.execute("INSERT INTO users (name) VALUES (%(user)s)", {'user': user})
-            g.ectl.register(user, password)
+            InsertedUser(username, password)
         except IntegrityError:
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
         return parent_command_id, None
     
     def delete_user(self, parent_command_id, user):
         try:
-            
             #TODO implement this
             # for friend in g.db_fetch_user_friends(user):
             #     self.delete_friendship(user, friend)
             # for party_vinebot_uuid in g.db_fetch_user_party_vinebots(user):
             #     vinebot_user = self.get_vinebot_user(party_vinebot_uuid)
             #     self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
-            g.db.execute("DELETE FROM users WHERE name = %(user)s", {'user': user})
-            g.ectl.unregister(user)
+            user = FetchedUser(name=user)
+            user.delete()
         except IntegrityError:
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user already exists?')
         return parent_command_id, None
     
     def create_edge(self, parent_command_id, from_username, to_username):
         try:
-            f_user = User(name=from_username)
-            t_user = User(name=to_username)
+            f_user = FetchedUser(name=from_username)
+            t_user = FetchedUser(name=to_username)
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
         try:
@@ -439,8 +437,8 @@ class LeafComponent(ComponentXMPP):
     
     def delete_edge(self, parent_command_id, from_username, to_username):
         try:
-            f_user = User(name=from_username)
-            t_user = User(name=to_username)
+            f_user = FetchedUser(name=from_username)
+            t_user = FetchedUser(name=to_username)
         except NotUserException, e:
             raise ExecutionError, (parent_command, e)
         try:
