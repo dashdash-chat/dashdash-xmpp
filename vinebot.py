@@ -77,8 +77,13 @@ class AbstractVinebot(object):
                                               })
         return set([FetchedUser(name=observer[0], dbid=observer[1]) for observer in observers])
     
-    def remove_participant(self):
+    def remove_participant(self, user, message=None):
         logging.info("TODO implement remove participant")
+        # roster stuff, ugh
+    
+    def add_participant(self, user, message=None):
+        logging.info("TODO implement add participant")
+        # roster stuff, ugh
     
     def update_rosters(self):
         if len(self._edges) == 2:

@@ -254,12 +254,16 @@ class LeafComponent(ComponentXMPP):
                 elif user in observers:
                     self.send_presences(vinebot, [user])
             else:
-                edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
-                edge_f_user = FetchedEdge(f_user=user, vinebot=vinebot)
-                if edge_t_user:
+                try:
+                    edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
                     self.send_presences(vinebot, [edge_t_user.f_user])
-                if edge_f_user:
+                except NotEdgeException:
+                    pass
+                try:
+                    edge_f_user = FetchedEdge(f_user=user, vinebot=vinebot)
                     self.send_presences(vinebot, [user], edge_f_user.t_user.status())
+                except NotEdgeException:
+                    pass
         except NotVinebotException:
             return
         except NotUserException:
@@ -280,9 +284,11 @@ class LeafComponent(ComponentXMPP):
                     self.send_presences(vinebot, [user], pshow=remaining_user.status())
                     self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
             else:
-                edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
-                if edge_t_user:
+                try:
+                    edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
                     self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
+                except NotEdgeException:
+                    pass
         except NotVinebotException:
             return
         except NotUserException:
@@ -320,37 +326,46 @@ class LeafComponent(ComponentXMPP):
                 if self.commands.is_command(msg['body']):
                     handle_command(msg, vinebot)
                 else:
-                    self.send_reply(msg, vinebot, 'Received: %s' % msg['body'])
-                    # if msg['from'].user in bot.participants:
-                    #     if not bot.is_active:
-                    #         user1, user2 = bot.participants  # in case one user is away or offline
-                    #         user1_status = self.user_status(user1)
-                    #         user2_status = self.user_status(user2)
-                    #         self.send_presences(bot, [user1], pshow=user2_status)
-                    #         self.send_presences(bot, [user2], pshow=user1_status)
-                    #         if user1_status != 'unavailable' and user2_status != 'unavailable':
-                    #             g.db_activate_pair_vinebot(bot.user, True)
-                    #             self.update_rosters(set([]), bot.participants, bot.user, False)
-                    #             self.send_presences(bot, bot.observers)
-                    #             self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
-                    #         else:
-                    #             parent_message_id = g.db_log_message(bot.user, msg['from'].user, [], msg['body'])
-                    #             self.send_reply(msg, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
-                    #     else:
-                    #         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
-                    # elif msg['from'].user in bot.observers:
-                    #     if bot.is_active:
-                    #         self.add_participant(msg['from'].user, bot, '%s has joined the conversation' % msg['from'].user)
-                    #         self.broadcast_msg(msg, bot.participants, sender=msg['from'].user)
-                    #     else:    
-                    #         parent_message_id = g.db_log_message(bot.user, msg['from'].user, [], msg['body'])
-                    #         self.send_reply(msg, 'Sorry, this conversation has ended for now.', parent_message_id=parent_message_id)
-                    # else:
-                    #     parent_message_id = g.db_log_message(bot.user, msg['from'].user, [], msg['body'])
-                    #     if bot.is_active:
-                    #         self.send_reply(msg, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
-                    #     else:    
-                    #         self.send_reply(msg, 'Sorry, this conversation has ended.', parent_message_id=parent_message_id)
+                    user = FetchedUser(name=msg['from'].user)
+                    participants = vinebot.fetch_participants()
+                    if participants:
+                        observers = vinebot.fetch_observers()
+                        if user in participants:
+                            self.broadcast_message(vinebot, user, participants, msg['body'])
+                        elif user in observers:
+                            vinebot.add_participant(user, '%s has joined the conversation' % user.name)
+                            self.broadcast_message(vinebot, user, participants, msg['body'])
+                        else:
+                            parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
+                            self.send_reply(msg, vinebot, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
+                    else:
+                        try:
+                            edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
+                        except NotEdgeException:
+                            edge_t_user = None
+                        try:
+                            edge_f_user = FetchedEdge(f_user=user, vinebot=vinebot)
+                        except NotEdgeException:
+                            edge_f_user = None
+                        if edge_t_user or edge_f_user:
+                            user1, user2 = set([edge_t_user.t_user, edge_t_user.f_user] if edge_t_user else [] +
+                                               [edge_f_user.t_user, edge_f_user.f_user] if edge_f_user else [])
+                            user1_status = user1.status()
+                            user2_status = user2.status()
+                            self.send_presences(vinebot, [user1], pshow=user2_status)
+                            self.send_presences(vinebot, [user2], pshow=user1_status)
+                            if user1_status != 'unavailable' and user2_status != 'unavailable':
+                                observers = vinebot.fetch_observers()
+                                vinebot.add_participant(user1)
+                                vinebot.add_participant(user2)
+                                self.send_presences(vinebot, observers)
+                                self.broadcast_message(vinebot, user, participants, msg['body'])
+                            else:
+                                parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
+                                self.send_reply(msg, vinebot, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
+                        else:
+                            parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
+                            self.send_reply(msg, vinebot, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
             except NotVinebotException:
                 if msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
                     if self.commands.is_command(msg['body']):
@@ -361,6 +376,8 @@ class LeafComponent(ComponentXMPP):
                 else:
                     parent_message_id = g.db.log_message(msg['from'].user, [], msg['body'])
                     self.send_reply(msg, None, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
+            except NotUserException:
+                logging.error('Received message from unknown user: %s' % msg)
     
     def handle_chatstate(self, msg):
         pass
@@ -372,6 +389,26 @@ class LeafComponent(ComponentXMPP):
                                 pto='%s@%s' % (recipient.name, constants.server),
                                 pshow=None if pshow == 'available' else pshow,
                                 pstatus=unicode(vinebot.topic) if vinebot.topic else None)
+    
+    def broadcast_message(self, vinebot, sender, recipients, body, parent_command_id=None):
+        #LATER fix html, but it's a pain with reformatting
+        msg = self.Message()
+        if body and body != '':
+            if sender:
+                msg['body'] = '[%s] %s' % (sender, body)
+            else:
+                msg['body'] = '*** %s' % (body)
+        actual_recipients = []
+        for recipient in recipients:
+            if not sender or sender != recipient:
+                new_msg = msg.__copy__()
+                new_msg['to'] = '%s@%s' % (recipient, constants.server)
+                new_msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
+                actual_recipients.append(recipient)
+        self.db_log_message(vinebot_jid.user, sender, actual_recipients, body, parent_command_id=parent_command_id)
+    
+    def broadcast_alert(self, vinebot, recipients, body, parent_command_id):
+        self.broadcast_message(vinebot, None, recipients, body, parent_command_id=parent_command_id)
     
     def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
         msg.reply(body).send()

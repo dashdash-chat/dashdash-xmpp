@@ -19,13 +19,13 @@ class MySQLConnection(object):
             log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
                                         VALUES (
                                             %(vinebot_id)s,
-                                            (SELECT id FROM users WHERE name = %(sender)s),
+                                            %(sender_id)s,
                                             %(parent_message_id)s,
                                             %(parent_command_id)s,
                                             %(body)s
                                         )""", {
                                             'vinebot_id': vinebot.id if vinebot else None,
-                                            'sender':  sender,
+                                            'sender_id':  sender.id,
                                             'parent_message_id': parent_message_id,
                                             'parent_command_id': parent_command_id,
                                             'body': body.encode('utf-8')
