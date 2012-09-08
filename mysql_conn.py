@@ -98,7 +98,7 @@ class MySQLConnection(object):
         return []
     
     def execute(self, query, data={}):
-        #logging.info(query % data)
+        logging.debug(query % data)
         if not self.conn or not self.cursor:
             logging.info("MySQL connection missing, attempting to reconnect and retry query")
             self.connect()

@@ -3,7 +3,7 @@
 import sys
 import logging
 from constants import g
-from user import FetchedUser
+import user as u
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -21,12 +21,23 @@ class AbstractEdge(object):
         self.vinebot_id = None
         self.id = None
     
+    def change_vinebot(self, vinebot):
+        g.db.execute("""UPDATE edges
+                        SET vinebot_id = %(vinebot_id)s
+                        WHERE id = %(id)s
+                     """, {
+                        'vinebot_id': vinebot.id,
+                        'id': self.id
+                     })
+        self.vinebot_id = vinebot.id
+    
     def delete(self):
         g.db.execute("""DELETE FROM edges
                             WHERE id = %(id)s
                          """, {           
                             'id': self.id
                          })
+    
 
 class InsertedEdge(AbstractEdge):
     def __init__(self, f_user, t_user, vinebot_id):
@@ -45,9 +56,22 @@ class InsertedEdge(AbstractEdge):
     
 
 class FetchedEdge(AbstractEdge):
-    def __init__(self, f_user=None, t_user=None, vinebot=None):
+    def __init__(self, f_user=None, t_user=None, vinebot=None, dbid=None):
         super(FetchedEdge, self).__init__()
-        if f_user and t_user and vinebot is None:
+        if dbid and vinebot is None and f_user is None and t_user is None:
+            result = g.db.execute_and_fetchall("""SELECT from_id, to_id, vinebot_id
+                                                  FROM edges
+                                                  WHERE id = %(id)s
+                                               """, {
+                                                  'id': dbid
+                                               })
+            if len(result) == 0:
+                raise NotEdgeException
+            self.f_user = u.FetchedUser(dbid=result[0][0])
+            self.t_user = u.FetchedUser(dbid=result[0][1])
+            self.id = dbid
+            self.vinebot_id = result[0][2]
+        elif f_user and t_user and vinebot is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, vinebot_id
                                                                 FROM edges
                                                                 WHERE to_id = %(t_id)s
@@ -62,7 +86,7 @@ class FetchedEdge(AbstractEdge):
             self.t_user = t_user
             self.id = result[0][0]
             self.vinebot_id = result[0][1]
-        elif vinebot and f_user and t_user is None:
+        elif vinebot and f_user and t_user is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, to_id
                                                       FROM edges
                                                       WHERE vinebot_id = %(vinebot_id)s
@@ -74,10 +98,10 @@ class FetchedEdge(AbstractEdge):
             if len(result) == 0:
                 raise NotEdgeException
             self.f_user = f_user
-            self.t_user = FetchedUser(dbid=result[0][1])
+            self.t_user = u.FetchedUser(dbid=result[0][1])
             self.id = result[0][0]
             self.vinebot_id = vinebot.id
-        elif vinebot and t_user and f_user is None:
+        elif vinebot and t_user and f_user is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, from_id
                                                       FROM edges
                                                       WHERE vinebot_id = %(vinebot_id)s
@@ -88,10 +112,10 @@ class FetchedEdge(AbstractEdge):
                                                   })
             if len(result) == 0:
                 raise NotEdgeException
-            self.f_user = FetchedUser(dbid=result[0][1])
+            self.f_user = u.FetchedUser(dbid=result[0][1])
             self.t_user = t_user
             self.id = result[0][0]
             self.vinebot_id = vinebot.id
         else:
-            raise Exception, 'FechedEdges require either both users or a vinebot and either user as parameters.'
+            raise Exception, 'FechedEdges require either both users or a vinebot and either user, or a dbid as parameters.'
     

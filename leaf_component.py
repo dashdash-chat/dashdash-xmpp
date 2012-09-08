@@ -62,9 +62,9 @@ class LeafComponent(ComponentXMPP):
         def admin_or_graph_to_leaf(sender, vinebot):
             return sender.bare in (constants.admin_users + [constants.graph_xmpp_user]) and not vinebot
         def participant_to_vinebot(sender, vinebot):
-            return sender.user in bot.participants and vinebot
+            return sender.user in vinebot.participants and vinebot
         def observer_to_vinebot(sender, vinebot):
-            return sender.user in bot.observers and vinebot
+            return sender.user in vinebot.observers and vinebot
         def admin_or_participant_to_vinebot(sender, vinebot):
             return admin_to_vinebot(sender, vinebot) or participant_to_vinebot(sender, vinebot)
         # Argument transformations for /commands
@@ -215,7 +215,11 @@ class LeafComponent(ComponentXMPP):
                     break
         #logging.info('disconnecting! other leaves online? %s' % other_leaves_online)
         if not other_leaves_online:
-            logging.warning("TODO: send unavailable from all vinebots")
+            for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
+                self.send_presences(vinebot, vinebot.everyone, pshow='unavailable')
+            for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
+                for edge in vinebot.edges:
+                    self.send_presences(vinebot, [edge.f_user], pshow='unavailable')
         g.db.cleanup()
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
@@ -239,19 +243,27 @@ class LeafComponent(ComponentXMPP):
             return constants.max_leaves > 0  # if there are no locks to acquire, but we have to go through the whole loop to make sure we acquire one ourself
         other_leaves_online = register_leaf()
         if not other_leaves_online:
-            logging.warning("TODO: send available from all vinebots")
+            for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
+                self.send_presences(vinebot, vinebot.everyone)
+            for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
+                for edge in vinebot.edges:
+                    self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
         #logging.info('starting! other leaves online? %s' % other_leaves_online)
     
     def handle_presence_available(self, presence):
+        #TODO fix this bullshit
+        # one (of several) times i use the vinebot_id in the edges table is that if you come online, and there's a steven->jorge edge
+        # then it needs to look for that steven->jorge edge, and then look for a steven->jorge vinebot, so that it can send a presence from that vinebot to me saying that i'm online
+        # (the bug is that the leaf only receives the notification that you're online to ANOTHER vinebot, presumably one of your other friends (or not at all, if you have no friends, but i dont even know how to fix that right now)
+        # but then, maybe you have several inbound edges, and those vinebots never "receive"  those stanzas because they arent on your roster
+        # and right now, i'm not properly broadcasting the presence for any of those possible inbound edges)
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
             user = FetchedUser(name=presence['from'].user)
-            if vinebot.is_active():
-                participants = vinebot.fetch_participants()
-                observers = vinebot.fetch_observers()
-                if user in participants:
-                    self.send_presences(vinebot, participants + observers)
-                elif user in observers:
+            if vinebot.is_active:
+                if user in vinebot.participants:
+                    self.send_presences(vinebot, vinebot.everyone)
+                elif user in vinebot.observers:
                     self.send_presences(vinebot, [user])
             else:
                 try:
@@ -273,14 +285,12 @@ class LeafComponent(ComponentXMPP):
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
             user = FetchedUser(name=presence['from'].user)
-            participants = vinebot.fetch_participants()
-            if user in participants:  # [] if vinebot is not active
-                if len(participants) > 2:
-                    observers = vinebot.fetch_observers()
-                    self.send_presences(vinebot, participants + observers)
-                else:  # elif len(participants) == 2:
-                    vinebot.remove_participant(user)  # this deactivates the vinebot
-                    remaining_user = participants.difference([user])
+            if user in vinebot.participants:  # [] if vinebot is not active
+                if len(vinebot.participants) >= 3:
+                    self.send_presences(vinebot, vinebot.everyone)
+                else:  # elif len(participants) == 2:    
+                    remaining_user = vinebot.participants.difference([user]).pop()
+                    self.remove_participant(vinebot, user)  # this deactivates the vinebot
                     self.send_presences(vinebot, [user], pshow=remaining_user.status())
                     self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
             else:
@@ -298,16 +308,13 @@ class LeafComponent(ComponentXMPP):
         try:
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
             user = FetchedUser(name=presence['from'].user)
-            participants = vinebot.fetch_participants()
-            if user in participants:  # [] if vinebot is not active
-                vinebot.remove_participant(user)   
-                if len(participants) > 2:
-                    observers = vinebot.fetch_observers()
-                    self.send_presences(vinebot, participants + observers)
-                    
+            if not user.is_online() and user in vinebot.participants:  # [] if vinebot is not active
+                if len(vinebot.participants) > 2:
+                    self.send_presences(vinebot, vinebot.everyone.difference([user]))
                 else:  # elif len(participants) == 2:
-                    remaining_user = participants.difference([user])
-                    self.send_presences(vinebot, [remaining_user], pshow='unavailable')
+                    remaining_users = vinebot.participants.difference([user])
+                    self.send_presences(vinebot, remaining_users, pshow='unavailable')
+                self.remove_participant(vinebot, user)
         except NotVinebotException:
             return
         except NotUserException:
@@ -327,18 +334,18 @@ class LeafComponent(ComponentXMPP):
                     handle_command(msg, vinebot)
                 else:
                     user = FetchedUser(name=msg['from'].user)
-                    participants = vinebot.fetch_participants()
-                    if participants:
-                        observers = vinebot.fetch_observers()
-                        if user in participants:
-                            self.broadcast_message(vinebot, user, participants, msg['body'])
-                        elif user in observers:
-                            vinebot.add_participant(user, '%s has joined the conversation' % user.name)
-                            self.broadcast_message(vinebot, user, participants, msg['body'])
+                    if vinebot.participants:
+                        if user in vinebot.participants:
+                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
+                        elif user in vinebot.observers:
+                            vinebot.add_participant(user)
+                            self.broadcast_alert(vinebot, vinebot.participants, '%s has joined the conversation' % user.name)
+                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_reply(msg, vinebot, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
+                        #TODO ugh this is a mess, use if len(vinebot.edges) > 0:
                         try:
                             edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
                         except NotEdgeException:
@@ -355,27 +362,32 @@ class LeafComponent(ComponentXMPP):
                             self.send_presences(vinebot, [user1], pshow=user2_status)
                             self.send_presences(vinebot, [user2], pshow=user1_status)
                             if user1_status != 'unavailable' and user2_status != 'unavailable':
-                                observers = vinebot.fetch_observers()
-                                vinebot.add_participant(user1)
-                                vinebot.add_participant(user2)
-                                self.send_presences(vinebot, observers)
-                                self.broadcast_message(vinebot, user, participants, msg['body'])
+                                self.add_participant(vinebot, user1)
+                                self.add_participant(vinebot, user2)
+                                self.send_presences(vinebot, vinebot.observers)
+                                self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                                 self.send_reply(msg, vinebot, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_reply(msg, vinebot, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
+                    vinebot.cleanup()
             except NotVinebotException:
-                if msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
-                    if self.commands.is_command(msg['body']):
-                        handle_command(msg)
+                try:
+                    if msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
+                        if self.commands.is_command(msg['body']):
+                            handle_command(msg)
+                        else:
+                            user = FetchedUser(name=msg['from'].user)
+                            parent_message_id = g.db.log_message(user, [], msg['body'])
+                            self.send_reply(msg, None, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
                     else:
-                        parent_message_id = g.db.log_message(msg['from'].user, [], msg['body'])
-                        self.send_reply(msg, None, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
-                else:
-                    parent_message_id = g.db.log_message(msg['from'].user, [], msg['body'])
-                    self.send_reply(msg, None, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
+                        user = FetchedUser(name=msg['from'].user)
+                        parent_message_id = g.db.log_message(user, [], msg['body'])
+                        self.send_reply(msg, None, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
+                except NotUserException:
+                    logging.error('Received message from unknown user: %s' % msg)
             except NotUserException:
                 logging.error('Received message from unknown user: %s' % msg)
     
@@ -395,19 +407,20 @@ class LeafComponent(ComponentXMPP):
         msg = self.Message()
         if body and body != '':
             if sender:
-                msg['body'] = '[%s] %s' % (sender, body)
+                msg['body'] = '[%s] %s' % (sender.name, body)
             else:
                 msg['body'] = '*** %s' % (body)
         actual_recipients = []
         for recipient in recipients:
             if not sender or sender != recipient:
                 new_msg = msg.__copy__()
-                new_msg['to'] = '%s@%s' % (recipient, constants.server)
-                new_msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
-                actual_recipients.append(recipient)
-        self.db_log_message(vinebot_jid.user, sender, actual_recipients, body, parent_command_id=parent_command_id)
+                new_msg['to'] = '%s@%s' % (recipient.name, constants.server)
+                new_msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
+                new_msg.send()
+                actual_recipients.append(recipient.name)
+        g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
-    def broadcast_alert(self, vinebot, recipients, body, parent_command_id):
+    def broadcast_alert(self, vinebot, recipients, body, parent_command_id=None):
         self.broadcast_message(vinebot, None, recipients, body, parent_command_id=parent_command_id)
     
     def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
@@ -421,6 +434,64 @@ class LeafComponent(ComponentXMPP):
                                 vinebot=vinebot,
                                 parent_message_id=parent_message_id,
                                 parent_command_id=parent_command_id)
+    
+    def add_participant(self, vinebot, user):
+        old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
+        vinebot.add_participant(user)
+        if len(vinebot.participants) < 2:
+            pass  # this is the first participant, so assume that we're adding another one in a second
+        elif len(vinebot.participants) == 2:
+            vinebot.update_rosters(set([]), vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
+        elif len(vinebot.participants) == 3:
+            vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
+            if len(vinebot.edges) > 0:
+                new_vinebot = InsertedVinebot()
+                for edge in vinebot.edges:
+                    edge.change_vinebot(new_vinebot) 
+                    new_vinebot.add_to_roster_of(edge.f_user, new_vinebot.get_nick(edge.t_user))
+        else:
+            # there's no way this vinebot can still have edges associated with it
+            vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
+    
+    def remove_participant(self, vinebot, user):
+        old_participants = vinebot.participants.copy()
+        vinebot.remove_participant(user)
+        if len(vinebot.participants) < 1:
+            pass
+        elif len(vinebot.participants) == 1:
+            vinebot.remove_participant(vinebot.participants.pop()) # AUUUGH THIS SHOULD BE IMMUTABLE
+            vinebot.update_rosters(old_participants, set([]))
+            self.send_presences(vinebot, vinebot.everyone)
+        elif len(vinebot.participants) == 2:
+            vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
+            user1, user2 = vinebot.participants
+            try:
+                edge_t_user = FetchedEdge(f_user=user2, t_user=user1)
+            except NotEdgeException:
+                edge_t_user = None
+            try:
+                edge_f_user = FetchedEdge(f_user=user1, t_user=user2)
+            except NotEdgeException:
+                edge_f_user = None
+            edge = edge_t_user if edge_t_user else edge_f_user
+            if edge_t_user:
+                old_vinebot = FetchedVinebot(dbid=edge_t_user.vinebot_id)
+            elif edge_f_user:
+                old_vinebot = FetchedVinebot(dbid=edge_f_user.vinebot_id)
+            if edge and len(old_vinebot.participants) == 0:
+                old_vinebot.delete()
+                if edge_t_user:
+                    edge_t_user.change_vinebot(new_vinebot)
+                if edge_f_user:
+                    edge_f_user.change_vinebot(new_vinebot)
+        else:
+            # this conversation had more than three people so start, so nothing changes if we remove someone
+            vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
@@ -457,19 +528,21 @@ class LeafComponent(ComponentXMPP):
             pass
         try:
             reverse_edge = FetchedEdge(t_user, f_user)
-            vinebot = FetchedVinebot(dbid=reverse_edge.vinebot_id, edges=[reverse_edge])
+            vinebot = FetchedVinebot(dbid=reverse_edge.vinebot_id)#, edges=[reverse_edge])
             f_user.note_visible_active_vinebots()
             t_user.note_visible_active_vinebots()
             InsertedEdge(f_user, t_user, vinebot_id=vinebot.id)
-            f_user.update_visible_active_vinebots()
-            t_user.update_visible_active_vinebots()
-            #TODO send presences to observers?
+            for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
+                self.send_presences(other_vinebot, [f_user])
+            for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.add_to_roster_of(t_user, other_vinebot.get_nick(t_user))
+                self.send_presences(other_vinebot, [t_user])
         except NotEdgeException:
-            vinebot = InsertedVinebot(g.db, g.ectl)
+            vinebot = InsertedVinebot()
             InsertedEdge(f_user, t_user, vinebot_id=vinebot.id)
         self.send_presences(vinebot, [f_user], pshow=t_user.status())
-        vinebot.add_to_roster_of(f_user)
-        vinebot.cleanup()
+        vinebot.add_to_roster_of(f_user, vinebot.get_nick(f_user))
         return parent_command_id, '%s and %s now have a directed edge between them.' % (f_user.name, t_user.name)
     
     def delete_edge(self, parent_command_id, from_username, to_username):
@@ -477,25 +550,27 @@ class LeafComponent(ComponentXMPP):
             f_user = FetchedUser(name=from_username)
             t_user = FetchedUser(name=to_username)
         except NotUserException, e:
-            raise ExecutionError, (parent_command, e)
+            raise ExecutionError, (parent_command_id, e)
         try:
             edge = FetchedEdge(f_user, t_user)
         except NotEdgeException:
             raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
         vinebot = FetchedVinebot(dbid=edge.vinebot_id)
         try:
-            reverse_edge = FetchedEdge(t_user, f_user)
+            FetchedEdge(t_user, f_user)  # reverse_edge
             f_user.note_visible_active_vinebots()
             t_user.note_visible_active_vinebots()
             edge.delete()
-            f_user.update_visible_active_vinebots()
-            t_user.update_visible_active_vinebots()
+            for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(f_user)
+            for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(t_user)
         except NotEdgeException:    
             edge.delete()
-            if not vinebot.is_active():
+            if not vinebot.is_active:
                 vinebot.delete()
-        vinebot.remove_from_roster_of(f_user)
-        vinebot.cleanup()
+        if not vinebot.is_active:
+            vinebot.remove_from_roster_of(f_user)
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
 
