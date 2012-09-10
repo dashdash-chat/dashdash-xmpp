@@ -274,7 +274,7 @@ class LeafComponent(ComponentXMPP):
                         pass
             except NotVinebotException:
                 pass
-            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
+            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):  #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
                 self.send_presences(incoming_vinebot, [user])
         except NotUserException:
             return
