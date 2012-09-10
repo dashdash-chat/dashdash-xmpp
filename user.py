@@ -48,7 +48,6 @@ class AbstractUser(object):
                                               """, {
                                                  'id': self.id
                                               })
-        logging.info(vinebots)
         return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
     
     def _fetch_visible_active_vinebot_ids(self):

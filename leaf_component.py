@@ -312,8 +312,6 @@ class LeafComponent(ComponentXMPP):
             vinebot = None
             try:
                 vinebot = FetchedVinebot(jiduser=presence['to'].user)
-                logging.info('ok')
-                logging.info(user.is_online())
                 if not user.is_online():
                     if user in vinebot.participants:  # [] if vinebot is not active
                         if len(vinebot.participants) > 2:
@@ -470,17 +468,18 @@ class LeafComponent(ComponentXMPP):
     def remove_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
-        if len(vinebot.participants) < 1:
-            pass
-        elif len(vinebot.participants) == 1:
-            vinebot.remove_participant(iter(vinebot.participants.difference([user])).next())
-            vinebot.update_rosters(old_participants, set([]))
-            self.send_presences(vinebot, vinebot.everyone)
-            if len(vinebot.edges) == 0:
+        if len(vinebot.participants) == 1:
+            other_user = iter(vinebot.participants.difference([user])).next()
+            vinebot.remove_participant(other_user)
+            if len(vinebot.edges) > 0:
+                vinebot.update_rosters(old_participants, set([]), participants_changed=False)
+                if len(vinebot.edges) == 1:
+                    vinebot.remove_from_roster_of(iter(vinebot.edges).next().t_user)
+            else:
+                vinebot.update_rosters(old_participants, set([]))
                 vinebot.delete()
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(old_participants, vinebot.participants)
-            self.send_presences(vinebot, vinebot.everyone)
             user1, user2 = vinebot.participants
             try:
                 edge_t_user = FetchedEdge(f_user=user2, t_user=user1)
@@ -504,7 +503,7 @@ class LeafComponent(ComponentXMPP):
         else:
             # this conversation had more than three people so start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
-            self.send_presences(vinebot, vinebot.everyone)
+        self.send_presences(vinebot, vinebot.everyone)
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
