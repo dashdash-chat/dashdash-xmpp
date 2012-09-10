@@ -47,10 +47,11 @@ class MySQLConnection(object):
                                         })
         for recipient in recipients:
             self.execute("""INSERT INTO message_recipients (message_id, recipient_id)
-                               VALUES (
-                                   %(log_id)s,
-                                   (SELECT id FROM users WHERE name = %(recipient)s)
-                               )""", {'log_id': log_id, 'recipient': recipient})
+                            VALUES (%(log_id)s, %(recipient_id)s)
+                         """, {
+                               'log_id': log_id,
+                               'recipient_id': recipient.id
+                         })
         return log_id
     
     def log_command(self, sender, command_name, token, string, vinebot=None, is_valid=True):

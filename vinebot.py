@@ -199,6 +199,9 @@ class AbstractVinebot(object):
             return False
         return (self.id == other.id and self.jiduser == other.jiduser)
     
+    def __ne__(self, other):
+        return not self.__eq__(other)
+    
     def __hash__(self):
         return hash('%d.%s' % (self.id, self.jiduser))
     

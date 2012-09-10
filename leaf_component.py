@@ -354,18 +354,8 @@ class LeafComponent(ComponentXMPP):
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_reply(msg, vinebot, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
-                        #TODO ugh this is a mess, use if len(vinebot.edges) > 0:
-                        try:
-                            edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
-                        except NotEdgeException:
-                            edge_t_user = None
-                        try:
-                            edge_f_user = FetchedEdge(f_user=user, vinebot=vinebot)
-                        except NotEdgeException:
-                            edge_f_user = None
-                        if edge_t_user or edge_f_user:
-                            user1, user2 = set([edge_t_user.t_user, edge_t_user.f_user] if edge_t_user else [] +
-                                               [edge_f_user.t_user, edge_f_user.f_user] if edge_f_user else [])
+                        if len(vinebot.edges) > 0:
+                            user1, user2 = vinebot.edge_users
                             user1_status = user1.status()
                             user2_status = user2.status()
                             self.send_presences(vinebot, [user1], pshow=user2_status)
@@ -426,7 +416,7 @@ class LeafComponent(ComponentXMPP):
                 new_msg['to'] = '%s@%s' % (recipient.name, constants.server)
                 new_msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
                 new_msg.send()
-                actual_recipients.append(recipient.name)
+                actual_recipients.append(recipient)
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
     def broadcast_alert(self, vinebot, recipients, body, parent_command_id=None):
@@ -437,12 +427,16 @@ class LeafComponent(ComponentXMPP):
         if parent_message_id is None and parent_command_id is None:
             logging.error('Attempted to send reply "%s" with no parent. msg=%s' % (body, msg))
         else:
+            try:
+                recipients = [FetchedUser(name=msg['to'].user)]
+            except NotUserException:
+                recipients = []
             g.db.log_message(None,
-                                [msg['to'].user],
-                                body,
-                                vinebot=vinebot,
-                                parent_message_id=parent_message_id,
-                                parent_command_id=parent_command_id)
+                             recipients,
+                             body,
+                             vinebot=vinebot,
+                             parent_message_id=parent_message_id,
+                             parent_command_id=parent_command_id)
     
     def add_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
