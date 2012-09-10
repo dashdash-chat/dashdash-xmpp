@@ -38,6 +38,12 @@ class AbstractEdge(object):
                             'id': self.id
                          })
     
+    def __str__(self):
+        return self.__repr__()
+    
+    def __repr__(self):
+        return '%s(dbid=\'%s\', vinebot_id=%d)' % (self.__class__.__name__, self.id, self.vinebot_id)
+    
 
 class InsertedEdge(AbstractEdge):
     def __init__(self, f_user, t_user, vinebot_id):
