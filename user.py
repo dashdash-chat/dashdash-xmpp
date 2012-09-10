@@ -127,6 +127,12 @@ class AbstractUser(object):
     
     def __hash__(self):
         return hash('%d.%s' % (self.id, self.name))
+
+    def __str__(self):
+        return self.__repr__()
+    
+    def __repr__(self):
+        return '%s(name=\'%s\', dbid=%d)' % (self.__class__.__name__, self.name, self.id)
     
 
 class InsertedUser(AbstractUser):
