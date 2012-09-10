@@ -45,6 +45,7 @@ class AbstractUser(object):
                                                  WHERE incoming.vinebot_id = vinebots.id
                                                  AND incoming.to_id = %(id)s
                                                  AND outgoing.vinebot_id != vinebots.id
+                                                 GROUP BY vinebots.id
                                               """, {
                                                  'id': self.id
                                               })
