@@ -509,6 +509,7 @@ class LeafComponent(ComponentXMPP):
         except IntegrityError, e:
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
                 raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
+            raise e
         self.broadcast_alert(vinebot, vinebot.participants, alert_msg, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
