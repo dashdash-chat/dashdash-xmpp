@@ -216,11 +216,14 @@ class InsertedVinebot(AbstractVinebot):
     
 
 class FetchedVinebot(AbstractVinebot):
-    def __init__(self, jiduser=None, dbid=None):#, edges=None):
+    def __init__(self, jiduser=None, dbid=None, _uuid=None):#, edges=None):
         super(FetchedVinebot, self).__init__()
         # if edges and len(edges) > 2:
         #     raise Exception, 'Vinebots cannot have more than two edges associated with them.'
-        if dbid:
+        if dbid and _uuid:
+            self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid)))
+            self.id = dbid
+        elif dbid:
             _uuid = g.db.execute_and_fetchall("""SELECT uuid 
                                                      FROM vinebots
                                                      WHERE id = %(id)s

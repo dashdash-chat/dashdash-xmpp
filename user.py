@@ -17,6 +17,7 @@ class NotUserException(Exception):
 class AbstractUser(object):
     def __init__(self, name=None, dbid=None):
         self._friends = None
+        self._incoming_vinebots = None
         self._noted_vinebot_ids = None
     
     def status(self):
@@ -27,18 +28,30 @@ class AbstractUser(object):
     
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
-                                            FROM users, edges AS outgoing, edges AS incoming
-                                            WHERE outgoing.vinebot_id = incoming.vinebot_id
-                                            AND outgoing.from_id = %(id)s
-                                            AND incoming.to_id = %(id)s
-                                            AND outgoing.to_id = incoming.from_id
-                                            AND outgoing.to_id = users.id
-                                         """, {
-                                            'id': self.id
-                                         })
+                                                    FROM users, edges AS outgoing, edges AS incoming
+                                                    WHERE outgoing.vinebot_id = incoming.vinebot_id
+                                                    AND outgoing.from_id = %(id)s
+                                                    AND incoming.to_id = %(id)s
+                                                    AND outgoing.to_id = incoming.from_id
+                                                    AND outgoing.to_id = users.id
+                                                 """, {
+                                                    'id': self.id
+                                                 })
         return frozenset([FetchedUser(name=friend_pair[0], dbid=friend_pair[1]) for friend_pair in friend_pairs])
     
-    def _fetch_visible_active_vinebots(self):
+    def _fetch_vinebots_incoming_only(self):  # fetches the vinebots for ONLY incoming edges
+        vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
+                                                 FROM vinebots, edges AS incoming, edges AS outgoing
+                                                 WHERE incoming.vinebot_id = vinebots.id
+                                                 AND incoming.to_id = %(id)s
+                                                 AND outgoing.vinebot_id != vinebots.id
+                                              """, {
+                                                 'id': self.id
+                                              })
+        logging.info(vinebots)
+        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+    
+    def _fetch_visible_active_vinebot_ids(self):
         return g.db.execute_and_fetchall("""SELECT participants.vinebot_id
                                             FROM edges AS outgoing, edges AS incoming, participants
                                             WHERE outgoing.vinebot_id = incoming.vinebot_id
@@ -51,12 +64,12 @@ class AbstractUser(object):
                                          }, strip_pairs=True)
     
     def note_visible_active_vinebots(self):
-        self._noted_vinebot_ids = set(self._fetch_visible_active_vinebots())
+        self._noted_vinebot_ids = set(self._fetch_visible_active_vinebot_ids())
     
     def calc_active_vinebot_diff(self):
         if self._noted_vinebot_ids == None:
             raise Exception, 'User\'s noted visible active vinebots must be fetched before they are updated!'
-        current_vinebot_ids = set(self._fetch_visible_active_vinebots())
+        current_vinebot_ids = set(self._fetch_visible_active_vinebot_ids())
         old_vinebot_ids = self._noted_vinebot_ids.difference(current_vinebot_ids)
         new_vinebot_ids = current_vinebot_ids.difference(self._noted_vinebot_ids)
         if len(old_vinebot_ids) > 0 and len(new_vinebot_ids) > 0:
@@ -68,15 +81,15 @@ class AbstractUser(object):
         else:
             return set([])
     
-    def get_active_vinebots(self):
-        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
-                                                   FROM participants
-                                                   WHERE user_id = %(id)s
-                                                   LIMIT 1
-                                                """, {
-                                                   'id': self.id
-                                                }, strip_pairs=True)
-        return [v.FetchedVinebot(g.db, g.ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
+    # def get_active_vinebots(self):
+    #     vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
+    #                                                FROM participants
+    #                                                WHERE user_id = %(id)s
+    #                                                LIMIT 1
+    #                                             """, {
+    #                                                'id': self.id
+    #                                             }, strip_pairs=True)
+    #     return [v.FetchedVinebot(g.db, g.ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
     
     def delete(self):
         g.db.execute("""DELETE FROM users
@@ -91,11 +104,15 @@ class AbstractUser(object):
             if self._friends is None:
                 self._friends = self._fetch_friends()
             return self._friends
+        elif name == 'incoming_vinebots':
+            if self._incoming_vinebots is None:
+                self._incoming_vinebots = self._fetch_vinebots_incoming_only()
+            return self._incoming_vinebots
         else:
             dict.__getattr__(self, name)
     
     def __setattr__(self, name, value):
-        if name == 'friends':
+        if name == ['friends', 'incoming_vinebots']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
