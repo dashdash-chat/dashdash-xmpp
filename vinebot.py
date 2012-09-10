@@ -113,7 +113,7 @@ class AbstractVinebot(object):
             comma_sep = ''.join([', %s' % user.name for user in users[1:-1]])
             return '%s%s & %s' % (users[0].name, comma_sep, users[-1].name)
     
-    def update_rosters(self, old_participants, new_participants, participants_changed=True):
+    def update_rosters(self, old_participants, new_participants, protected_participants=set([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
         # First, create the old and new lists of observers
         def get_observers_for(users):
@@ -124,15 +124,14 @@ class AbstractVinebot(object):
         # else:
         new_observers = get_observers_for(new_participants)
         # Then, update the participants
-        if participants_changed:
-            for old_participant in old_participants.difference(new_observers).difference(new_participants):
-                self.remove_from_roster_of(old_participant)
-            for new_participant in new_participants:
-                self.add_to_roster_of(new_participant, self.get_nick(new_participant))
+        for old_participant in old_participants.difference(new_observers).difference(new_participants).difference(protected_participants):
+            self.remove_from_roster_of(old_participant)
+        for new_participant in new_participants.difference(protected_participants):
+            self.add_to_roster_of(new_participant, self.get_nick(new_participant))
         # Finally, update the observers
-        for old_observer in old_observers.difference(new_participants).difference(new_observers):
+        for old_observer in old_observers.difference(new_participants).difference(new_observers).difference(protected_participants):
             self.remove_from_roster_of(old_observer)
-        for new_observer in new_observers.difference(new_participants):
+        for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
     def delete(self):
