@@ -265,9 +265,9 @@ class FetchedVinebot(AbstractVinebot):
     @staticmethod
     def fetch_vinebots_with_edges():
         vinebot_ids = g.db.execute_and_fetchall("""SELECT edges.vinebot_id 
-                                                   FROM edges, participants
+                                                   FROM edges
                                                    WHERE edges.vinebot_id IS NOT NULL
-                                                   AND edges.vinebot_id != participants.vinebot_id
+                                                   AND (SELECT COUNT(*) FROM participants WHERE vinebot_id = edges.vinebot_id) = 0
                                                    GROUP BY edges.vinebot_id
                                                 """, strip_pairs=True)
         return [FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids]
