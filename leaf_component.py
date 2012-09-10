@@ -56,55 +56,55 @@ class LeafComponent(ComponentXMPP):
     def add_slash_commands(self):
         # Access filters for /commands
         def admin_to_vinebot(sender, vinebot):
-            return sender.bare in constants.admin_users and vinebot
+            return sender.jid in constants.admin_jids and vinebot
         def admin_to_leaf(sender, vinebot):
-            return sender.bare in constants.admin_users and not vinebot
+            return sender.jid in constants.admin_jids and not vinebot
         def admin_or_graph_to_leaf(sender, vinebot):
-            return sender.bare in (constants.admin_users + [constants.graph_xmpp_user]) and not vinebot
+            return sender.jid in (constants.admin_jids + [constants.graph_xmpp_jid]) and not vinebot
         def participant_to_vinebot(sender, vinebot):
-            return sender.user in vinebot.participants and vinebot
+            return sender in vinebot.participants and vinebot
         def observer_to_vinebot(sender, vinebot):
-            return sender.user in vinebot.observers and vinebot
+            return sender in vinebot.observers and vinebot
         def admin_or_participant_to_vinebot(sender, vinebot):
             return admin_to_vinebot(sender, vinebot) or participant_to_vinebot(sender, vinebot)
         # Argument transformations for /commands
-        def logid_sender_vinebot(command_name, sender, vinebot, arg_string, arg_tokens):
+        def logid_vinebot_sender(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) == 0:
-                parent_command_id = g.db.log_command(sender.user, command_name, None, None, vinebot=vinebot)
-                return [parent_command_id, sender.user, vinebot]
+                parent_command_id = g.db.log_command(sender, command_name, None, None, vinebot=vinebot)
+                return [parent_command_id, vinebot, sender]
             return False
         def logid_sender_vinebot_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = g.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, sender.user, vinebot, token]
             return False
         def logid_sender_vinebot_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot:
                 string_or_none = arg_string if len(arg_string.strip()) > 0 else None
-                parent_command_id = g.db.log_command(sender.user, command_name, None, string_or_none, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, None, string_or_none, vinebot=vinebot)
                 return [parent_command_id, sender.user, vinebot, string_or_none]
             return False
         def logid_sender_vinebot_token_string(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) >= 2:
                 token = arg_tokens[0]
                 string = arg_string.partition(arg_tokens[0])[2].strip()
-                parent_command_id = g.db.log_command(sender.user, command_name, token, string, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, token, string, vinebot=vinebot)
                 return [parent_command_id, sender.user, vinebot, token, string]
             return False
         def logid_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = g.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, token]
             return False
         def logid_token_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
                 token = arg_tokens[0]
-                parent_command_id = g.db.log_command(sender.user, command_name, token, None, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, token]
             elif len(arg_tokens) == 0:
-                parent_command_id = g.db.log_command(sender.user, command_name, None, None, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, None, None, vinebot=vinebot)
                 return [parent_command_id]
             return False
         def logid_token_token(command_name, sender, vinebot, arg_string, arg_tokens):
@@ -113,22 +113,22 @@ class LeafComponent(ComponentXMPP):
                 token2 = arg_tokens[1]
                 # Please forgive me for storing the second token as the command's string, but ugh I don't want
                 # to add an extra column right now. I'll fix it when I have a second command with two tokens.
-                parent_command_id = g.db.log_command(sender.user, command_name, token1, token2, vinebot=vinebot)
+                parent_command_id = g.db.log_command(sender, command_name, token1, token2, vinebot=vinebot)
                 return [parent_command_id, token1, token2]
             return False
         # Register vinebot commands
-        # self.commands.add(SlashCommand(command_name     = 'join',
-        #                                        text_arg_format  = '',
-        #                                        text_description = 'Join this conversation without interrupting.',
-        #                                        validate_sender  = observer_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot,
-        #                                        action           = self.user_joined))    
-        #         self.commands.add(SlashCommand(command_name     = 'leave',
-        #                                        text_arg_format  = '',
-        #                                        text_description = 'Leave this conversation.',
-        #                                        validate_sender  = participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot,
-        #                                        action           = self.user_left))                  
+        self.commands.add(SlashCommand(command_name     = 'join',
+                                       text_arg_format  = '',
+                                       text_description = 'Join this conversation without interrupting.',
+                                       validate_sender  = observer_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.user_joined))    
+        self.commands.add(SlashCommand(command_name     = 'leave',
+                                       text_arg_format  = '',
+                                       text_description = 'Leave this conversation.',
+                                       validate_sender  = participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.user_left))                  
         #         self.commands.add(SlashCommand(command_name     = 'invite',
         #                                        text_arg_format  = '<username>',
         #                                        text_description = 'Invite a user to this conversation.',
@@ -330,19 +330,19 @@ class LeafComponent(ComponentXMPP):
             return
     
     def handle_msg(self, msg):
-        def handle_command(msg, vinebot=None):
-            parent_command_id, response = self.commands.handle_command(msg['from'], msg['body'], vinebot)
+        def handle_command(msg, sender, vinebot=None):
+            parent_command_id, response = self.commands.handle_command(sender, msg['body'], vinebot)
             if parent_command_id is None:  # if the command has some sort of error
                 command_name, arg_string = self.commands.parse_command(msg['body'])
-                parent_command_id = g.db.log_command(msg['from'].user, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
+                parent_command_id = g.db.log_command(sender, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
             self.send_reply(msg, vinebot, response, parent_command_id=parent_command_id)
         if msg['type'] in ('chat', 'normal'):
             try:
+                user = FetchedUser(name=msg['from'].user)
                 vinebot = FetchedVinebot(jiduser=msg['to'].user)
                 if self.commands.is_command(msg['body']):
-                    handle_command(msg, vinebot)
+                    handle_command(msg, user, vinebot)
                 else:
-                    user = FetchedUser(name=msg['from'].user)
                     if vinebot.participants:
                         if user in vinebot.participants:
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
@@ -374,11 +374,10 @@ class LeafComponent(ComponentXMPP):
                     vinebot.cleanup()
             except NotVinebotException:
                 try:
-                    if msg['from'].bare in (constants.admin_users + [constants.graph_xmpp_user]):
+                    if user.jid in (constants.admin_jids + [constants.graph_xmpp_jid]):
                         if self.commands.is_command(msg['body']):
-                            handle_command(msg)
+                            handle_command(msg, user)
                         else:
-                            user = FetchedUser(name=msg['from'].user)
                             parent_message_id = g.db.log_message(user, [], msg['body'])
                             self.send_reply(msg, None, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
                     else:
@@ -498,6 +497,29 @@ class LeafComponent(ComponentXMPP):
             # this conversation had more than three people so start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
         self.send_presences(vinebot, vinebot.everyone)
+    
+    ##### user /commands
+    def user_joined(self, parent_command_id, vinebot, user):
+        if vinebot.topic:
+            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user.name, vinebot.topic)
+        else:
+            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user.name
+        try:
+            self.add_participant(vinebot, user)
+        except IntegrityError, e:
+            if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
+                raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
+        self.broadcast_alert(vinebot, vinebot.participants, alert_msg, parent_command_id=parent_command_id)
+        return parent_command_id, ''
+    
+    def user_left(self, parent_command_id, vinebot, user):
+        if len(vinebot.participants) == 2:  # revert to previous status states
+            user1, user2 = vinebot.participants
+            self.send_presences(vinebot, [user1], pshow=user2.status())
+            self.send_presences(vinebot, [user2], pshow=user1.status())
+        self.remove_participant(vinebot, user)
+        self.broadcast_alert(vinebot, vinebot.participants,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
+        return parent_command_id, 'You left the conversation.'
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):

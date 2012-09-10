@@ -98,20 +98,19 @@ class AbstractVinebot(object):
                      })
     
     def get_nick(self, viewer):
-        #refactor this, if viewer is none then we have a mess
         if self.is_active:
-            users = list(self.participants.difference([viewer]))
+            usernames = [user.name for user in self.participants.difference([viewer])]
         else:
-            users = list(self.edge_users.difference([viewer]))
-        if len(users) < 1:
+            usernames = [user.name for user in self.edge_users.difference([viewer])]
+        if len(usernames) < 1:
             return self.jiduser
-        elif len(users) == 1:
-            return users[0].name
+        elif len(usernames) == 1:
+            return usernames[0]
         else:
             if viewer:
-                users.insert(0, 'you')
-            comma_sep = ''.join([', %s' % user.name for user in users[1:-1]])
-            return '%s%s & %s' % (users[0].name, comma_sep, users[-1].name)
+                usernames.insert(0, 'you')
+            comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
+            return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
     
     def update_rosters(self, old_participants, new_participants, protected_participants=set([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)

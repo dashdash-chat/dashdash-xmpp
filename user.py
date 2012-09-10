@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+import constants
 from constants import g
 import vinebot as v
 
@@ -100,6 +101,8 @@ class AbstractUser(object):
         g.ectl.unregister(self.name)
     
     def __getattr__(self, name):
+        if name == 'jid':
+            return '%s@%s' % (self.name, constants.server)
         if name == 'friends':
             if self._friends is None:
                 self._friends = self._fetch_friends()
@@ -112,7 +115,7 @@ class AbstractUser(object):
             dict.__getattr__(self, name)
     
     def __setattr__(self, name, value):
-        if name == ['friends', 'incoming_vinebots']:
+        if name == ['jid', 'friends', 'incoming_vinebots']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)

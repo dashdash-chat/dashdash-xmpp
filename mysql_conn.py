@@ -60,14 +60,14 @@ class MySQLConnection(object):
         return self.execute("""INSERT INTO commands (vinebot_id, sender_id, command_name, is_valid, token, string)
                                   VALUES (
                                       %(vinebot_id)s,
-                                      (SELECT id FROM users WHERE name = %(sender)s),
+                                      %(sender_id)s,
                                       %(command_name)s,
                                       %(is_valid)s,
                                       %(token)s,
                                       %(string)s
                                   )""", {
                                       'vinebot_id': vinebot.id if vinebot else None,
-                                      'sender':  sender,
+                                      'sender_id':  sender.id,
                                       'command_name': command_name,
                                       'is_valid': is_valid,
                                       'token': token or None,
