@@ -36,7 +36,7 @@ class AbstractUser(object):
                                          """, {
                                             'id': self.id
                                          })
-        return set([FetchedUser(name=friend_pair[0], dbid=friend_pair[1]) for friend_pair in friend_pairs])
+        return frozenset([FetchedUser(name=friend_pair[0], dbid=friend_pair[1]) for friend_pair in friend_pairs])
     
     def _fetch_visible_active_vinebots(self):
         return g.db.execute_and_fetchall("""SELECT participants.vinebot_id

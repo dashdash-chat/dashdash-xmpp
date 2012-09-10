@@ -289,7 +289,7 @@ class LeafComponent(ComponentXMPP):
                 if len(vinebot.participants) >= 3:
                     self.send_presences(vinebot, vinebot.everyone)
                 else:  # elif len(participants) == 2:    
-                    remaining_user = vinebot.participants.difference([user]).pop()
+                    remaining_user = iter(vinebot.participants.difference([user])).next()
                     self.remove_participant(vinebot, user)  # this deactivates the vinebot
                     self.send_presences(vinebot, [user], pshow=remaining_user.status())
                     self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
@@ -462,9 +462,11 @@ class LeafComponent(ComponentXMPP):
         if len(vinebot.participants) < 1:
             pass
         elif len(vinebot.participants) == 1:
-            vinebot.remove_participant(vinebot.participants.pop()) # AUUUGH THIS SHOULD BE IMMUTABLE
+            vinebot.remove_participant(iter(vinebot.participants.difference([user])).next())
             vinebot.update_rosters(old_participants, set([]))
             self.send_presences(vinebot, vinebot.everyone)
+            if len(vinebot.edges) == 0:
+                vinebot.delete()
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(old_participants, vinebot.participants)
             self.send_presences(vinebot, vinebot.everyone)

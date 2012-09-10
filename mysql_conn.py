@@ -72,7 +72,6 @@ class MySQLConnection(object):
                                       'token': token or None,
                                       'string': string or None
                                   })
-
     
     def get_lock(self, lock_name, timeout=0):
         lock = self.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {

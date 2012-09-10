@@ -35,6 +35,7 @@ class AbstractVinebot(object):
     def cleanup(self):
         pass
         #TODO release the lock for this vinebot
+        #NOTE that it shouldn't rely on database state, since the vinebot may have been deleted
     
     def add_to_roster_of(self, user, nick):
         g.ectl.add_rosteritem(user.name, self.jiduser, nick)
@@ -50,11 +51,11 @@ class AbstractVinebot(object):
                                                  """, {
                                                      'id': self.id
                                                  })
-        return set([u.FetchedUser(name=participant[0], dbid=participant[1]) for participant in participants])
+        return frozenset([u.FetchedUser(name=participant[0], dbid=participant[1]) for participant in participants])
     
     def _fetch_observers(self):
         if not self.is_active:
-            return set([])
+            return frozenset([])
         observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                  FROM participants, edges AS outgoing, edges AS incoming, users
                                                  WHERE participants.vinebot_id = %(id)s
@@ -65,7 +66,7 @@ class AbstractVinebot(object):
                                               """, {
                                                   'id': self.id
                                               })
-        return set([u.FetchedUser(name=observer[0], dbid=observer[1]) for observer in observers])
+        return frozenset([u.FetchedUser(name=observer[0], dbid=observer[1]) for observer in observers])
     
     def _fetch_edges(self):
         edge_ids = g.db.execute_and_fetchall("""SELECT id
@@ -74,7 +75,7 @@ class AbstractVinebot(object):
                                              """, {
                                                  'id': self.id
                                              }, strip_pairs=True)
-        return [e.FetchedEdge(dbid=edge_id) for edge_id in edge_ids]
+        return frozenset([e.FetchedEdge(dbid=edge_id) for edge_id in edge_ids])
     
     def add_participant(self, user):
         g.db.execute("""INSERT INTO participants (vinebot_id, user_id)
@@ -84,12 +85,10 @@ class AbstractVinebot(object):
                         'user_id': user.id
                      })
         #NOTE adding "self.participants" here to initialize the pariticipants causes an error I don't understand
-        self._participants.add(user)
+        self._participants = self._participants.union([user])
     
     def remove_participant(self, user):
-        logging.info('removing %s from' % user.name)
-        logging.info([p.name for p in self.participants])
-        self._participants.remove(user)
+        self._participants = self._participants.difference([user])
         g.db.execute("""DELETE FROM participants
                         WHERE user_id = %(user_id)s
                         AND vinebot_id = %(vinebot_id)s
@@ -99,29 +98,20 @@ class AbstractVinebot(object):
                      })
     
     def get_nick(self, viewer):
-        if len(self.participants) < 2:
-            if len(self.edges) == 0:
-                logging.error("Tried to get_nick for vinebot with id=%s and jiduser=%s and only %d participant(s) and no edges." % (self.id, self.jiduser, len(self.participants)))
-                return self.jiduser
-            elif viewer:
-                return self.edge_users.difference([viewer]).pop().name
-            else:
-                logging.error("Tried to get_nick for vinebot with id=%s and jiduser=%s and using edges but no viewer." % (self.id, self.jiduser))
-                raise Exception
-                return self.jiduser
+        #refactor this, if viewer is none then we have a mess
+        if self.is_active:
+            users = list(self.participants.difference([viewer]))
+        else:
+            users = list(self.edge_users.difference([viewer]))
+        if len(users) < 1:
+            return self.jiduser
+        elif len(users) == 1:
+            return users[0].name
         else:
             if viewer:
-                users = self.participants.difference([viewer])
-                if len(users) == 1:
-                    return users.pop().name
-                else:
-                    users = list(users)
-                    users.insert(0, 'you')
-            else:
-                users = list(self.participants)
+                users.insert(0, 'you')
             comma_sep = ''.join([', %s' % user.name for user in users[1:-1]])
             return '%s%s & %s' % (users[0].name, comma_sep, users[-1].name)
-            
     
     def update_rosters(self, old_participants, new_participants):
         #NOTE that I'm no longer using participants_changed - because it would only be false if the users already had symmetric edges, it's not worth the complexity
@@ -143,24 +133,7 @@ class AbstractVinebot(object):
         for old_observer in old_observers.difference(new_participants).difference(new_observers):
             self.remove_from_roster_of(old_observer)
         for new_observer in new_observers.difference(new_participants):
-            self.add_to_roster_of(new_observer, nick=observer_nick)        
-        # if len(self._edges) == 2:
-        #     logging.info("update symmetric rosters here")
-        # elif len(self._edges) == 1:
-        #     logging.info("update asymmetric rosters here")
-        #     # make sure that vinebot isn't on other users roster?
-        # else:
-        #     logging.info("update party rosters")
-    
-    # def add_fetched_edge(self, edge):
-    #     if edge.vinebot_id != self.id:
-    #         raise Exception, 'Edge with id %s and vinebot_id %s cannot be added to Vinebot with id %s' % (edge.id, edge.vinebot_id, self.id)
-    #     if len(self._edges) == 2:
-    #         raise Exception, "Vinebot %s already has two edges %s and %s" % (self._id, self._edges[0].id, self._edges[1].id)
-    #     if len(self._edges) == 1:
-    #         if not (edge.from_user.id == self._edges[0].to_user.id and edge.to_user.id == self._edges[0].from_user.id):
-    #             raise Exception, "New edge users %s and %s do not match existing edge users %s and %s " % (edge.from_user.id, edge.to_user.id, self._edges[0].from_user.id, self._edges[0].to_user.id)
-    #     self._edges.append(edge)
+            self.add_to_roster_of(new_observer, nick=observer_nick)
     
     def delete(self):
         #TODO remove from rosters?
@@ -194,11 +167,13 @@ class AbstractVinebot(object):
             return self._edges
         elif name == 'edge_users':
             if len(self.edges) == 0:
-                return []
+                return set([])
             elif len(self.edges) == 1:
-                return set([self.edges[0].t_user, self.edges[0].f_user])
+                edge = iter(self.edges).next()
+                return set([edge.t_user, edge.f_user])  # doesn't need to be a frozenset
             elif len(self.edges) == 2:
-                return set([self.edges[0].t_user, self.edges[0].f_user, self.edges[1].t_user, self.edges[1].f_user])
+                edge1, edge2 = self.edges
+                return set([edge1.t_user, edge1.f_user, edge2.t_user, edge2.f_user])
             else:
                 raise AttributeError("Vinebot somehow has %d edges" % len(self.edges))
         elif name == 'participants':
@@ -296,27 +271,4 @@ class FetchedVinebot(AbstractVinebot):
                                                    GROUP BY edges.vinebot_id
                                                 """, strip_pairs=True)
         return [FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids]
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     
