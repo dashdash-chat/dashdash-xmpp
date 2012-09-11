@@ -347,7 +347,7 @@ class LeafComponent(ComponentXMPP):
                         if user in vinebot.participants:
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         elif user in vinebot.observers:
-                            vinebot.add_participant(user)
+                            self.add_participant(vinebot, user)
                             self.broadcast_alert(vinebot, '%s has joined the conversation' % user.name)
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         else:
@@ -443,7 +443,7 @@ class LeafComponent(ComponentXMPP):
             self.add_participant(vinebot, user2)
             self.send_presences(vinebot, vinebot.observers)
         return both_users_online
-        
+    
     def add_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
         vinebot.add_participant(user)

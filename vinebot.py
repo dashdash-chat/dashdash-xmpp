@@ -131,7 +131,7 @@ class AbstractVinebot(object):
         for new_participant in new_participants.difference(protected_participants):
             self.add_to_roster_of(new_participant, self.get_nick(new_participant))
         # Finally, update the observers
-        for old_observer in old_observers.difference(new_participants).difference(new_observers).difference(protected_participants):
+        for old_observer in old_observers.difference(new_participants).difference(protected_participants).difference(new_observers):
             self.remove_from_roster_of(old_observer)
         for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
