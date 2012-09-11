@@ -58,11 +58,15 @@ class AbstractVinebot(object):
             return frozenset([])
         observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                  FROM participants, edges AS outgoing, edges AS incoming, users
-                                                 WHERE participants.vinebot_id = %(id)s
+                                                 WHERE outgoing.to_id = users.id
+                                                 AND incoming.from_id = outgoing.to_id
                                                  AND participants.user_id = incoming.to_id
                                                  AND participants.user_id = outgoing.from_id
-                                                 AND incoming.from_id = outgoing.to_id
-                                                 AND outgoing.to_id = users.id
+                                                 AND (SELECT COUNT(*) 
+                                                      FROM participants 
+                                                      WHERE participants.vinebot_id = %(id)s 
+                                                      AND user_id=users.id
+                                                     ) = 0
                                               """, {
                                                   'id': self.id
                                               })

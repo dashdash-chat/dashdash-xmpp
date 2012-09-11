@@ -147,12 +147,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.list_participants))
-        #         self.commands.add(SlashCommand(command_name     = 'nearby',
-        #                                        text_arg_format  = '',
-        #                                        text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot,
-        #                                        action           = self.list_observers))
+        self.commands.add(SlashCommand(command_name     = 'nearby',
+                                       text_arg_format  = '',
+                                       text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
+                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.list_observers))
         #         self.commands.add(SlashCommand(command_name     = 'whisper',
         #                                        text_arg_format  = '<username> <message text>',
         #                                        text_description = 'Whisper a quick message to only one other participant.',
@@ -532,6 +532,26 @@ class LeafComponent(ComponentXMPP):
         else:
             return parent_command_id, 'The current participants are:\n%s\nNo one has set the topic.' % (
                     ''.join(['\t%s\n' % username for username in usernames]).strip('\n'))
+    
+    def list_observers(self, parent_command_id, vinebot, user):
+        observers = filter(lambda observer: observer.is_online(), vinebot.observers)
+        observer_string = ''.join(['\t%s\n' % observer.name for observer in observers]).strip('\n')
+        if vinebot.is_active:
+            if len(observers) > 1:
+                response = 'These users are online and can see this conversation:\n' + observer_string
+            elif len(observers) == 1:
+                response = '%s is online and can see this conversation.' % observers[0].name
+            else:
+                response = 'There are no users online that can see this conversaton.'
+        else:
+            if len(observers) > 1:
+                response = 'If this conversation were active, then these online users would see it:\n' + observer_string
+            elif len(observers) == 1:
+                response = 'If this conversation were active, then %s would see it.' % observers[0].name
+            else:
+                response = 'There are no users online that can see this conversaton.'
+        return parent_command_id, response
+
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
