@@ -61,12 +61,12 @@ class LeafComponent(ComponentXMPP):
             return sender.jid in constants.admin_jids and not vinebot
         def admin_or_graph_to_leaf(sender, vinebot):
             return sender.jid in (constants.admin_jids + [constants.graph_xmpp_jid]) and not vinebot
-        def participant_to_vinebot(sender, vinebot):
-            return sender in vinebot.participants and vinebot
+        def participant_or_edgeuser_to_vinebot(sender, vinebot):
+            return (sender in vinebot.participants or sender in vinebot.edge_users) and vinebot  # short circuit to avoid the extra query
         def observer_to_vinebot(sender, vinebot):
             return sender in vinebot.observers and vinebot
-        def admin_or_participant_to_vinebot(sender, vinebot):
-            return admin_to_vinebot(sender, vinebot) or participant_to_vinebot(sender, vinebot)
+        def admin_or_participant_or_edgeuser_to_vinebot(sender, vinebot):
+            return admin_to_vinebot(sender, vinebot) or participant_or_edgeuser_to_vinebot(sender, vinebot)
         # Argument transformations for /commands
         def logid_vinebot_sender(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) == 0:
@@ -79,11 +79,11 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, vinebot, sender, token]
             return False
-        def logid_sender_vinebot_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
+        def logid_vinebot_sender_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot:
                 string_or_none = arg_string if len(arg_string.strip()) > 0 else None
                 parent_command_id = g.db.log_command(sender, command_name, None, string_or_none, vinebot=vinebot)
-                return [parent_command_id, sender.user, vinebot, string_or_none]
+                return [parent_command_id, vinebot, sender, string_or_none]
             return False
         def logid_vinebot_sender_token_string(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) >= 2:
@@ -126,45 +126,45 @@ class LeafComponent(ComponentXMPP):
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
                                        text_description = 'Leave this conversation.',
-                                       validate_sender  = participant_to_vinebot,
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.user_left))                  
         self.commands.add(SlashCommand(command_name     = 'invite',
                                        text_arg_format  = '<username>',
                                        text_description = 'Invite a user to this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token,
                                        action           = self.invite_user))
         self.commands.add(SlashCommand(command_name     = 'kick',
                                        text_arg_format  = '<username>',
                                        text_description = 'Kick a user out of this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token,
                                        action           = self.kick_user))
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
                                        text_description = 'List the participants in this conversation.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.list_participants))
         self.commands.add(SlashCommand(command_name     = 'nearby',
                                        text_arg_format  = '',
                                        text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
-                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.list_observers))
         self.commands.add(SlashCommand(command_name     = 'whisper',
                                        text_arg_format  = '<username> <message text>',
                                        text_description = 'Whisper a quick message to only one other participant.',
-                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string,
                                        action           = self.whisper_msg))
-        #         self.commands.add(SlashCommand(command_name     = 'topic',
-        #                                        text_arg_format  = '<new topic>',
-        #                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot_string_or_none,
-        #                                        action           = self.set_topic))
+        self.commands.add(SlashCommand(command_name     = 'topic',
+                                       text_arg_format  = '<new topic>',
+                                       text_description = 'Set the topic for the conversation, which friends of participants can see.',
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_string_or_none,
+                                       action           = self.set_topic))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -343,7 +343,7 @@ class LeafComponent(ComponentXMPP):
                 if self.commands.is_command(msg['body']):
                     handle_command(msg, user, vinebot)
                 else:
-                    if vinebot.participants:
+                    if vinebot.is_active:
                         if user in vinebot.participants:
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         elif user in vinebot.observers:
@@ -355,15 +355,7 @@ class LeafComponent(ComponentXMPP):
                             self.send_reply(msg, vinebot, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
                         if len(vinebot.edges) > 0:
-                            user1, user2 = vinebot.edge_users
-                            user1_status = user1.status()
-                            user2_status = user2.status()
-                            self.send_presences(vinebot, [user1], pshow=user2_status)
-                            self.send_presences(vinebot, [user2], pshow=user1_status)
-                            if user1_status != 'unavailable' and user2_status != 'unavailable':
-                                self.add_participant(vinebot, user1)
-                                self.add_participant(vinebot, user2)
-                                self.send_presences(vinebot, vinebot.observers)
+                            if self.activate_vinebot(vinebot):
                                 self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
@@ -459,6 +451,24 @@ class LeafComponent(ComponentXMPP):
             vinebot.update_rosters(old_participants, vinebot.participants)
             self.send_presences(vinebot, vinebot.everyone)
     
+    def activate_vinebot(self, vinebot):
+        if vinebot.is_active:
+            logging.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
+            return True
+        if len(vinebot.edges) == 0:
+            raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
+        user1, user2 = vinebot.edge_users
+        user1_status = user1.status()
+        user2_status = user2.status()
+        self.send_presences(vinebot, [user1], pshow=user2_status)
+        self.send_presences(vinebot, [user2], pshow=user1_status)
+        both_users_online = user1_status != 'unavailable' and user2_status != 'unavailable'
+        if both_users_online:
+            self.add_participant(vinebot, user1)
+            self.add_participant(vinebot, user2)
+            self.send_presences(vinebot, vinebot.observers)
+        return both_users_online
+    
     def remove_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
@@ -521,7 +531,7 @@ class LeafComponent(ComponentXMPP):
             self.send_presences(vinebot, [user2], pshow=user1.status())
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, vinebot.participants,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
-        return parent_command_id, 'You left the conversation.'
+        return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
         try:
@@ -613,6 +623,30 @@ class LeafComponent(ComponentXMPP):
             return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient.name
         else:
             return parent_command_id, 'You whispered to %s, and no one noticed!' % recipient.name
+    
+    def set_topic(self, parent_command_id, vinebot, sender, topic):
+        if topic and len(topic) > 100:
+            raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
+        else:
+            vinebot.topic = topic  # using a fancy custom setter!
+            if vinebot.is_active or self.activate_vinebot(vinebot):  # short-circuit prevents unnecessary vinebot activation
+                self.send_presences(vinebot, vinebot.everyone)
+                if vinebot.topic:
+                    self.broadcast_alert(vinebot, vinebot.participants, '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic), parent_command_id=parent_command_id)
+                else:
+                    self.broadcast_alert(vinebot, vinebot.participants, '%s has cleared the topic of conversation.' % sender.name, parent_command_id=parent_command_id)
+            else:
+                if vinebot.topic:
+                    body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
+                else:
+                    body = 'You\'ve cleared the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
+                msg = self.Message()
+                msg['body'] = body
+                msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
+                msg['to'] = sender.jid
+                msg.send()
+                g.db.log_message(None, [sender], body, vinebot=vinebot, parent_command_id=parent_command_id)
+        return parent_command_id, ''
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):

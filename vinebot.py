@@ -21,11 +21,10 @@ class NotVinebotException(Exception):
 
 class AbstractVinebot(object):
     def __init__(self):
-        self.topic = None
+        self._topic = None  # None is meaningful to the leaf component, so it might get initialized again by FetchedVinebot
         self._edges = None
         self._participants = None
         self._observers = None
-        # self._topic = self._format_topic(topic)
         #TODO
         #TODO
         #TODO get a lock for this vinebot
@@ -137,6 +136,37 @@ class AbstractVinebot(object):
         for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
+    def _set_topic(self, body):
+        g.db.execute("""DELETE FROM topics
+                        WHERE vinebot_id = %(vinebot_id)s
+                    """, {
+                        'vinebot_id': self.id
+                    })
+        self._topic = None
+        if body:
+            g.db.execute("""INSERT INTO topics (vinebot_id, body)
+                            VALUES (%(vinebot_id)s, %(body)s)
+                         """, {
+                            'vinebot_id': self.id,
+                            'body': body.encode('utf-8')
+                         })
+            self._topic = self._format_topic(body, datetime.now())
+    
+    def _fetch_topic(self):
+        topic = g.db.execute_and_fetchall("""SELECT body, created
+                                             FROM topics
+                                             WHERE vinebot_id = %(vinebot_id)s
+                                          """, {
+                                             'vinebot_id': self.id
+                                          })
+        if topic and len(topic) > 0:
+            body, created = topic[0]
+            return self._format_topic(body, created)
+        return None
+    
+    def _format_topic(self, body, created):
+        return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (set on %b %d at %-I:%M%p EST)'))
+    
     def delete(self):
         #TODO remove from rosters?
         g.db.execute("""DELETE FROM edges
@@ -161,7 +191,9 @@ class AbstractVinebot(object):
                         })
     
     def __getattr__(self, name):
-        if name == 'is_active':
+        if name == 'topic':
+            return self._topic
+        elif name == 'is_active':
             return len(self.participants) >= 2
         elif name == 'edges':
             if self._edges is None:
@@ -191,7 +223,9 @@ class AbstractVinebot(object):
         # __getattr__ is only called as a last resort, so we don't need a catchall
     
     def __setattr__(self, name, value):
-        if name in ['is_active', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
+        if name == 'topic':
+            self._set_topic(value)
+        elif name in ['is_active', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
@@ -223,8 +257,6 @@ class InsertedVinebot(AbstractVinebot):
 class FetchedVinebot(AbstractVinebot):
     def __init__(self, jiduser=None, dbid=None, _uuid=None):#, edges=None):
         super(FetchedVinebot, self).__init__()
-        # if edges and len(edges) > 2:
-        #     raise Exception, 'Vinebots cannot have more than two edges associated with them.'
         if dbid and _uuid:
             self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid)))
             self.id = dbid
@@ -258,9 +290,7 @@ class FetchedVinebot(AbstractVinebot):
             raise NotVinebotException
         else:
             raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
-        # if edges:
-        #     for edge in edges:
-        #         self.add_fetched_edge(edge)
+        self._topic = self._fetch_topic()
     
     @staticmethod
     def fetch_vinebots_with_participants():
