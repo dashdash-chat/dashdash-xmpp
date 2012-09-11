@@ -348,7 +348,7 @@ class LeafComponent(ComponentXMPP):
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         elif user in vinebot.observers:
                             vinebot.add_participant(user)
-                            self.broadcast_alert(vinebot, vinebot.participants, '%s has joined the conversation' % user.name)
+                            self.broadcast_alert(vinebot, '%s has joined the conversation' % user.name)
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
@@ -412,7 +412,7 @@ class LeafComponent(ComponentXMPP):
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
     def broadcast_alert(self, vinebot, recipients, body, parent_command_id=None):
-        self.broadcast_message(vinebot, None, recipients, body, parent_command_id=parent_command_id)
+        self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id)
     
     def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
         msg.reply(body).send()
@@ -521,7 +521,7 @@ class LeafComponent(ComponentXMPP):
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
                 raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
             raise e
-        self.broadcast_alert(vinebot, vinebot.participants, alert_msg, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def user_left(self, parent_command_id, vinebot, user):
@@ -530,7 +530,7 @@ class LeafComponent(ComponentXMPP):
             self.send_presences(vinebot, [user1], pshow=user2.status())
             self.send_presences(vinebot, [user2], pshow=user1.status())
         self.remove_participant(vinebot, user)
-        self.broadcast_alert(vinebot, vinebot.participants,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
@@ -549,7 +549,7 @@ class LeafComponent(ComponentXMPP):
         else:
             alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter.name, invitee.name)
         self.add_participant(vinebot, invitee)
-        self.broadcast_alert(vinebot, vinebot.participants, alert_msg, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def kick_user(self, parent_command_id, vinebot, kicker, kickee):
@@ -564,7 +564,7 @@ class LeafComponent(ComponentXMPP):
         if not kickee in vinebot.participants:
             raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee.name)
         self.remove_participant(vinebot, kickee)
-        self.broadcast_alert(vinebot, vinebot.participants, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
         msg = self.Message()
         body = '%s has kicked you from the conversation' % kicker.name
         msg['body'] = body
@@ -632,9 +632,9 @@ class LeafComponent(ComponentXMPP):
             if vinebot.is_active or self.activate_vinebot(vinebot):  # short-circuit prevents unnecessary vinebot activation
                 self.send_presences(vinebot, vinebot.everyone)
                 if vinebot.topic:
-                    self.broadcast_alert(vinebot, vinebot.participants, '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic), parent_command_id=parent_command_id)
+                    self.broadcast_alert(vinebot, '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic), parent_command_id=parent_command_id)
                 else:
-                    self.broadcast_alert(vinebot, vinebot.participants, '%s has cleared the topic of conversation.' % sender.name, parent_command_id=parent_command_id)
+                    self.broadcast_alert(vinebot, '%s has cleared the topic of conversation.' % sender.name, parent_command_id=parent_command_id)
             else:
                 if vinebot.topic:
                     body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
