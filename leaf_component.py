@@ -411,7 +411,7 @@ class LeafComponent(ComponentXMPP):
                 actual_recipients.append(recipient)
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
-    def broadcast_alert(self, vinebot, recipients, body, parent_command_id=None):
+    def broadcast_alert(self, vinebot, body, parent_command_id=None):
         self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id)
     
     def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
