@@ -85,12 +85,12 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = g.db.log_command(sender, command_name, None, string_or_none, vinebot=vinebot)
                 return [parent_command_id, sender.user, vinebot, string_or_none]
             return False
-        def logid_sender_vinebot_token_string(command_name, sender, vinebot, arg_string, arg_tokens):
+        def logid_vinebot_sender_token_string(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) >= 2:
                 token = arg_tokens[0]
                 string = arg_string.partition(arg_tokens[0])[2].strip()
                 parent_command_id = g.db.log_command(sender, command_name, token, string, vinebot=vinebot)
-                return [parent_command_id, sender.user, vinebot, token, string]
+                return [parent_command_id, vinebot, sender, token, string]
             return False
         def logid_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
@@ -153,12 +153,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.list_observers))
-        #         self.commands.add(SlashCommand(command_name     = 'whisper',
-        #                                        text_arg_format  = '<username> <message text>',
-        #                                        text_description = 'Whisper a quick message to only one other participant.',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot_token_string,
-        #                                        action           = self.whisper_msg))
+        self.commands.add(SlashCommand(command_name     = 'whisper',
+                                       text_arg_format  = '<username> <message text>',
+                                       text_description = 'Whisper a quick message to only one other participant.',
+                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token_string,
+                                       action           = self.whisper_msg))
         #         self.commands.add(SlashCommand(command_name     = 'topic',
         #                                        text_arg_format  = '<new topic>',
         #                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
@@ -558,7 +558,7 @@ class LeafComponent(ComponentXMPP):
         msg = self.Message()
         body = '%s has kicked you from the conversation' % kicker.name
         msg['body'] = body
-        msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
+        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
         msg['to'] = kickee.jid
         msg.send()
         g.db.log_message(None, [kickee], body, vinebot=vinebot, parent_command_id=parent_command_id)
@@ -593,7 +593,26 @@ class LeafComponent(ComponentXMPP):
             else:
                 response = 'There are no users online that can see this conversaton.'
         return parent_command_id, response
-
+    
+    def whisper_msg(self, parent_command_id, vinebot, sender, recipient, body):
+        try:
+            recipient = FetchedUser(name=recipient)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
+        if recipient == sender:
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to youerself.')
+        if recipient not in vinebot.participants and recipient.jid not in constants.admin_users:
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
+        msg = self.Message()
+        msg['body'] = '[%s, whispering] %s' % (sender.name, body)
+        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
+        msg['to'] = recipient.jid
+        msg.send()
+        g.db.log_message(sender, [recipient], body, vinebot=vinebot, parent_command_id=parent_command_id)
+        if len(vinebot.participants) == 2:
+            return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient.name
+        else:
+            return parent_command_id, 'You whispered to %s, and no one noticed!' % recipient.name
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
