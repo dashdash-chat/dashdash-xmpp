@@ -465,7 +465,7 @@ class LeafComponent(ComponentXMPP):
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
             if len(vinebot.edges) == 1:
-                vinebot.update_rosters(old_participants, set([]), protected_participants=iter(vinebot.edges).next().f_user)
+                vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
             elif len(vinebot.edges) == 2:
                 vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)
             else:
