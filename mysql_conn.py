@@ -15,36 +15,20 @@ class MySQLConnection(object):
     def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
         if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
             return
-        if sender:
-            log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
-                                        VALUES (
-                                            %(vinebot_id)s,
-                                            %(sender_id)s,
-                                            %(parent_message_id)s,
-                                            %(parent_command_id)s,
-                                            %(body)s
-                                        )""", {
-                                            'vinebot_id': vinebot.id if vinebot else None,
-                                            'sender_id':  sender.id,
-                                            'parent_message_id': parent_message_id,
-                                            'parent_command_id': parent_command_id,
-                                            'body': body.encode('utf-8')
-                                        })
-        else:
-            log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
-                                        VALUES (
-                                            %(vinebot_id)s,
-                                            %(sender_id)s,
-                                            %(parent_message_id)s,
-                                            %(parent_command_id)s,
-                                            %(body)s
-                                        )""", {
-                                            'vinebot_id': vinebot.id if vinebot else None,
-                                            'sender_id':  None,
-                                            'parent_message_id': parent_message_id,
-                                            'parent_command_id': parent_command_id,
-                                            'body': body.encode('utf-8')
-                                        })
+        log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
+                                    VALUES (
+                                        %(vinebot_id)s,
+                                        %(sender_id)s,
+                                        %(parent_message_id)s,
+                                        %(parent_command_id)s,
+                                        %(body)s
+                                    )""", {
+                                        'vinebot_id': vinebot.id if vinebot else None,
+                                        'sender_id': sender.id if sender else None,
+                                        'parent_message_id': parent_message_id,
+                                        'parent_command_id': parent_command_id,
+                                        'body': body.encode('utf-8')
+                                    })
         for recipient in recipients:
             self.execute("""INSERT INTO message_recipients (message_id, recipient_id)
                             VALUES (%(log_id)s, %(recipient_id)s)
