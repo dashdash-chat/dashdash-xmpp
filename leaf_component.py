@@ -426,6 +426,24 @@ class LeafComponent(ComponentXMPP):
         if parent_message_id is None and parent_command_id is None:
             logging.error('Call to send_alert with no parent. msg=%s' % (body, msg))
     
+    def activate_vinebot(self, vinebot):
+        if vinebot.is_active:
+            logging.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
+            return True
+        if len(vinebot.edges) == 0:
+            raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
+        user1, user2 = vinebot.edge_users
+        user1_status = user1.status()
+        user2_status = user2.status()
+        self.send_presences(vinebot, [user1], pshow=user2_status)
+        self.send_presences(vinebot, [user2], pshow=user1_status)
+        both_users_online = user1_status != 'unavailable' and user2_status != 'unavailable'
+        if both_users_online:
+            self.add_participant(vinebot, user1)
+            self.add_participant(vinebot, user2)
+            self.send_presences(vinebot, vinebot.observers)
+        return both_users_online
+        
     def add_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
         vinebot.add_participant(user)
@@ -446,24 +464,6 @@ class LeafComponent(ComponentXMPP):
             # there's no way this vinebot can still have edges associated with it
             vinebot.update_rosters(old_participants, vinebot.participants)
             self.send_presences(vinebot, vinebot.everyone)
-    
-    def activate_vinebot(self, vinebot):
-        if vinebot.is_active:
-            logging.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
-            return True
-        if len(vinebot.edges) == 0:
-            raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
-        user1, user2 = vinebot.edge_users
-        user1_status = user1.status()
-        user2_status = user2.status()
-        self.send_presences(vinebot, [user1], pshow=user2_status)
-        self.send_presences(vinebot, [user2], pshow=user1_status)
-        both_users_online = user1_status != 'unavailable' and user2_status != 'unavailable'
-        if both_users_online:
-            self.add_participant(vinebot, user1)
-            self.add_participant(vinebot, user2)
-            self.send_presences(vinebot, vinebot.observers)
-        return both_users_online
     
     def remove_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()
