@@ -141,12 +141,12 @@ class LeafComponent(ComponentXMPP):
         #                                        validate_sender  = admin_or_participant_to_vinebot,
         #                                        transform_args   = logid_sender_vinebot_token,
         #                                        action           = self.kick_user))
-        #         self.commands.add(SlashCommand(command_name     = 'list',
-        #                                        text_arg_format  = '',
-        #                                        text_description = 'List the participants in this conversation.',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot,
-        #                                        action           = self.list_participants))
+        self.commands.add(SlashCommand(command_name     = 'list',
+                                       text_arg_format  = '',
+                                       text_description = 'List the participants in this conversation.',
+                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.list_participants))
         #         self.commands.add(SlashCommand(command_name     = 'nearby',
         #                                        text_arg_format  = '',
         #                                        text_description = 'List the friends of the participants who can see this conversation (but not what you\'re saying).',
@@ -521,6 +521,17 @@ class LeafComponent(ComponentXMPP):
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, vinebot.participants,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
         return parent_command_id, 'You left the conversation.'
+    
+    def list_participants(self, parent_command_id, vinebot, user):
+        usernames = [participant.name for participant in vinebot.participants.difference([user])]
+        if user in vinebot.participants:
+            usernames.append('you')
+        if vinebot.topic:
+            return parent_command_id, 'The current participants are:\n%s\nThe current topic is:\n\t%s' % (
+                    ''.join(['\t%s\n' % username for username in usernames]).strip('\n'), vinebot.topic)
+        else:
+            return parent_command_id, 'The current participants are:\n%s\nNo one has set the topic.' % (
+                    ''.join(['\t%s\n' % username for username in usernames]).strip('\n'))
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
