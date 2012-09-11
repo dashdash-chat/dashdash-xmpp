@@ -56,15 +56,15 @@ class LeafComponent(ComponentXMPP):
     def add_slash_commands(self):
         # Access filters for /commands
         def admin_to_vinebot(sender, vinebot):
-            return sender.jid in constants.admin_jids and vinebot
+            return vinebot and sender.jid in constants.admin_jids
         def admin_to_leaf(sender, vinebot):
-            return sender.jid in constants.admin_jids and not vinebot
+            return not vinebot and sender.jid in constants.admin_jids
         def admin_or_graph_to_leaf(sender, vinebot):
-            return sender.jid in (constants.admin_jids + [constants.graph_xmpp_jid]) and not vinebot
+            return not vinebot and sender.jid in (constants.admin_jids + [constants.graph_xmpp_jid])
         def participant_or_edgeuser_to_vinebot(sender, vinebot):
-            return (sender in vinebot.participants or sender in vinebot.edge_users) and vinebot  # short circuit to avoid the extra query
+            return vinebot and (sender in vinebot.participants or sender in vinebot.edge_users)   # short circuit to avoid the extra query
         def observer_to_vinebot(sender, vinebot):
-            return sender in vinebot.observers and vinebot
+            return vinebot and sender in vinebot.observers
         def admin_or_participant_or_edgeuser_to_vinebot(sender, vinebot):
             return admin_to_vinebot(sender, vinebot) or participant_or_edgeuser_to_vinebot(sender, vinebot)
         # Argument transformations for /commands
@@ -335,7 +335,10 @@ class LeafComponent(ComponentXMPP):
             if parent_command_id is None:  # if the command has some sort of error
                 command_name, arg_string = self.commands.parse_command(msg['body'])
                 parent_command_id = g.db.log_command(sender, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
-            self.send_alert(vinebot, None, sender, response, parent_command_id=parent_command_id)
+            if vinebot:
+                self.send_alert(vinebot, None, sender, response, parent_command_id=parent_command_id)
+            else:
+                self.send_alert(None, None, sender, response, fromjid=msg['to'], parent_command_id=parent_command_id)
         if msg['type'] in ('chat', 'normal'):
             try:
                 user = FetchedUser(name=msg['from'].user)
