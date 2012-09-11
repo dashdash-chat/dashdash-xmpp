@@ -73,11 +73,11 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = g.db.log_command(sender, command_name, None, None, vinebot=vinebot)
                 return [parent_command_id, vinebot, sender]
             return False
-        def logid_sender_vinebot_token(command_name, sender, vinebot, arg_string, arg_tokens):
+        def logid_vinebot_sender_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) == 1:
                 token = arg_tokens[0]
                 parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
-                return [parent_command_id, sender.user, vinebot, token]
+                return [parent_command_id, vinebot, sender, token]
             return False
         def logid_sender_vinebot_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot:
@@ -129,18 +129,18 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = participant_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.user_left))                  
-        #         self.commands.add(SlashCommand(command_name     = 'invite',
-        #                                        text_arg_format  = '<username>',
-        #                                        text_description = 'Invite a user to this conversation.',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot_token,
-        #                                        action           = self.invite_user))
-        #         self.commands.add(SlashCommand(command_name     = 'kick',
-        #                                        text_arg_format  = '<username>',
-        #                                        text_description = 'Kick a user out of this conversation.',
-        #                                        validate_sender  = admin_or_participant_to_vinebot,
-        #                                        transform_args   = logid_sender_vinebot_token,
-        #                                        action           = self.kick_user))
+        self.commands.add(SlashCommand(command_name     = 'invite',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Invite a user to this conversation.',
+                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token,
+                                       action           = self.invite_user))
+        self.commands.add(SlashCommand(command_name     = 'kick',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Kick a user out of this conversation.',
+                                       validate_sender  = admin_or_participant_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token,
+                                       action           = self.kick_user))
         self.commands.add(SlashCommand(command_name     = 'list',
                                        text_arg_format  = '',
                                        text_description = 'List the participants in this conversation.',
@@ -390,6 +390,7 @@ class LeafComponent(ComponentXMPP):
                 logging.error('Received message from unknown user: %s' % msg)
     
     def handle_chatstate(self, msg):
+        #TODO add chatstate stuff
         pass
     
     ##### helper functions
@@ -490,9 +491,9 @@ class LeafComponent(ComponentXMPP):
             if edge and len(old_vinebot.participants) == 0:
                 old_vinebot.delete()
                 if edge_t_user:
-                    edge_t_user.change_vinebot(new_vinebot)
+                    edge_t_user.change_vinebot(vinebot)
                 if edge_f_user:
-                    edge_f_user.change_vinebot(new_vinebot)
+                    edge_f_user.change_vinebot(vinebot)
         else:
             # this conversation had more than three people so start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
@@ -521,6 +522,47 @@ class LeafComponent(ComponentXMPP):
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, vinebot.participants,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
         return parent_command_id, 'You left the conversation.'
+    
+    def invite_user(self, parent_command_id, vinebot, inviter, invitee):
+        try:
+            invitee = FetchedUser(name=invitee)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee)
+        if inviter == invitee:
+            raise ExecutionError, (parent_command_id, 'you can\'t invite yourself.')
+        if invitee in vinebot.participants:
+            raise ExecutionError, (parent_command_id, '%s is already in this conversation.' % invitee.name)
+        if not invitee.is_online():
+            raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee.name)
+        if vinebot.topic:
+            alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter.name, invitee.name, vinebot.topic)
+        else:
+            alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter.name, invitee.name)
+        self.add_participant(vinebot, invitee)
+        self.broadcast_alert(vinebot, vinebot.participants, alert_msg, parent_command_id=parent_command_id)
+        return parent_command_id, ''
+    
+    def kick_user(self, parent_command_id, vinebot, kicker, kickee):
+        try:
+            kickee = FetchedUser(name=kickee)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee)
+        if kicker == kickee:
+            raise ExecutionError, (parent_command_id, 'you can\'t kick yourself. Maybe you meant /leave?')
+        if len(vinebot.participants) == 2:
+            raise ExecutionError, (parent_command_id, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?')
+        if not kickee in vinebot.participants:
+            raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee.name)
+        self.remove_participant(vinebot, kickee)
+        self.broadcast_alert(vinebot, vinebot.participants, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
+        msg = self.Message()
+        body = '%s has kicked you from the conversation' % kicker.name
+        msg['body'] = body
+        msg['from'] = '%s@%s' % (vinebot.user, self.boundjid.bare)
+        msg['to'] = kickee.jid
+        msg.send()
+        g.db.log_message(None, [kickee], body, vinebot=vinebot, parent_command_id=parent_command_id)
+        return parent_command_id, ''
     
     def list_participants(self, parent_command_id, vinebot, user):
         usernames = [participant.name for participant in vinebot.participants.difference([user])]
