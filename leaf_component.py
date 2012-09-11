@@ -335,7 +335,7 @@ class LeafComponent(ComponentXMPP):
             if parent_command_id is None:  # if the command has some sort of error
                 command_name, arg_string = self.commands.parse_command(msg['body'])
                 parent_command_id = g.db.log_command(sender, command_name, None, arg_string, vinebot=vinebot, is_valid=False)
-            self.send_reply(msg, vinebot, response, parent_command_id=parent_command_id)
+            self.send_alert(vinebot, None, sender, response, parent_command_id=parent_command_id)
         if msg['type'] in ('chat', 'normal'):
             try:
                 user = FetchedUser(name=msg['from'].user)
@@ -352,17 +352,17 @@ class LeafComponent(ComponentXMPP):
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
-                            self.send_reply(msg, vinebot, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
+                            self.send_alert(vinebot, None, user, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
                         if len(vinebot.edges) > 0:
                             if self.activate_vinebot(vinebot):
                                 self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
-                                self.send_reply(msg, vinebot, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
+                                self.send_alert(vinebot, None, user, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
-                            self.send_reply(msg, vinebot, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
+                            self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
                     vinebot.cleanup()
             except NotVinebotException:
                 try:
@@ -371,11 +371,11 @@ class LeafComponent(ComponentXMPP):
                             handle_command(msg, user)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'])
-                            self.send_reply(msg, None, 'Sorry, this leaf only accepts /commands from admins.', parent_message_id=parent_message_id)
+                            self.send_alert(None, None, user, 'Sorry, this leaf only accepts /commands from admins.', fromjid=msg['to'], parent_message_id=parent_message_id)
                     else:
                         user = FetchedUser(name=msg['from'].user)
                         parent_message_id = g.db.log_message(user, [], msg['body'])
-                        self.send_reply(msg, None, 'Sorry, you can\'t send messages to %s.' % msg['to'], parent_message_id=parent_message_id)
+                        self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s.' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
                 except NotUserException:
                     logging.error('Received message from unknown user: %s' % msg)
             except NotUserException:
@@ -414,21 +414,17 @@ class LeafComponent(ComponentXMPP):
     def broadcast_alert(self, vinebot, body, parent_command_id=None):
         self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id)
     
-    def send_reply(self, msg, vinebot, body, parent_message_id=None, parent_command_id=None):
-        msg.reply(body).send()
+    def send_alert(self, vinebot, sender, recipient, body, prefix='***', fromjid=None, parent_message_id=None, parent_command_id=None):
+        if body == '':
+            return
+        msg = self.Message()
+        msg['body'] = '%s %s' % (prefix, body)
+        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare) if vinebot else fromjid
+        msg['to'] = recipient.jid
+        msg.send()
+        g.db.log_message(sender, [recipient], body, vinebot=vinebot, parent_message_id=parent_message_id, parent_command_id=parent_command_id)
         if parent_message_id is None and parent_command_id is None:
-            logging.error('Attempted to send reply "%s" with no parent. msg=%s' % (body, msg))
-        else:
-            try:
-                recipients = [FetchedUser(name=msg['to'].user)]
-            except NotUserException:
-                recipients = []
-            g.db.log_message(None,
-                             recipients,
-                             body,
-                             vinebot=vinebot,
-                             parent_message_id=parent_message_id,
-                             parent_command_id=parent_command_id)
+            logging.error('Call to send_alert with no parent. msg=%s' % (body, msg))
     
     def add_participant(self, vinebot, user):
         old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
@@ -565,13 +561,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee.name)
         self.remove_participant(vinebot, kickee)
         self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
-        msg = self.Message()
-        body = '%s has kicked you from the conversation' % kicker.name
-        msg['body'] = body
-        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
-        msg['to'] = kickee.jid
-        msg.send()
-        g.db.log_message(None, [kickee], body, vinebot=vinebot, parent_command_id=parent_command_id)
+        self.send_alert(vinebot, None, kickee, '%s has kicked you from the conversation' % kicker.name, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def list_participants(self, parent_command_id, vinebot, user):
@@ -613,12 +603,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to youerself.')
         if recipient not in vinebot.participants and recipient.jid not in constants.admin_users:
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
-        msg = self.Message()
-        msg['body'] = '[%s, whispering] %s' % (sender.name, body)
-        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
-        msg['to'] = recipient.jid
-        msg.send()
-        g.db.log_message(sender, [recipient], body, vinebot=vinebot, parent_command_id=parent_command_id)
+        self.send_alert(vinebot, sender, recipient, body, prefix='[%s, whispering]' % sender.name, parent_command_id=parent_command_id)
         if len(vinebot.participants) == 2:
             return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient.name
         else:
@@ -632,20 +617,16 @@ class LeafComponent(ComponentXMPP):
             if vinebot.is_active or self.activate_vinebot(vinebot):  # short-circuit prevents unnecessary vinebot activation
                 self.send_presences(vinebot, vinebot.everyone)
                 if vinebot.topic:
-                    self.broadcast_alert(vinebot, '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic), parent_command_id=parent_command_id)
+                    body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
                 else:
-                    self.broadcast_alert(vinebot, '%s has cleared the topic of conversation.' % sender.name, parent_command_id=parent_command_id)
+                    body = '%s has cleared the topic of conversation.' % sender.name
+                self.broadcast_alert(vinebot, body, parent_command_id=parent_command_id)
             else:
                 if vinebot.topic:
                     body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
                 else:
                     body = 'You\'ve cleared the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
-                msg = self.Message()
-                msg['body'] = body
-                msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
-                msg['to'] = sender.jid
-                msg.send()
-                g.db.log_message(None, [sender], body, vinebot=vinebot, parent_command_id=parent_command_id)
+                self.send_alert(vinebot, None, sender, body, parent_command_id=None)
         return parent_command_id, ''
     
     ##### admin /commands
