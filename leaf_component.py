@@ -56,7 +56,6 @@ class LeafComponent(ComponentXMPP):
     def add_slash_commands(self):
         # Access filters for /commands
         def admin_to_vinebot(sender, vinebot):
-            logging.info((sender.jid, constants.admin_jids))
             return vinebot and sender.jid in constants.admin_jids
         def admin_to_leaf(sender, vinebot):
             return not vinebot and sender.jid in constants.admin_jids
@@ -467,6 +466,7 @@ class LeafComponent(ComponentXMPP):
                 for edge in vinebot.edges:
                     edge.change_vinebot(new_vinebot) 
                     new_vinebot.add_to_roster_of(edge.f_user, new_vinebot.get_nick(edge.f_user))
+                self.send_presences(new_vinebot, new_vinebot.everyone)
             self.send_presences(vinebot, vinebot.everyone)
         else:
             # there's no way this vinebot can still have edges associated with it
@@ -516,7 +516,7 @@ class LeafComponent(ComponentXMPP):
     
     ##### user /commands
     def debug_vinebot(self, parent_command_id, vinebot, user):
-        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\nparticipants = %s\nedges = %s' % (vinebot.id, vinebot.jiduser, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
+        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def user_joined(self, parent_command_id, vinebot, user):
