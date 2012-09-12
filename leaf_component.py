@@ -263,12 +263,12 @@ class LeafComponent(ComponentXMPP):
                         self.send_presences(vinebot, [user])
                 else:
                     try:
-                        edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
+                        edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
                         self.send_presences(vinebot, [edge_t_user.f_user])
                     except NotEdgeException:
                         pass
                     try:
-                        edge_f_user = FetchedEdge(f_user=user, vinebot=vinebot)
+                        edge_f_user = FetchedEdge(f_user=user, vinebot_id=vinebot.id)
                         self.send_presences(vinebot, [user], edge_f_user.t_user.status())
                     except NotEdgeException:
                         pass
@@ -295,7 +295,7 @@ class LeafComponent(ComponentXMPP):
                         self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
                 else:
                     try:
-                        edge_t_user = FetchedEdge(t_user=user, vinebot=vinebot)
+                        edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
                         self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
                     except NotEdgeException:
                         pass
@@ -368,19 +368,15 @@ class LeafComponent(ComponentXMPP):
                             self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
                     vinebot.cleanup()
             except NotVinebotException:
-                try:
-                    if user.jid in (constants.admin_jids + [constants.graph_xmpp_jid]):
-                        if self.commands.is_command(msg['body']):
-                            handle_command(msg, user)
-                        else:
-                            parent_message_id = g.db.log_message(user, [], msg['body'])
-                            self.send_alert(None, None, user, 'Sorry, this leaf only accepts /commands from admins.', fromjid=msg['to'], parent_message_id=parent_message_id)
+                if user.jid in (constants.admin_jids + [constants.graph_xmpp_jid]):
+                    if self.commands.is_command(msg['body']):
+                        handle_command(msg, user)
                     else:
-                        user = FetchedUser(name=msg['from'].user)
                         parent_message_id = g.db.log_message(user, [], msg['body'])
-                        self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s.' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
-                except NotUserException:
-                    logging.error('Received message from unknown user: %s' % msg)
+                        self.send_alert(None, None, user, 'Sorry, this leaf only accepts /commands from admins.', fromjid=msg['to'], parent_message_id=parent_message_id)
+                else:
+                    parent_message_id = g.db.log_message(user, [], msg['body'])
+                    self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s.' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
             except NotUserException:
                 logging.error('Received message from unknown user: %s' % msg)
     
@@ -642,16 +638,16 @@ class LeafComponent(ComponentXMPP):
     
     def delete_user(self, parent_command_id, user):
         try:
-            #TODO implement this
-            # for friend in g.db_fetch_user_friends(user):
-            #     self.delete_friendship(user, friend)
-            # for party_vinebot_uuid in g.db_fetch_user_party_vinebots(user):
-            #     vinebot_user = self.get_vinebot_user(party_vinebot_uuid)
-            #     self.remove_participant(user, vinebot_user, '%s\'s account has been deleted.' % user)
             user = FetchedUser(name=user)
+            for vinebot in user.fetch_current_active_vinebots():
+                self.remove_participant(vinebot, user)
+            for edge in FetchedEdge.fetch_edges_for_user(user):
+                self.cleanup_and_delete_edge(edge)
             user.delete()
         except IntegrityError:
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user already exists?')
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, e)
         return parent_command_id, None
     
     def create_edge(self, parent_command_id, from_username, to_username):
@@ -661,12 +657,12 @@ class LeafComponent(ComponentXMPP):
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
         try:
-            FetchedEdge(f_user, t_user)
+            FetchedEdge(f_user=f_user, t_user=t_user)
             raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge connecting them.' % (f_user.name, t_user.name))
         except NotEdgeException:  # no edge was found in the database, so we can continue
             pass
         try:
-            reverse_edge = FetchedEdge(t_user, f_user)
+            reverse_edge = FetchedEdge(f_user=t_user, t_user=f_user)
             vinebot = FetchedVinebot(dbid=reverse_edge.vinebot_id)#, edges=[reverse_edge])
             f_user.note_visible_active_vinebots()
             t_user.note_visible_active_vinebots()
@@ -691,26 +687,29 @@ class LeafComponent(ComponentXMPP):
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
         try:
-            edge = FetchedEdge(f_user, t_user)
+            edge = FetchedEdge(f_user=f_user, t_user=t_user)
         except NotEdgeException:
             raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
+        self.cleanup_and_delete_edge(edge)
+        return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
+    
+    def cleanup_and_delete_edge(self, edge):
         vinebot = FetchedVinebot(dbid=edge.vinebot_id)
         try:
-            FetchedEdge(t_user, f_user)  # reverse_edge
-            f_user.note_visible_active_vinebots()
-            t_user.note_visible_active_vinebots()
+            FetchedEdge(f_user=edge.t_user, t_user=edge.f_user)  # reverse_edge
+            edge.f_user.note_visible_active_vinebots()
+            edge.t_user.note_visible_active_vinebots()
             edge.delete()
-            for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(f_user)
-            for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(t_user)
+            for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(edge.f_user)
+            for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(edge.t_user)
         except NotEdgeException:    
             edge.delete()
             if not vinebot.is_active:
                 vinebot.delete()
         if not vinebot.is_active:
-            vinebot.remove_from_roster_of(f_user)
-        return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
+            vinebot.remove_from_roster_of(edge.f_user)
     
 
 if __name__ == '__main__':

@@ -62,9 +62,14 @@ class InsertedEdge(AbstractEdge):
     
 
 class FetchedEdge(AbstractEdge):
-    def __init__(self, f_user=None, t_user=None, vinebot=None, dbid=None):
+    def __init__(self, f_user=None, t_user=None, vinebot_id=None, dbid=None):
         super(FetchedEdge, self).__init__()
-        if dbid and vinebot is None and f_user is None and t_user is None:
+        if f_user and t_user and vinebot_id and dbid:
+            self.f_user = f_user
+            self.t_user = t_user
+            self.id = dbid
+            self.vinebot_id = vinebot_id
+        elif dbid and vinebot_id is None and f_user is None and t_user is None:
             result = g.db.execute_and_fetchall("""SELECT from_id, to_id, vinebot_id
                                                   FROM edges
                                                   WHERE id = %(id)s
@@ -77,51 +82,81 @@ class FetchedEdge(AbstractEdge):
             self.t_user = u.FetchedUser(dbid=result[0][1])
             self.id = dbid
             self.vinebot_id = result[0][2]
-        elif f_user and t_user and vinebot is None and dbid is None:
+        elif f_user and t_user and vinebot_id is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, vinebot_id
-                                                                FROM edges
-                                                                WHERE to_id = %(t_id)s
-                                                                AND from_id = %(f_id)s
-                                                             """, {
-                                                                't_id': t_user.id, 
-                                                                'f_id': f_user.id
-                                                             })
+                                                  FROM edges
+                                                  WHERE to_id = %(t_id)s
+                                                  AND from_id = %(f_id)s
+                                               """, {
+                                                  't_id': t_user.id, 
+                                                  'f_id': f_user.id
+                                               })
             if len(result) == 0:
                 raise NotEdgeException
             self.f_user = f_user
             self.t_user = t_user
             self.id = result[0][0]
             self.vinebot_id = result[0][1]
-        elif vinebot and f_user and t_user is None and dbid is None:
+        elif vinebot_id and f_user and t_user is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, to_id
-                                                      FROM edges
-                                                      WHERE vinebot_id = %(vinebot_id)s
-                                                      AND from_id = %(f_id)s
-                                                  """, {
-                                                      'vinebot_id': vinebot.id, 
-                                                      'f_id': f_user.id
-                                                  })
+                                                  FROM edges
+                                                  WHERE vinebot_id = %(vinebot_id)s
+                                                  AND from_id = %(f_id)s
+                                               """, {
+                                                   'vinebot_id': vinebot_id, 
+                                                   'f_id': f_user.id
+                                               })
             if len(result) == 0:
                 raise NotEdgeException
             self.f_user = f_user
             self.t_user = u.FetchedUser(dbid=result[0][1])
             self.id = result[0][0]
-            self.vinebot_id = vinebot.id
-        elif vinebot and t_user and f_user is None and dbid is None:
+            self.vinebot_id = vinebot_id
+        elif vinebot_id and t_user and f_user is None and dbid is None:
             result = g.db.execute_and_fetchall("""SELECT id, from_id
-                                                      FROM edges
-                                                      WHERE vinebot_id = %(vinebot_id)s
-                                                      AND to_id = %(t_id)s
-                                                  """, {
-                                                      'vinebot_id': vinebot.id, 
-                                                      't_id': t_user.id
-                                                  })
+                                                  FROM edges
+                                                  WHERE vinebot_id = %(vinebot_id)s
+                                                  AND to_id = %(t_id)s
+                                               """, {
+                                                   'vinebot_id': vinebot_id, 
+                                                   't_id': t_user.id
+                                               })
             if len(result) == 0:
                 raise NotEdgeException
             self.f_user = u.FetchedUser(dbid=result[0][1])
             self.t_user = t_user
             self.id = result[0][0]
-            self.vinebot_id = vinebot.id
+            self.vinebot_id = vinebot_id
         else:
-            raise Exception, 'FechedEdges require either both users or a vinebot and either user, or a dbid as parameters.'
+            raise Exception, 'FechedEdges require either both users or a vinebot_id and either user, or a dbid, or all four as parameters.'
     
+    @staticmethod  # this is here and not in AbstractUser because it is coupled tightly to the FetchedEdge constructor, and isn't really a "safe" interface
+    def fetch_edges_for_user(user):
+        results = g.db.execute_and_fetchall("""SELECT from_id, vinebot_id, id
+                                               FROM edges
+                                               WHERE to_id = %(to_id)s
+                                            """, {
+                                               'to_id': user.id
+                                            })
+        to_edges = []
+        if results and len(results) > 0:
+            to_edges = [FetchedEdge(f_user=u.FetchedUser(dbid=result[0]),
+                                    t_user=user,
+                                    vinebot_id=result[1],
+                                    dbid=result[2]
+                                   ) for result in results]
+        results = g.db.execute_and_fetchall("""SELECT to_id, vinebot_id, id
+                                               FROM edges
+                                               WHERE from_id = %(from_id)s
+                                            """, {
+                                               'from_id': user.id
+                                            })
+        from_edges = []
+        if results and len(results) > 0:
+            from_edges = [FetchedEdge(f_user=user,
+                                      t_user=u.FetchedUser(dbid=result[0]),
+                                      vinebot_id=result[1],
+                                      dbid=result[2]
+                                     ) for result in results]
+        return frozenset(to_edges + from_edges)
+   

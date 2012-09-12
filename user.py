@@ -82,15 +82,14 @@ class AbstractUser(object):
         else:
             return set([])
     
-    # def get_active_vinebots(self):
-    #     vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
-    #                                                FROM participants
-    #                                                WHERE user_id = %(id)s
-    #                                                LIMIT 1
-    #                                             """, {
-    #                                                'id': self.id
-    #                                             }, strip_pairs=True)
-    #     return [v.FetchedVinebot(g.db, g.ectl, dbid=vinebot_id) for vinebot_id in vinebot_ids]
+    def fetch_current_active_vinebots(self):
+        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
+                                                   FROM participants
+                                                   WHERE user_id = %(id)s
+                                                """, {
+                                                   'id': self.id
+                                                }, strip_pairs=True)
+        return frozenset([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids])
     
     def delete(self):
         g.db.execute("""DELETE FROM users
@@ -130,7 +129,7 @@ class AbstractUser(object):
     
     def __hash__(self):
         return hash('%d.%s' % (self.id, self.name))
-
+    
     def __str__(self):
         return self.__repr__()
     
