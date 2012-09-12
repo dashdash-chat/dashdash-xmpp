@@ -552,6 +552,8 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t invite administrator accounts.')
         if invitee in vinebot.participants:
             raise ExecutionError, (parent_command_id, '%s is already in this conversation.' % invitee.name)
+        if len(vinebot.participants) == 0:
+            raise ExecutionError, (parent_command_id, 'You can\'t invite someone before the conversation has started.')
         if not invitee.is_online():
             raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee.name)
         if vinebot.topic:
