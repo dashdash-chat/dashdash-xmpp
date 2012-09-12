@@ -205,12 +205,12 @@ class LeafComponent(ComponentXMPP):
         #                                validate_sender  = admin_to_leaf,
         #                                transform_args   = logid_token,
         #                                action           = self.prune_roster))
-        # self.commands.add(SlashCommand(command_name     = 'friendships',
-        #                                text_arg_format  = '<username (optional)>',
-        #                                text_description = 'List all current friendships, or only the specified user\'s friendships.',
-        #                                validate_sender  = admin_to_leaf,
-        #                                transform_args   = logid_token_or_none,
-        #                                action           = self.friendships))
+        self.commands.add(SlashCommand(command_name     = 'edges',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'List all current edges, or only the specified user\'s edges.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.list_edges))
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
@@ -525,6 +525,24 @@ class LeafComponent(ComponentXMPP):
             vinebot.update_rosters(old_participants, vinebot.participants)
         self.send_presences(vinebot, vinebot.everyone)
     
+    def cleanup_and_delete_edge(self, edge):
+        vinebot = FetchedVinebot(dbid=edge.vinebot_id)
+        try:
+            FetchedEdge(f_user=edge.t_user, t_user=edge.f_user)  # reverse_edge
+            edge.f_user.note_visible_active_vinebots()
+            edge.t_user.note_visible_active_vinebots()
+            edge.delete()
+            for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(edge.f_user)
+            for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
+                other_vinebot.remove_from_roster_of(edge.t_user)
+        except NotEdgeException:    
+            edge.delete()
+            if not vinebot.is_active:
+                vinebot.delete()
+        if not vinebot.is_active:
+            vinebot.remove_from_roster_of(edge.f_user)
+    
     ##### user /commands
     def debug_vinebot(self, parent_command_id, vinebot, user):
         self.send_alert(vinebot, None, user, 'dbid = %d\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
@@ -667,9 +685,9 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
         return parent_command_id, None
     
-    def delete_user(self, parent_command_id, user):
+    def delete_user(self, parent_command_id, username):
         try:
-            user = FetchedUser(name=user)
+            user = FetchedUser(name=username)
             for vinebot in user.fetch_current_active_vinebots():
                 self.remove_participant(vinebot, user)
             for edge in FetchedEdge.fetch_edges_for_user(user):
@@ -724,23 +742,34 @@ class LeafComponent(ComponentXMPP):
         self.cleanup_and_delete_edge(edge)
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
-    def cleanup_and_delete_edge(self, edge):
-        vinebot = FetchedVinebot(dbid=edge.vinebot_id)
+    def list_edges(self, parent_command_id, username):
         try:
-            FetchedEdge(f_user=edge.t_user, t_user=edge.f_user)  # reverse_edge
-            edge.f_user.note_visible_active_vinebots()
-            edge.t_user.note_visible_active_vinebots()
-            edge.delete()
-            for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(edge.f_user)
-            for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(edge.t_user)
-        except NotEdgeException:    
-            edge.delete()
-            if not vinebot.is_active:
-                vinebot.delete()
-        if not vinebot.is_active:
-            vinebot.remove_from_roster_of(edge.f_user)
+            user = FetchedUser(name=username)
+            edges = FetchedEdge.fetch_edges_for_user(user)
+            def has_reverse(edge):
+                for other_edge in edges:
+                    if (edge.f_user == other_edge.t_user) and (edge.t_user == other_edge.f_user):
+                        return True
+                return False
+            symmetric = filter(has_reverse, edges)
+            asymmetric = edges.difference(symmetric)
+            incoming = filter(lambda edge: edge.t_user == user, asymmetric)
+            outgoing = filter(lambda edge: edge.f_user == user, asymmetric)
+            if (len(outgoing) + len(incoming) + len(symmetric)) != len(edges):
+                raise ExecutionError, (parent_command_id, 'something bad happened to the edge set calculations for %s' % user)
+            output = '%d %s has:' % (user.id, user.name)
+            output += '\n\t%d friends (symmetric edges)' % len(user.friends)
+            if len(user.friends) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['%d %s' % (friend.id, friend.name) for friend in user.friends])
+            output += '\n\t%d incoming edges' % len(incoming)
+            if len(incoming) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['%d %s' % (edge.f_user.id, edge.f_user.name) for edge in incoming ])
+            output += '\n\t%d outgoing edges' % len(outgoing)
+            if len(outgoing) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['%d %s' % (edge.t_user.id, edge.t_user.name) for edge in outgoing ])
+            return parent_command_id, output
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
     
 
 if __name__ == '__main__':
