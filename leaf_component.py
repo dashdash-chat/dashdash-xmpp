@@ -389,8 +389,18 @@ class LeafComponent(ComponentXMPP):
                 logging.error('Received message from unknown user: %s' % msg)
     
     def handle_chatstate(self, msg):
-        #TODO add chatstate stuff
-        pass
+        try:
+            user = FetchedUser(name=msg['from'].user)
+            vinebot = FetchedVinebot(jiduser=msg['to'].user)
+            if user in vinebot.participants:
+                del msg['id']
+                del msg['body']
+                del msg['html']
+                self.broadcast_message(vinebot, user, vinebot.everyone, None, msg=msg)
+        except NotVinebotException:
+            pass
+        except NotUserException:
+            pass
     
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
@@ -400,9 +410,10 @@ class LeafComponent(ComponentXMPP):
                                 pshow=None if pshow == 'available' else pshow,
                                 pstatus=unicode(vinebot.topic) if vinebot.topic else None)
     
-    def broadcast_message(self, vinebot, sender, recipients, body, parent_command_id=None):
+    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None):
         #LATER fix html, but it's a pain with reformatting
-        msg = self.Message()
+        if msg is None:  # need to pass this for chat states
+            msg = self.Message()
         if body and body != '':
             if sender:
                 msg['body'] = '[%s] %s' % (sender.name, body)
