@@ -385,7 +385,7 @@ class LeafComponent(ComponentXMPP):
                         self.send_alert(None, None, user, 'Sorry, this leaf only accepts /commands from admins.', fromjid=msg['to'], parent_message_id=parent_message_id)
                 else:
                     parent_message_id = g.db.log_message(user, [], msg['body'])
-                    self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s.' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
+                    self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s. Try another contact in your list?' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
             except NotUserException:
                 logging.error('Received message from unknown user: %s' % msg)
     
@@ -477,6 +477,7 @@ class LeafComponent(ComponentXMPP):
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
         if len(vinebot.participants) == 1:
+            #LATER if two users have two active vinebots, one with an edge, and the person leaves the one with the edge, it won't get moved ot the other
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
             if len(vinebot.edges) == 1:

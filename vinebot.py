@@ -168,12 +168,9 @@ class AbstractVinebot(object):
         return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (set on %b %d at %-I:%M%p EST)'))
     
     def delete(self):
-        #TODO remove from rosters?
-        g.db.execute("""DELETE FROM edges
-                           WHERE vinebot_id = %(id)s
-                        """, {           
-                           'id': self.id
-                        })
+        for user in self.edge_users:
+            self.remove_from_roster_of(user)
+        # don't delete the actual edges though - either they're deleted elsewhere, or will be transferred to a new vinebot
         g.db.execute("""DELETE FROM participants
                            WHERE vinebot_id = %(id)s
                         """, {           
