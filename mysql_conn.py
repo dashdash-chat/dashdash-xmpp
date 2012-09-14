@@ -13,7 +13,7 @@ class MySQLConnection(object):
         self.connect()
     
     def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
-        if not body or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
+        if body is None or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
             return
         log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
                                     VALUES (

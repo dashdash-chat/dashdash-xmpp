@@ -18,6 +18,10 @@ class NotUserException(Exception):
 class AbstractUser(object):
     def __init__(self, name=None, dbid=None):
         self._friends = None
+        self._active_vinebots = None
+        self._observed_vinebots = None
+        self._symmetric_vinebots = None
+        self._outgoing_vinebots = None
         self._incoming_vinebots = None
         self._noted_vinebot_ids = None
     
@@ -26,6 +30,9 @@ class AbstractUser(object):
     
     def is_online(self):
         return self.status() != 'unavailable'  # this function is useful for list filterss
+    
+    def roster(self):
+        return g.ectl.get_roster(self.name)
     
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
@@ -40,17 +47,55 @@ class AbstractUser(object):
                                                  })
         return frozenset([FetchedUser(name=friend_pair[0], dbid=friend_pair[1]) for friend_pair in friend_pairs])
     
-    def _fetch_vinebots_incoming_only(self):  # fetches the vinebots for ONLY incoming edges
+    def _fetch_current_active_vinebots(self):
+        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
+                                                   FROM participants
+                                                   WHERE user_id = %(id)s
+                                                """, {
+                                                   'id': self.id
+                                                }, strip_pairs=True)
+        return frozenset([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids])
+    
+    def _fetch_vinebots_symmetric_only(self):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
-                                                 FROM vinebots, edges AS incoming, edges AS outgoing
-                                                 WHERE incoming.vinebot_id = vinebots.id
-                                                 AND incoming.to_id = %(id)s
-                                                 AND outgoing.vinebot_id != vinebots.id
-                                                 GROUP BY vinebots.id
-                                              """, {
-                                                 'id': self.id
-                                              })
+                                                FROM vinebots, edges AS incoming, edges AS outgoing
+                                                WHERE incoming.vinebot_id = vinebots.id
+                                                AND incoming.to_id = %(id)s
+                                                AND outgoing.from_id = %(id)s
+                                                AND incoming.from_id = outgoing.to_id
+                                                GROUP BY vinebots.id;
+                                             """, {
+                                                'id': self.id
+                                             })
         return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+
+    
+    def _fetch_vinebots_incoming_only(self):
+        vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
+                                                FROM vinebots, edges AS incoming, edges AS outgoing
+                                                WHERE incoming.vinebot_id = vinebots.id
+                                                AND incoming.to_id = %(id)s
+                                                AND incoming.from_id = outgoing.to_id
+                                                AND outgoing.vinebot_id != vinebots.id
+                                                GROUP BY vinebots.id;
+                                             """, {
+                                                'id': self.id
+                                             })
+        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+    
+    def _fetch_vinebots_outgoing_only(self):
+        vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
+                                                FROM vinebots, edges AS incoming, edges AS outgoing
+                                                WHERE outgoing.vinebot_id = vinebots.id
+                                                AND outgoing.from_id = %(id)s
+                                                AND outgoing.to_id = incoming.from_id
+                                                AND incoming.vinebot_id != vinebots.id
+                                                GROUP BY vinebots.id;
+                                             """, {
+                                                'id': self.id
+                                             })
+        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+
     
     def _fetch_visible_active_vinebot_ids(self):
         return g.db.execute_and_fetchall("""SELECT participants.vinebot_id
@@ -63,6 +108,9 @@ class AbstractUser(object):
                                          """, {
                                             'id': self.id
                                          }, strip_pairs=True)
+    
+    def _fetch_visible_active_vinebots(self):
+        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in self._fetch_visible_active_vinebot_ids()])
     
     def note_visible_active_vinebots(self):
         self._noted_vinebot_ids = set(self._fetch_visible_active_vinebot_ids())
@@ -82,15 +130,6 @@ class AbstractUser(object):
         else:
             return set([])
     
-    def fetch_current_active_vinebots(self):
-        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
-                                                   FROM participants
-                                                   WHERE user_id = %(id)s
-                                                """, {
-                                                   'id': self.id
-                                                }, strip_pairs=True)
-        return frozenset([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids])
-    
     def delete(self):
         g.db.execute("""DELETE FROM users
                         WHERE id = %(id)s
@@ -106,10 +145,26 @@ class AbstractUser(object):
             if self._friends is None:
                 self._friends = self._fetch_friends()
             return self._friends
+        elif name == 'active_vinebots':
+            if self._active_vinebots is None:
+                self._active_vinebots = self._fetch_current_active_vinebots()
+            return self._active_vinebots
+        elif name == 'observed_vinebots':
+            if self._observed_vinebots is None:
+                self._observed_vinebots = self._fetch_visible_active_vinebots()
+            return self._observed_vinebots
+        elif name == 'symmetric_vinebots':
+            if self._symmetric_vinebots is None:
+                self._symmetric_vinebots = self._fetch_vinebots_symmetric_only()
+            return self._symmetric_vinebots
         elif name == 'incoming_vinebots':
             if self._incoming_vinebots is None:
                 self._incoming_vinebots = self._fetch_vinebots_incoming_only()
             return self._incoming_vinebots
+        elif name == 'outgoing_vinebots':
+            if self._outgoing_vinebots is None:
+                self._outgoing_vinebots = self._fetch_vinebots_outgoing_only()
+            return self._outgoing_vinebots
         else:
             dict.__getattr__(self, name)
     
