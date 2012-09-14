@@ -199,12 +199,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token_token,
                                        action           = self.delete_edge))
-        # self.commands.add(SlashCommand(command_name     = 'prune',
-        #                                text_arg_format  = '<username>',
-        #                                text_description = 'Remove old, unused vinebots from a user\'s roster.',
-        #                                validate_sender  = admin_to_leaf,
-        #                                transform_args   = logid_token,
-        #                                action           = self.prune_roster))
+        self.commands.add(SlashCommand(command_name     = 'prune',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Remove old, unused vinebots from a user\'s roster.',
+                                       validate_sender  = admin_or_graph_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.prune_roster))
         self.commands.add(SlashCommand(command_name     = 'edges',
                                        text_arg_format  = '<username>',
                                        text_description = 'List all current edges, or only the specified user\'s edges.',
@@ -688,7 +688,7 @@ class LeafComponent(ComponentXMPP):
     def delete_user(self, parent_command_id, username):
         try:
             user = FetchedUser(name=username)
-            for vinebot in user.fetch_current_active_vinebots():
+            for vinebot in user.active_vinebots:
                 self.remove_participant(vinebot, user)
             for edge in FetchedEdge.fetch_edges_for_user(user):
                 self.cleanup_and_delete_edge(edge)
@@ -742,6 +742,29 @@ class LeafComponent(ComponentXMPP):
         self.cleanup_and_delete_edge(edge)
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
+    def prune_roster(self, parent_command_id, username):
+        try:
+            user = FetchedUser(name=username)
+            expected_vinebots = frozenset([]).union(user.active_vinebots) \
+                                             .union(user.observed_vinebots) \
+                                             .union(user.symmetric_vinebots) \
+                                             .union(user.outgoing_vinebots)
+            expected_rosteritems = frozenset([(expected.jiduser, expected.get_nick(user)) for expected in expected_vinebots])
+            actual_rosteritems = frozenset(user.roster())
+            errors = []
+            for roster_user, roster_nick in expected_rosteritems.difference(actual_rosteritems):
+                errors.append('No rosteritem found for vinebot %s with nick %s' % (roster_user, roster_nick))
+                g.ectl.add_rosteritem(user, roster_user, roster_nick)
+            for roster_user, roster_nick in actual_rosteritems.difference(expected_rosteritems):
+                errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
+                g.ectl.delete_rosteritem(user, roster_user)
+            if errors:
+                return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
+            else:
+                return parent_command_id, '%s has no roster errors.' % user.name
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
     def list_edges(self, parent_command_id, username):
         try:
             user = FetchedUser(name=username)
@@ -788,40 +811,3 @@ if __name__ == '__main__':
         logging.info("Done")
     else:    
         logging.error("Unable to connect")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
