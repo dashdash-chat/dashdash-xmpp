@@ -68,6 +68,7 @@ class AbstractVinebot(object):
                                                  FROM participants, edges AS outgoing, edges AS incoming, users
                                                  WHERE outgoing.to_id = users.id
                                                  AND incoming.from_id = outgoing.to_id
+                                                 AND participants.vinebot_id = %(id)s
                                                  AND participants.user_id = incoming.to_id
                                                  AND participants.user_id = outgoing.from_id
                                                  AND (SELECT COUNT(*) 
