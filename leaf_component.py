@@ -259,83 +259,95 @@ class LeafComponent(ComponentXMPP):
         #logging.info('starting! other leaves online? %s' % other_leaves_online)
     
     def handle_presence_available(self, presence):
+        user = None
+        vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = None
-            try:
-                vinebot = FetchedVinebot(jiduser=presence['to'].user)            
-                if vinebot.is_active:
-                    if user in vinebot.participants:
-                        self.send_presences(vinebot, vinebot.everyone)
-                    elif user in vinebot.observers:
-                        self.send_presences(vinebot, [user])
-                else:
-                    try:
-                        edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
-                        self.send_presences(vinebot, [edge_t_user.f_user])
-                    except NotEdgeException:
-                        pass
-                    try:
-                        edge_f_user = FetchedEdge(f_user=user, vinebot_id=vinebot.id)
-                        self.send_presences(vinebot, [user], edge_f_user.t_user.status())
-                    except NotEdgeException:
-                        pass
-            except NotVinebotException:
-                pass
-            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):  #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
-                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
+            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)            
+            if vinebot.is_active:
+                if user in vinebot.participants:
+                    self.send_presences(vinebot, vinebot.everyone)
+                elif user in vinebot.observers:
+                    self.send_presences(vinebot, [user])
+            else:
+                try:
+                    edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
+                    self.send_presences(vinebot, [edge_t_user.f_user])
+                except NotEdgeException:
+                    pass
+                try:
+                    edge_f_user = FetchedEdge(f_user=user, vinebot_id=vinebot.id)
+                    self.send_presences(vinebot, [user], edge_f_user.t_user.status())
+                except NotEdgeException:
+                    pass
+        except NotVinebotException:
+            pass
         except NotUserException:
-            return
+            pass
+        finally:
+            if vinebot:
+                vinebot.release_lock()
+        if user:  #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
+            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
+                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
     
     def handle_presence_away(self, presence):
+        user = None
+        vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = None
-            try:
-                vinebot = FetchedVinebot(jiduser=presence['to'].user)
-                if user in vinebot.participants:  # [] if vinebot is not active
-                    if len(vinebot.participants) >= 3:
-                        self.send_presences(vinebot, vinebot.everyone)
-                    else:  # elif len(participants) == 2:
-                        remaining_user = iter(vinebot.participants.difference([user])).next()
-                        self.remove_participant(vinebot, user)  # this deactivates the vinebot
-                        self.send_presences(vinebot, [user], pshow=remaining_user.status())
-                        self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
-                else:
-                    try:
-                        edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
-                        self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
-                    except NotEdgeException:
-                        pass
-            except NotVinebotException:
-                return
+            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
+            if user in vinebot.participants:  # [] if vinebot is not active
+                if len(vinebot.participants) >= 3:
+                    self.send_presences(vinebot, vinebot.everyone)
+                else:  # elif len(participants) == 2:
+                    remaining_user = iter(vinebot.participants.difference([user])).next()
+                    self.remove_participant(vinebot, user)  # this deactivates the vinebot
+                    self.send_presences(vinebot, [user], pshow=remaining_user.status())
+                    self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
+            else:
+                try:
+                    edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
+                    self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
+                except NotEdgeException:
+                    pass
+        except NotVinebotException:
+            pass
+        except NotUserException:
+            pass
+        finally:
+            if vinebot:
+                vinebot.release_lock()
+        if user:
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow=presence['type'])
-        except NotUserException:
-            return
     
     def handle_presence_unavailable(self, presence):
+        user = None
+        vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = None
-            try:
-                vinebot = FetchedVinebot(jiduser=presence['to'].user)
-                if not user.is_online():
-                    if user in vinebot.participants:  # [] if vinebot is not active
-                        if len(vinebot.participants) > 2:
-                            self.send_presences(vinebot, vinebot.everyone.difference([user]))
-                        else:  # elif len(participants) == 2:
-                            self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
-                        self.remove_participant(vinebot, user)
-                    elif user in vinebot.edge_users:
-                        self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
-            except NotVinebotException:
-                return
+            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
+            if not user.is_online():
+                if user in vinebot.participants:  # [] if vinebot is not active
+                    if len(vinebot.participants) > 2:
+                        self.send_presences(vinebot, vinebot.everyone.difference([user]))
+                    else:  # elif len(participants) == 2:
+                        self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
+                    self.remove_participant(vinebot, user)
+                elif user in vinebot.edge_users:
+                    self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
+        except NotVinebotException:
+            pass
+        except NotUserException:
+            pass
+        finally:
+            if vinebot:
+                vinebot.release_lock()
+        if user:
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 if len(incoming_vinebot.edges) == 1:  # no need to send this presence to vinebots with two edges #LATER make this more efficient
                     self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow='unavailable')
-        except NotUserException:
-            return
     
     def handle_msg(self, msg):
         def handle_command(msg, sender, vinebot=None):
@@ -347,10 +359,12 @@ class LeafComponent(ComponentXMPP):
                 self.send_alert(vinebot, None, sender, response, parent_command_id=parent_command_id)
             else:
                 self.send_alert(None, None, sender, response, fromjid=msg['to'], parent_command_id=parent_command_id)
+        
         if msg['type'] in ('chat', 'normal'):
+            vinebot = None
             try:
                 user = FetchedUser(name=msg['from'].user)
-                vinebot = FetchedVinebot(jiduser=msg['to'].user)
+                vinebot = FetchedVinebot(can_write=True, jiduser=msg['to'].user)
                 if self.commands.is_command(msg['body']):
                     handle_command(msg, user, vinebot)
                 else:
@@ -374,7 +388,6 @@ class LeafComponent(ComponentXMPP):
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user.', parent_message_id=parent_message_id)
-                    vinebot.cleanup()
             except NotVinebotException:
                 if user.jid in (constants.admin_jids + [constants.graph_xmpp_jid]):
                     if self.commands.is_command(msg['body']):
@@ -387,6 +400,9 @@ class LeafComponent(ComponentXMPP):
                     self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s. Try another contact in your list?' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
             except NotUserException:
                 logging.error('Received message from unknown user: %s' % msg)
+            finally:
+                if vinebot:
+                    vinebot.release_lock()
     
     def handle_chatstate(self, msg):
         try:
@@ -473,11 +489,16 @@ class LeafComponent(ComponentXMPP):
         elif len(vinebot.participants) == 3:
             vinebot.update_rosters(old_participants, vinebot.participants)
             if len(vinebot.edges) > 0:
-                new_vinebot = InsertedVinebot()
-                for edge in vinebot.edges:
-                    edge.change_vinebot(new_vinebot) 
-                    new_vinebot.add_to_roster_of(edge.f_user, new_vinebot.get_nick(edge.f_user))
-                self.send_presences(new_vinebot, new_vinebot.everyone)
+                new_vinebot = None
+                try:
+                    new_vinebot = InsertedVinebot()
+                    for edge in vinebot.edges:
+                        edge.change_vinebot(new_vinebot) 
+                        new_vinebot.add_to_roster_of(edge.f_user, new_vinebot.get_nick(edge.f_user))
+                    self.send_presences(new_vinebot, new_vinebot.everyone)
+                finally:
+                    if new_vinebot:
+                        new_vinebot.release_lock()
             self.send_presences(vinebot, vinebot.everyone)
         else:
             # there's no way this vinebot can still have edges associated with it
@@ -510,38 +531,48 @@ class LeafComponent(ComponentXMPP):
             except NotEdgeException:
                 edge_f_user = None
             edge = edge_t_user if edge_t_user else edge_f_user
-            if edge_t_user:
-                old_vinebot = FetchedVinebot(dbid=edge_t_user.vinebot_id)
-            elif edge_f_user:
-                old_vinebot = FetchedVinebot(dbid=edge_f_user.vinebot_id)
-            if edge and len(old_vinebot.participants) == 0:
-                old_vinebot.delete()
+            old_vinebot = None
+            try:
                 if edge_t_user:
-                    edge_t_user.change_vinebot(vinebot)
-                if edge_f_user:
-                    edge_f_user.change_vinebot(vinebot)
+                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge_t_user.vinebot_id)
+                elif edge_f_user:
+                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge_f_user.vinebot_id)
+                if edge and len(old_vinebot.participants) == 0:
+                    old_vinebot.delete()
+                    if edge_t_user:
+                        edge_t_user.change_vinebot(vinebot)
+                    if edge_f_user:
+                        edge_f_user.change_vinebot(vinebot)
+            finally:
+                if old_vinebot:
+                    old_vinebot.release_lock()
         else:
             # this conversation had more than three people so start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
         self.send_presences(vinebot, vinebot.everyone)
     
     def cleanup_and_delete_edge(self, edge):
-        vinebot = FetchedVinebot(dbid=edge.vinebot_id)
+        vinebot = None
         try:
-            FetchedEdge(f_user=edge.t_user, t_user=edge.f_user)  # reverse_edge
-            edge.f_user.note_visible_active_vinebots()
-            edge.t_user.note_visible_active_vinebots()
-            edge.delete()
-            for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(edge.f_user)
-            for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.remove_from_roster_of(edge.t_user)
-        except NotEdgeException:    
-            edge.delete()
+            vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
+            try:
+                FetchedEdge(f_user=edge.t_user, t_user=edge.f_user)  # reverse_edge
+                edge.f_user.note_visible_active_vinebots()
+                edge.t_user.note_visible_active_vinebots()
+                edge.delete(vinebot)
+                for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
+                    other_vinebot.remove_from_roster_of(edge.f_user)
+                for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
+                    other_vinebot.remove_from_roster_of(edge.t_user)
+            except NotEdgeException:
+                edge.delete(vinebot)
+                if not vinebot.is_active:
+                    vinebot.delete()
             if not vinebot.is_active:
-                vinebot.delete()
-        if not vinebot.is_active:
-            vinebot.remove_from_roster_of(edge.f_user)
+                vinebot.remove_from_roster_of(edge.f_user)
+        finally:
+            if vinebot:
+                vinebot.release_lock()
     
     ##### user /commands
     def debug_vinebot(self, parent_command_id, vinebot, user):
@@ -687,7 +718,7 @@ class LeafComponent(ComponentXMPP):
     
     def delete_user(self, parent_command_id, username):
         try:
-            user = FetchedUser(name=username)
+            user = FetchedUser(can_write=True, name=username)
             for vinebot in user.active_vinebots:
                 self.remove_participant(vinebot, user)
             for edge in FetchedEdge.fetch_edges_for_user(user):
@@ -701,8 +732,8 @@ class LeafComponent(ComponentXMPP):
     
     def create_edge(self, parent_command_id, from_username, to_username):
         try:
-            f_user = FetchedUser(name=from_username)
-            t_user = FetchedUser(name=to_username)
+            f_user = FetchedUser(can_write=True, name=from_username)
+            t_user = FetchedUser(can_write=True, name=to_username)
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
         try:
@@ -710,29 +741,34 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge connecting them.' % (f_user.name, t_user.name))
         except NotEdgeException:  # no edge was found in the database, so we can continue
             pass
+        vinebot = None
         try:
-            reverse_edge = FetchedEdge(f_user=t_user, t_user=f_user)
-            vinebot = FetchedVinebot(dbid=reverse_edge.vinebot_id)#, edges=[reverse_edge])
-            f_user.note_visible_active_vinebots()
-            t_user.note_visible_active_vinebots()
-            InsertedEdge(f_user, t_user, vinebot_id=vinebot.id)
-            for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
-                self.send_presences(other_vinebot, [f_user])
-            for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
-                other_vinebot.add_to_roster_of(t_user, other_vinebot.get_nick(t_user))
-                self.send_presences(other_vinebot, [t_user])
-        except NotEdgeException:
-            vinebot = InsertedVinebot()
-            InsertedEdge(f_user, t_user, vinebot_id=vinebot.id)
-        self.send_presences(vinebot, [f_user], pshow=t_user.status())
-        vinebot.add_to_roster_of(f_user, vinebot.get_nick(f_user))
+            try:
+                reverse_edge = FetchedEdge(f_user=t_user, t_user=f_user)
+                vinebot = FetchedVinebot(can_write=True, dbid=reverse_edge.vinebot_id)#, edges=[reverse_edge])
+                f_user.note_visible_active_vinebots()
+                t_user.note_visible_active_vinebots()
+                InsertedEdge(f_user, t_user, vinebot=vinebot)
+                for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
+                    other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
+                    self.send_presences(other_vinebot, [f_user])
+                for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
+                    other_vinebot.add_to_roster_of(t_user, other_vinebot.get_nick(t_user))
+                    self.send_presences(other_vinebot, [t_user])
+            except NotEdgeException:
+                vinebot = InsertedVinebot()
+                InsertedEdge(f_user, t_user, vinebot=vinebot)
+            self.send_presences(vinebot, [f_user], pshow=t_user.status())
+            vinebot.add_to_roster_of(f_user, vinebot.get_nick(f_user))
+        finally:
+            if vinebot:
+                vinebot.release_lock()
         return parent_command_id, '%s and %s now have a directed edge between them.' % (f_user.name, t_user.name)
     
     def delete_edge(self, parent_command_id, from_username, to_username):
         try:
-            f_user = FetchedUser(name=from_username)
-            t_user = FetchedUser(name=to_username)
+            f_user = FetchedUser(can_write=True, name=from_username)  # these users will be used in cleanup_and_delete_edge, so need can_write=True
+            t_user = FetchedUser(can_write=True, name=to_username)
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
         try:

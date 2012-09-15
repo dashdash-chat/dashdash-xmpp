@@ -4,6 +4,7 @@ import sys
 import logging
 from constants import g
 import user as u
+import vinebot as v
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -22,6 +23,8 @@ class AbstractEdge(object):
         self.id = None
     
     def change_vinebot(self, vinebot):
+        if not vinebot.can_write:
+            raise v.VinebotPermissionsException
         g.db.execute("""UPDATE edges
                         SET vinebot_id = %(vinebot_id)s
                         WHERE id = %(id)s
@@ -31,7 +34,9 @@ class AbstractEdge(object):
                      })
         self.vinebot_id = vinebot.id
     
-    def delete(self):
+    def delete(self, vinebot):  # passing in this vinebot doesn't actually protect us from anything, but forces us to be explicit
+        if not vinebot.can_write:
+            raise v.VinebotPermissionsException
         g.db.execute("""DELETE FROM edges
                             WHERE id = %(id)s
                          """, {           
@@ -46,18 +51,20 @@ class AbstractEdge(object):
     
 
 class InsertedEdge(AbstractEdge):
-    def __init__(self, f_user, t_user, vinebot_id):
+    def __init__(self, f_user, t_user, vinebot):        
+        if not vinebot.can_write:
+            raise v.VinebotPermissionsException
         super(InsertedEdge, self).__init__()
         dbid = g.db.execute("""INSERT INTO edges (from_id, to_id, vinebot_id)
                                    VALUES (%(f_id)s, %(t_id)s, (%(vinebot_id)s))
                                 """, {           
                                    't_id': t_user.id, 
                                    'f_id': f_user.id,
-                                   'vinebot_id': vinebot_id
+                                   'vinebot_id': vinebot.id
                                 })
         self.f_user = f_user
         self.t_user = t_user
-        self.vinebot_id = vinebot_id
+        self.vinebot_id = vinebot.id
         self.id = dbid
     
 
@@ -159,4 +166,4 @@ class FetchedEdge(AbstractEdge):
                                       dbid=result[2]
                                      ) for result in results]
         return frozenset(to_edges + from_edges)
-   
+    

@@ -15,8 +15,11 @@ else:
 class NotUserException(Exception):
     pass
 
+class UserPermissionsException(Exception):
+    pass
+
 class AbstractUser(object):
-    def __init__(self, name=None, dbid=None):
+    def __init__(self, can_write=False, name=None, dbid=None):
         self._friends = None
         self._active_vinebots = None
         self._observed_vinebots = None
@@ -24,6 +27,8 @@ class AbstractUser(object):
         self._outgoing_vinebots = None
         self._incoming_vinebots = None
         self._noted_vinebot_ids = None
+        self.can_write = can_write
+        # if self.can_write:  the user doesn't actually require a lock, since deleting is really the only potential issue
     
     def status(self):
         return g.ectl.user_status(self.name)
@@ -54,7 +59,7 @@ class AbstractUser(object):
                                                 """, {
                                                    'id': self.id
                                                 }, strip_pairs=True)
-        return frozenset([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot_id) for vinebot_id in vinebot_ids])
     
     def _fetch_vinebots_symmetric_only(self):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
@@ -67,7 +72,7 @@ class AbstractUser(object):
                                              """, {
                                                 'id': self.id
                                              })
-        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
 
     
     def _fetch_vinebots_incoming_only(self):
@@ -81,7 +86,7 @@ class AbstractUser(object):
                                              """, {
                                                 'id': self.id
                                              })
-        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
     
     def _fetch_vinebots_outgoing_only(self):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
@@ -94,7 +99,7 @@ class AbstractUser(object):
                                              """, {
                                                 'id': self.id
                                              })
-        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
 
     
     def _fetch_visible_active_vinebot_ids(self):
@@ -110,7 +115,7 @@ class AbstractUser(object):
                                          }, strip_pairs=True)
     
     def _fetch_visible_active_vinebots(self):
-        return frozenset([v.FetchedVinebot(dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in self._fetch_visible_active_vinebot_ids()])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in self._fetch_visible_active_vinebot_ids()])
     
     def note_visible_active_vinebots(self):
         self._noted_vinebot_ids = set(self._fetch_visible_active_vinebot_ids())
@@ -124,13 +129,15 @@ class AbstractUser(object):
         if len(old_vinebot_ids) > 0 and len(new_vinebot_ids) > 0:
             raise Exception, '%d has both vinebots that are now not visible AND vinebots that are now visible that weren\'t before. You did too much between calculations!'
         elif len(old_vinebot_ids) > 0:
-            return set([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in old_vinebot_ids])
+            return set([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot_id) for vinebot_id in old_vinebot_ids])
         elif len(new_vinebot_ids) > 0:
-            return set([v.FetchedVinebot(dbid=vinebot_id) for vinebot_id in new_vinebot_ids])
+            return set([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot_id) for vinebot_id in new_vinebot_ids])
         else:
             return set([])
     
     def delete(self):
+        if not self.can_write:
+            raise UserPermissionsException
         g.db.execute("""DELETE FROM users
                         WHERE id = %(id)s
                      """, {
@@ -194,7 +201,7 @@ class AbstractUser(object):
 
 class InsertedUser(AbstractUser):
     def __init__(self, name, password):
-        super(InsertedUser, self).__init__()
+        super(InsertedUser, self).__init__(can_write=True)
         dbid = g.db.execute("""INSERT INTO users (name)
                                VALUES (%(name)s)
                             """, {
@@ -206,8 +213,8 @@ class InsertedUser(AbstractUser):
     
 
 class FetchedUser(AbstractUser):
-    def __init__(self, name=None, dbid=None):
-        super(FetchedUser, self).__init__()
+    def __init__(self, can_write=False, name=None, dbid=None):
+        super(FetchedUser, self).__init__(can_write)
         if name and dbid:
             self.id = dbid
             self.name = name

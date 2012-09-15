@@ -65,6 +65,12 @@ class MySQLConnection(object):
                                              }, strip_pairs=True)
         return (lock and (lock[0] == 1))
     
+    def release_lock(self, lock_name):
+        lock = self.execute_and_fetchall("SELECT RELEASE_LOCK(%(lock_name)s)", {
+                                                'lock_name': lock_name
+                                             }, strip_pairs=True)
+        return (lock and (lock[0] == 1))
+        
     def is_free_lock(self, lock_name):
         lock = self.execute_and_fetchall("SELECT IS_FREE_LOCK(%(lock_name)s)", {
                                                 'lock_name': lock_name

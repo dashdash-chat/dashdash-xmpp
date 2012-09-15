@@ -19,27 +19,36 @@ else:
 class NotVinebotException(Exception):
     pass
 
+class VinebotPermissionsException(Exception):
+    pass
+
 class AbstractVinebot(object):
-    def __init__(self):
+    def __init__(self, can_write=False):
         self._topic = None  # None is meaningful to the leaf component, so it might get initialized again by FetchedVinebot
         self._edges = None
         self._participants = None
         self._observers = None
-        #TODO
-        #TODO
-        #TODO get a lock for this vinebot
-        #TODO
-        #TODO
+        self.can_write = can_write
+        #TODO add transactions?
     
-    def cleanup(self):
-        pass
-        #TODO release the lock for this vinebot
-        #NOTE that it shouldn't rely on database state, since the vinebot may have been deleted
+    def acquire_lock(self):
+        if self.can_write:
+            g.db.get_lock(self.jiduser, 20)
+            logging.debug('acquired lock for %s' % self.jiduser)
+    
+    def release_lock(self):
+        if self.can_write:
+            g.db.release_lock(self.jiduser)
+            logging.debug('released lock for %s' % self.jiduser)
     
     def add_to_roster_of(self, user, nick):
+        if not self.can_write:
+            raise VinebotPermissionsException
         g.ectl.add_rosteritem(user.name, self.jiduser, nick)
     
     def remove_from_roster_of(self, user):
+        if not self.can_write:
+            raise VinebotPermissionsException
         g.ectl.delete_rosteritem(user.name, self.jiduser)
     
     def _fetch_participants(self):
@@ -81,6 +90,8 @@ class AbstractVinebot(object):
         return frozenset([e.FetchedEdge(dbid=edge_id) for edge_id in edge_ids])
     
     def add_participant(self, user):
+        if not self.can_write:
+            raise VinebotPermissionsException
         g.db.execute("""INSERT INTO participants (vinebot_id, user_id)
                         VALUES (%(vinebot_id)s, %(user_id)s)
                      """, {
@@ -90,7 +101,9 @@ class AbstractVinebot(object):
         #NOTE adding "self.participants" here to initialize the pariticipants causes an error I don't understand
         self._participants = self._participants.union([user])
     
-    def remove_participant(self, user):
+    def remove_participant(self, user):        
+        if not self.can_write:
+            raise VinebotPermissionsException
         self._participants = self._participants.difference([user])
         g.db.execute("""DELETE FROM participants
                         WHERE user_id = %(user_id)s
@@ -136,7 +149,9 @@ class AbstractVinebot(object):
         for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
-    def _set_topic(self, body):
+    def _set_topic(self, body):        
+        if not self.can_write:
+            raise VinebotPermissionsException
         g.db.execute("""DELETE FROM topics
                         WHERE vinebot_id = %(vinebot_id)s
                     """, {
@@ -167,7 +182,9 @@ class AbstractVinebot(object):
     def _format_topic(self, body, created):
         return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (set on %b %d at %-I:%M%p EST)'))
     
-    def delete(self):
+    def delete(self):        
+        if not self.can_write:
+            raise VinebotPermissionsException
         for user in self.edge_users:
             self.remove_from_roster_of(user)
         # don't delete the actual edges though - either they're deleted elsewhere, or will be transferred to a new vinebot
@@ -241,7 +258,7 @@ class AbstractVinebot(object):
 
 class InsertedVinebot(AbstractVinebot):
     def __init__(self):
-        super(InsertedVinebot, self).__init__()
+        super(InsertedVinebot, self).__init__(can_write=True)
         _uuid = uuid.uuid4()
         self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
         self.id = g.db.execute("""INSERT INTO vinebots (uuid)
@@ -249,11 +266,12 @@ class InsertedVinebot(AbstractVinebot):
                                    """, {
                                       'uuid': _uuid.bytes
                                    })
+        self.acquire_lock()  # I wish this could go in AbstractVinebot.__init__(), but that happens before we have self.jiduser
     
 
 class FetchedVinebot(AbstractVinebot):
-    def __init__(self, jiduser=None, dbid=None, _uuid=None):#, edges=None):
-        super(FetchedVinebot, self).__init__()
+    def __init__(self, can_write=False, jiduser=None, dbid=None, _uuid=None):#, edges=None):
+        super(FetchedVinebot, self).__init__(can_write)
         if dbid and _uuid:
             self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid)))
             self.id = dbid
@@ -288,6 +306,7 @@ class FetchedVinebot(AbstractVinebot):
         else:
             raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
         self._topic = self._fetch_topic()
+        self.acquire_lock()
     
     @staticmethod
     def fetch_vinebots_with_participants():
