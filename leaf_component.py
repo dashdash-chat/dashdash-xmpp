@@ -346,8 +346,7 @@ class LeafComponent(ComponentXMPP):
                 vinebot.release_lock()
         if user:
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
-                if len(incoming_vinebot.edges) == 1:  # no need to send this presence to vinebots with two edges #LATER make this more efficient
-                    self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow='unavailable')
+                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow='unavailable')
     
     def handle_msg(self, msg):
         def handle_command(msg, sender, vinebot=None):

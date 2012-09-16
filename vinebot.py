@@ -181,7 +181,7 @@ class AbstractVinebot(object):
         return None
     
     def _format_topic(self, body, created):
-        return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (set on %b %d at %-I:%M%p EST)'))
+        return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (as of %b %d at %-I:%M%p EST)'))
     
     def delete(self):        
         if not self.can_write:
@@ -240,7 +240,7 @@ class AbstractVinebot(object):
     def __setattr__(self, name, value):
         if name == 'topic':
             self._set_topic(value)
-        elif name in ['is_active', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
+        elif name in ['topic', 'is_active', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
@@ -255,6 +255,12 @@ class AbstractVinebot(object):
     
     def __hash__(self):
         return hash('%d.%s' % (self.id, self.jiduser))
+    
+    def __str__(self):
+        return self.__repr__()
+    
+    def __repr__(self):
+        return '%s(jiduser=\'%s\', dbid=%d)' % (self.__class__.__name__, self.jiduser, self.id)
     
 
 class InsertedVinebot(AbstractVinebot):

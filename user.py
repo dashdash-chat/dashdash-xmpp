@@ -68,7 +68,7 @@ class AbstractUser(object):
                                                 AND incoming.to_id = %(id)s
                                                 AND outgoing.from_id = %(id)s
                                                 AND incoming.from_id = outgoing.to_id
-                                                GROUP BY vinebots.id;
+                                                GROUP BY vinebots.id
                                              """, {
                                                 'id': self.id
                                              })
@@ -77,12 +77,15 @@ class AbstractUser(object):
     
     def _fetch_vinebots_incoming_only(self):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
-                                                FROM vinebots, edges AS incoming, edges AS outgoing
+                                                FROM vinebots, edges AS incoming
                                                 WHERE incoming.vinebot_id = vinebots.id
-                                                AND incoming.to_id = %(id)s
-                                                AND incoming.from_id = outgoing.to_id
-                                                AND outgoing.vinebot_id != vinebots.id
-                                                GROUP BY vinebots.id;
+                                                AND incoming.to_id = 35
+                                                AND (SELECT COUNT(*)
+                                                     FROM edges AS outgoing
+                                                     WHERE outgoing.to_id = incoming.from_id
+                                                     AND outgoing.from_id = 35
+                                                    ) = 0
+                                                GROUP BY vinebots.id
                                              """, {
                                                 'id': self.id
                                              })
@@ -90,12 +93,15 @@ class AbstractUser(object):
     
     def _fetch_vinebots_outgoing_only(self):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
-                                                FROM vinebots, edges AS incoming, edges AS outgoing
+                                                FROM vinebots, edges AS outgoing
                                                 WHERE outgoing.vinebot_id = vinebots.id
-                                                AND outgoing.from_id = %(id)s
-                                                AND outgoing.to_id = incoming.from_id
-                                                AND incoming.vinebot_id != vinebots.id
-                                                GROUP BY vinebots.id;
+                                                AND outgoing.from_id = 35
+                                                AND (SELECT COUNT(*)
+                                                     FROM edges AS incoming
+                                                     WHERE incoming.to_id = 35
+                                                     AND incoming.from_id = outgoing.to_id
+                                                    ) = 0
+                                                GROUP BY vinebots.id
                                              """, {
                                                 'id': self.id
                                              })
@@ -176,7 +182,7 @@ class AbstractUser(object):
             dict.__getattr__(self, name)
     
     def __setattr__(self, name, value):
-        if name == ['jid', 'friends', 'incoming_vinebots']:
+        if name == ['jid', 'friends', 'active_vinebots', 'observed_vinebots', 'symmetric_vinebots', 'incoming_vinebots', 'outgoing_vinebots']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
