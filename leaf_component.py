@@ -256,7 +256,7 @@ class LeafComponent(ComponentXMPP):
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
-        #logging.info('starting! other leaves online? %s' % other_leaves_online)
+        logging.info('Leaf ready!')
     
     def handle_presence_available(self, presence):
         user = None

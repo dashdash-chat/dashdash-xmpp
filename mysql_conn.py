@@ -25,7 +25,7 @@ class MySQLConnection(object):
     def execute(self, query, data={}):
         logging.debug(query % data)
         if not self.conn or not self.cursor:
-            logging.info("MySQL connection missing, attempting to reconnect and retry query")
+            logging.debug("MySQL connection %s missing, attempting to reconnect and retry query" % self)
             self.connect()
         try:
             self.cursor.execute(query, data)
@@ -47,7 +47,7 @@ class MySQLConnection(object):
                                         constants.db_name)
             #self.conn.autocommit(True)
             self.cursor = self.conn.cursor()
-            logging.info("MySQL connection created")
+            logging.debug("MySQL connection %s ready" % self)
         except MySQLdb.Error, e:
             logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
@@ -156,7 +156,7 @@ class MySQLManager(object):
         lock_was_acquired = (lock and (lock[0] == 1))
         if lock_was_acquired:
             self._vinebot_conn_dict[lock_name] = db
-            logging.info('acquired %s with conn %s' % (lock_name, db))
+            logging.debug('Acquired lock %s with MySQL conn %s' % (lock_name, db))
         else:
             self._vinebot_conn_pool.add(db)
             logging.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
@@ -168,5 +168,5 @@ class MySQLManager(object):
         db = self._vinebot_conn_dict.pop(lock_name)
         db.execute("SELECT RELEASE_LOCK(%(lock_name)s)", {'lock_name': lock_name})
         self._vinebot_conn_pool.add(db)
-        logging.info('released %s' % lock_name)
+        logging.debug('Released lock %s with MySQL conn %s' % (lock_name, db))
     
