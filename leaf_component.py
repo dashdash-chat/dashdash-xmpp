@@ -133,7 +133,7 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.user_joined))    
         self.commands.add(SlashCommand(command_name     = 'leave',
                                        text_arg_format  = '',
-                                       text_description = 'Leave this conversation.',
+                                       text_description = 'Leave this conversation. If it\'s just the two of you, it will no longer be visible to friends.',
                                        validate_sender  = participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.user_left))                  
