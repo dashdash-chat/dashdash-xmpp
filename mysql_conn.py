@@ -156,7 +156,7 @@ class MySQLManager(object):
         lock_was_acquired = (lock and (lock[0] == 1))
         if lock_was_acquired:
             self._vinebot_conn_dict[lock_name] = db
-            logging.info('acquired %s' % lock_name)
+            logging.info('acquired %s with conn %s' % (lock_name, db))
         else:
             self._vinebot_conn_pool.add(db)
             logging.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))

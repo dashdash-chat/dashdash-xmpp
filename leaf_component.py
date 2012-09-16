@@ -561,9 +561,15 @@ class LeafComponent(ComponentXMPP):
                 edge.t_user.note_visible_active_vinebots()
                 edge.delete(vinebot)
                 for other_vinebot in edge.f_user.calc_active_vinebot_diff().difference([vinebot]):
-                    other_vinebot.remove_from_roster_of(edge.f_user)
+                    try:
+                        other_vinebot.remove_from_roster_of(edge.f_user)
+                    finally:
+                        other_vinebot.release_lock()
                 for other_vinebot in edge.t_user.calc_active_vinebot_diff().difference([vinebot]):
-                    other_vinebot.remove_from_roster_of(edge.t_user)
+                    try:
+                        other_vinebot.remove_from_roster_of(edge.t_user)
+                    finally:
+                        other_vinebot.release_lock()
             except NotEdgeException:
                 edge.delete(vinebot)
                 if not vinebot.is_active:
@@ -720,7 +726,10 @@ class LeafComponent(ComponentXMPP):
         try:
             user = FetchedUser(can_write=True, name=username)
             for vinebot in user.active_vinebots:
-                self.remove_participant(vinebot, user)
+                try:
+                    self.remove_participant(vinebot, user)
+                finally:
+                    vinebot.release_lock()
             for edge in FetchedEdge.fetch_edges_for_user(user):
                 self.cleanup_and_delete_edge(edge)
             user.delete()
@@ -750,10 +759,16 @@ class LeafComponent(ComponentXMPP):
                 t_user.note_visible_active_vinebots()
                 InsertedEdge(f_user, t_user, vinebot=vinebot)
                 for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
-                    other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
+                    try:
+                         other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
+                    finally:
+                        other_vinebot.release_lock()
                     self.send_presences(other_vinebot, [f_user])
                 for other_vinebot in t_user.calc_active_vinebot_diff().difference([vinebot]):
-                    other_vinebot.add_to_roster_of(t_user, other_vinebot.get_nick(t_user))
+                    try:
+                        other_vinebot.add_to_roster_of(t_user, other_vinebot.get_nick(t_user))
+                    finally:
+                        other_vinebot.release_lock()
                     self.send_presences(other_vinebot, [t_user])
             except NotEdgeException:
                 vinebot = InsertedVinebot()
