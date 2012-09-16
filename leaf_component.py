@@ -217,11 +217,9 @@ class LeafComponent(ComponentXMPP):
         for lock_num_to_check in range(constants.max_leaves):
             if self.acquired_lock_num != lock_num_to_check:
                 checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
-                #logging.info('%d checked? %s' % (lock_num_to_check, checked_lock))
                 if not checked_lock:
                     other_leaves_online = True
                     break
-        #logging.info('disconnecting! other leaves online? %s' % other_leaves_online)
         if not other_leaves_online:
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
                 self.send_presences(vinebot, vinebot.everyone, pshow='unavailable')
@@ -237,14 +235,12 @@ class LeafComponent(ComponentXMPP):
         def register_leaf():  # this is a function because using return makes it cleaner
             for lock_num_to_acquire in range(constants.max_leaves):
                 acquired_lock = g.db.lock_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
-                #logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
                 if acquired_lock:
                     self.acquired_lock_num = lock_num_to_acquire
                     if lock_num_to_acquire > 0:
                         return True
                     for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
                         checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
-                        #logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
                         if not checked_lock:
                             return True
                     return False
@@ -256,7 +252,7 @@ class LeafComponent(ComponentXMPP):
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
-        logging.info('Leaf ready!')
+        logging.info('Ready')
     
     def handle_presence_available(self, presence):
         user = None
@@ -334,6 +330,7 @@ class LeafComponent(ComponentXMPP):
                     else:  # elif len(participants) == 2:
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
                     self.remove_participant(vinebot, user)
+                    self.broadcast_alert(vinebot, '%s has disconnected and left the conversation' % user.name)
                 elif user in vinebot.edge_users:
                     self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
                 for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
@@ -602,7 +599,7 @@ class LeafComponent(ComponentXMPP):
             self.send_presences(vinebot, [user1], pshow=user2.status())
             self.send_presences(vinebot, [user2], pshow=user1.status())
         self.remove_participant(vinebot, user)
-        self.broadcast_alert(vinebot,  '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
@@ -858,4 +855,4 @@ if __name__ == '__main__':
         xmpp.process(block=True)
         logging.info("Done")
     else:    
-        logging.error("Unable to connect")
+        logging.error("Leaf was unable to connect")
