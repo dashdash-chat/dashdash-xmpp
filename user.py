@@ -79,11 +79,11 @@ class AbstractUser(object):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
                                                 FROM vinebots, edges AS incoming
                                                 WHERE incoming.vinebot_id = vinebots.id
-                                                AND incoming.to_id = 35
+                                                AND incoming.to_id = %(id)s
                                                 AND (SELECT COUNT(*)
                                                      FROM edges AS outgoing
                                                      WHERE outgoing.to_id = incoming.from_id
-                                                     AND outgoing.from_id = 35
+                                                     AND outgoing.from_id = %(id)s
                                                     ) = 0
                                                 GROUP BY vinebots.id
                                              """, {
@@ -95,10 +95,10 @@ class AbstractUser(object):
         vinebots = g.db.execute_and_fetchall("""SELECT vinebots.id, vinebots.uuid
                                                 FROM vinebots, edges AS outgoing
                                                 WHERE outgoing.vinebot_id = vinebots.id
-                                                AND outgoing.from_id = 35
+                                                AND outgoing.from_id = %(id)s
                                                 AND (SELECT COUNT(*)
                                                      FROM edges AS incoming
-                                                     WHERE incoming.to_id = 35
+                                                     WHERE incoming.to_id = %(id)s
                                                      AND incoming.from_id = outgoing.to_id
                                                     ) = 0
                                                 GROUP BY vinebots.id
@@ -106,7 +106,7 @@ class AbstractUser(object):
                                                 'id': self.id
                                              })
         return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in vinebots])
-
+        
     
     def _fetch_visible_active_vinebot_ids(self):
         return g.db.execute_and_fetchall("""SELECT participants.vinebot_id
@@ -121,7 +121,7 @@ class AbstractUser(object):
                                          }, strip_pairs=True)
     
     def _fetch_visible_active_vinebots(self):
-        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot[0], _uuid=vinebot[1]) for vinebot in self._fetch_visible_active_vinebot_ids()])
+        return frozenset([v.FetchedVinebot(can_write=self.can_write, dbid=vinebot_id) for vinebot_id in self._fetch_visible_active_vinebot_ids()])
     
     def note_visible_active_vinebots(self):
         self._noted_vinebot_ids = set(self._fetch_visible_active_vinebot_ids())

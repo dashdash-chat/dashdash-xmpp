@@ -199,12 +199,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token_token,
                                        action           = self.delete_edge))
-        self.commands.add(SlashCommand(command_name     = 'prune',
+        self.commands.add(SlashCommand(command_name     = 'sync',
                                        text_arg_format  = '<username>',
                                        text_description = 'Remove old, unused vinebots from a user\'s roster.',
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token,
-                                       action           = self.prune_roster))
+                                       action           = self.sync_roster))
         self.commands.add(SlashCommand(command_name     = 'edges',
                                        text_arg_format  = '<username>',
                                        text_description = 'List all current edges, or only the specified user\'s edges.',
@@ -792,7 +792,7 @@ class LeafComponent(ComponentXMPP):
         self.cleanup_and_delete_edge(edge)
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
-    def prune_roster(self, parent_command_id, username):
+    def sync_roster(self, parent_command_id, username):
         try:
             user = FetchedUser(name=username)
             expected_vinebots = frozenset([]).union(user.active_vinebots) \
@@ -804,10 +804,10 @@ class LeafComponent(ComponentXMPP):
             errors = []
             for roster_user, roster_nick in expected_rosteritems.difference(actual_rosteritems):
                 errors.append('No rosteritem found for vinebot %s with nick %s' % (roster_user, roster_nick))
-                g.ectl.add_rosteritem(user, roster_user, roster_nick)
+                g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
             for roster_user, roster_nick in actual_rosteritems.difference(expected_rosteritems):
                 errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
-                g.ectl.delete_rosteritem(user, roster_user)
+                g.ectl.delete_rosteritem(user.name, roster_user)
             if errors:
                 return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:
