@@ -280,6 +280,9 @@ class LeafComponent(ComponentXMPP):
                     self.send_presences(vinebot, [user], edge_f_user.t_user.status())
                 except NotEdgeException:
                     pass
+            #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
+            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
+                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
         except NotVinebotException:
             pass
         except NotUserException:
@@ -287,9 +290,6 @@ class LeafComponent(ComponentXMPP):
         finally:
             if vinebot:
                 vinebot.release_lock()
-        if user:  #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
-            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
-                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
     
     def handle_presence_away(self, presence):
         user = None
@@ -311,6 +311,8 @@ class LeafComponent(ComponentXMPP):
                     self.send_presences(vinebot, [edge_t_user.f_user], pshow=presence['type'])
                 except NotEdgeException:
                     pass
+            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
+                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow=presence['type'])
         except NotVinebotException:
             pass
         except NotUserException:
@@ -318,9 +320,6 @@ class LeafComponent(ComponentXMPP):
         finally:
             if vinebot:
                 vinebot.release_lock()
-        if user:
-            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
-                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow=presence['type'])
     
     def handle_presence_unavailable(self, presence):
         user = None
@@ -337,6 +336,8 @@ class LeafComponent(ComponentXMPP):
                     self.remove_participant(vinebot, user)
                 elif user in vinebot.edge_users:
                     self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
+                for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
+                    self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow='unavailable')
         except NotVinebotException:
             pass
         except NotUserException:
@@ -344,9 +345,6 @@ class LeafComponent(ComponentXMPP):
         finally:
             if vinebot:
                 vinebot.release_lock()
-        if user:
-            for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
-                self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow='unavailable')
     
     def handle_msg(self, msg):
         def handle_command(msg, sender, vinebot=None):
