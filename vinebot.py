@@ -124,7 +124,7 @@ class AbstractVinebot(object):
         elif len(usernames) == 1:
             return usernames[0]
         else:
-            if viewer:
+            if viewer and viewer in self.participants:
                 usernames.insert(0, 'you')
             comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
             return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
