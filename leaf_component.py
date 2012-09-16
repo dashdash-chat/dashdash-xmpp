@@ -686,7 +686,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
         if recipient == sender:
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to youerself.')
-        if recipient not in vinebot.participants and recipient.jid not in constants.admin_users:
+        if recipient not in vinebot.participants and recipient.jid not in constants.admin_jids:
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
         self.send_alert(vinebot, sender, recipient, body, prefix='[%s, whispering]' % sender.name, parent_command_id=parent_command_id)
         if len(vinebot.participants) == 2:
