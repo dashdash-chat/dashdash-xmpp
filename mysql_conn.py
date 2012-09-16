@@ -12,6 +12,75 @@ class MySQLConnection(object):
         self.cursor = None
         self.connect()
     
+    def execute_and_fetchall(self, query, data={}, strip_pairs=False):
+        self.execute(query, data)
+        fetched = self.cursor.fetchall()
+        if fetched and len(fetched) > 0:
+            if strip_pairs:
+                return [result[0] for result in fetched]
+            else:
+                return fetched
+        return []
+    
+    def execute(self, query, data={}):
+        logging.debug(query % data)
+        if not self.conn or not self.cursor:
+            logging.info("MySQL connection missing, attempting to reconnect and retry query")
+            self.connect()
+        try:
+            self.cursor.execute(query, data)
+        except MySQLdb.OperationalError, e:
+            if e[0] > 2000:  # error codes at http://dev.mysql.com/doc/refman/5.5/en/error-handling.html
+                logging.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
+                self.connect()  # Try again, but only once
+                self.cursor.execute(query, data)
+            else:
+                raise e
+        return self.conn.insert_id()
+    
+    def connect(self):
+        self.cleanup()
+        try:
+            self.conn = MySQLdb.connect(constants.db_host,
+                                        self.username,
+                                        self.password,
+                                        constants.db_name)
+            #self.conn.autocommit(True)
+            self.cursor = self.conn.cursor()
+            logging.info("MySQL connection created")
+        except MySQLdb.Error, e:
+            logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
+            self.cleanup()
+    
+    def cleanup(self):
+        if self.conn:
+            self.conn.close()
+    
+
+class MySQLManager(object):
+    def __init__(self, username, password):
+        self._username = username
+        self._password = password
+        # the MySQLManager object has one connection for the leaf's lock and the data queries, one then one for each vinebot lock
+        self._db = MySQLConnection(self._username, self._password)
+        self._vinebot_conn_pool = set([MySQLConnection(self._username, self._password), MySQLConnection(self._username, self._password)])  # start it off with two in the pool
+        self._vinebot_conn_dict = {}
+    
+    def execute_and_fetchall(self, query, data={}, strip_pairs=False):
+        return self._db.execute_and_fetchall(query, data=data, strip_pairs=strip_pairs)
+    
+    def execute(self, query, data={}):
+        return self._db.execute(query, data=data)
+    
+    def cleanup(self):
+        self._db.cleanup()
+        for db in self._vinebot_conn_pool:
+            db.cleanup()
+        self._vinebot_conn_pool = set([])
+        for db in self._vinebot_conn_dict.values():
+            db.cleanup()
+        self._vinebot_conn_dict = {}
+    
     def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
         if body is None or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
             return
@@ -58,66 +127,46 @@ class MySQLConnection(object):
                                       'string': string or None
                                   })
     
-    def get_lock(self, lock_name, timeout=0):
-        lock = self.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
+    def lock_leaf(self, lock_name, timeout=0):
+        if not lock_name.startswith(constants.leaf_mysql_lock_name):
+            raise Exception
+        lock = self._db.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
                                                 'lock_name': lock_name,
                                                 'timeout': timeout
                                              }, strip_pairs=True)
         return (lock and (lock[0] == 1))
     
-    def release_lock(self, lock_name):
-        lock = self.execute_and_fetchall("SELECT RELEASE_LOCK(%(lock_name)s)", {
-                                                'lock_name': lock_name
-                                             }, strip_pairs=True)
-        return (lock and (lock[0] == 1))
-        
-    def is_free_lock(self, lock_name):
-        lock = self.execute_and_fetchall("SELECT IS_FREE_LOCK(%(lock_name)s)", {
+    def is_unlocked_leaf(self, lock_name):
+        if not lock_name.startswith(constants.leaf_mysql_lock_name):
+            raise Exception
+        lock = self._db.execute_and_fetchall("SELECT IS_FREE_LOCK(%(lock_name)s)", {
                                                 'lock_name': lock_name
                                              }, strip_pairs=True)
         return (lock and (lock[0] == 1))
     
-    def execute_and_fetchall(self, query, data={}, strip_pairs=False):
-        self.execute(query, data)
-        fetched = self.cursor.fetchall()
-        if fetched and len(fetched) > 0:
-            if strip_pairs:
-                return [result[0] for result in fetched]
-            else:
-                return fetched
-        return []
-    
-    def execute(self, query, data={}):
-        logging.debug(query % data)
-        if not self.conn or not self.cursor:
-            logging.info("MySQL connection missing, attempting to reconnect and retry query")
-            self.connect()
+    def lock_vinebot(self, lock_name, timeout=0):
         try:
-            self.cursor.execute(query, data)
-        except MySQLdb.OperationalError, e:
-            if e[0] > 2000:  # error codes at http://dev.mysql.com/doc/refman/5.5/en/error-handling.html
-                logging.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
-                self.connect()  # Try again, but only once
-                self.cursor.execute(query, data)
-            else:
-                raise e
-        return self.conn.insert_id()    
+            db = self._vinebot_conn_pool.pop()
+        except KeyError:
+            db = MySQLConnection(self._username, self._password)
+        lock = db.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
+                                              'lock_name': lock_name,
+                                              'timeout': timeout
+                                           }, strip_pairs=True)
+        lock_was_acquired = (lock and (lock[0] == 1))
+        if lock_was_acquired:
+            self._vinebot_conn_dict[lock_name] = db
+            logging.info('acquired %s' % lock_name)
+        else:
+            self._vinebot_conn_pool.add(db)
+            logging.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
+        return lock_was_acquired
     
-    def connect(self):
-        self.cleanup()
-        try:
-            self.conn = MySQLdb.connect(constants.db_host,
-                                        self.username,
-                                        self.password,
-                                        constants.db_name)
-            #self.conn.autocommit(True)
-            self.cursor = self.conn.cursor()
-            logging.info("MySQL connection created")
-        except MySQLdb.Error, e:
-            logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
-            self.cleanup()
-    
-    def cleanup(self):
-        if self.conn:
-            self.conn.close()
+    def release_vinebot(self, lock_name):
+        if not lock_name in self._vinebot_conn_dict:
+            raise Exception  # somehow we locked a vinebot without storing the connection
+        db = self._vinebot_conn_dict.pop(lock_name)
+        db.execute("SELECT RELEASE_LOCK(%(lock_name)s)", {'lock_name': lock_name})
+        self._vinebot_conn_pool.add(db)
+        logging.info('released %s' % lock_name)
     

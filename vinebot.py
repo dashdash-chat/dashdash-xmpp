@@ -33,12 +33,12 @@ class AbstractVinebot(object):
     
     def acquire_lock(self):
         if self.can_write:
-            g.db.get_lock(self.jiduser, 20)
+            g.db.lock_vinebot(self.jiduser, 10)
             logging.debug('acquired lock for %s' % self.jiduser)
     
     def release_lock(self):
         if self.can_write:
-            g.db.release_lock(self.jiduser)
+            g.db.release_vinebot(self.jiduser)
             logging.debug('released lock for %s' % self.jiduser)
     
     def add_to_roster_of(self, user, nick):

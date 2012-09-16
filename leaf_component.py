@@ -13,7 +13,7 @@ from sleekxmpp.exceptions import IqError, IqTimeout
 import constants
 from constants import g
 from ejabberdctl import EjabberdCTL
-from mysql_conn import MySQLConnection
+from mysql_conn import MySQLManager
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
 from user import FetchedUser, InsertedUser, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
@@ -36,7 +36,7 @@ class LeafComponent(ComponentXMPP):
         self.registerPlugin('xep_0199') # XMPP Ping
         self.registerPlugin('xep_0085') # Chat State Notifications
         self.acquired_lock_num = None
-        g.db = MySQLConnection(constants.leaf_name, constants.leaf_mysql_password)
+        g.db = MySQLManager(constants.leaf_name, constants.leaf_mysql_password)
         g.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
         self.add_slash_commands()
@@ -216,7 +216,7 @@ class LeafComponent(ComponentXMPP):
         other_leaves_online = False
         for lock_num_to_check in range(constants.max_leaves):
             if self.acquired_lock_num != lock_num_to_check:
-                checked_lock = g.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
                 #logging.info('%d checked? %s' % (lock_num_to_check, checked_lock))
                 if not checked_lock:
                     other_leaves_online = True
@@ -236,14 +236,14 @@ class LeafComponent(ComponentXMPP):
     def handle_start(self, event):
         def register_leaf():  # this is a function because using return makes it cleaner
             for lock_num_to_acquire in range(constants.max_leaves):
-                acquired_lock = g.db.get_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
+                acquired_lock = g.db.lock_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
                 #logging.info('acquiring %d? %s' % (lock_num_to_acquire, acquired_lock))
                 if acquired_lock:
                     self.acquired_lock_num = lock_num_to_acquire
                     if lock_num_to_acquire > 0:
                         return True
                     for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
-                        checked_lock = g.db.is_free_lock('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                        checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
                         #logging.info('checking %d? %s' % (lock_num_to_check, checked_lock))
                         if not checked_lock:
                             return True
