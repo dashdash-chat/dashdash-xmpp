@@ -199,11 +199,6 @@ class AbstractVinebot(object):
                         """, {           
                            'id': self.id
                         })
-        g.db.execute("""DELETE FROM vinebots
-                           WHERE id = %(id)s
-                        """, {           
-                           'id': self.id
-                        })
     
     def __getattr__(self, name):
         if name == 'topic':
