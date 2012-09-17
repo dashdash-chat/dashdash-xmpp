@@ -531,11 +531,11 @@ class LeafComponent(ComponentXMPP):
                 elif edge_f_user:
                     old_vinebot = FetchedVinebot(can_write=True, dbid=edge_f_user.vinebot_id)
                 if edge and len(old_vinebot.participants) == 0:
-                    old_vinebot.delete()
                     if edge_t_user:
                         edge_t_user.change_vinebot(vinebot)
                     if edge_f_user:
                         edge_f_user.change_vinebot(vinebot)
+                    old_vinebot.delete()
             finally:
                 if old_vinebot:
                     old_vinebot.release_lock()
