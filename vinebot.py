@@ -102,7 +102,7 @@ class AbstractVinebot(object):
         #NOTE adding "self.participants" here to initialize the pariticipants causes an error I don't understand
         self._participants = self._participants.union([user])
     
-    def remove_participant(self, user):        
+    def remove_participant(self, user): 
         if not self.can_write:
             raise VinebotPermissionsException
         self._participants = self._participants.difference([user])

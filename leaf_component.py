@@ -259,7 +259,7 @@ class LeafComponent(ComponentXMPP):
         vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)            
+            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
             if vinebot.is_active:
                 if user in vinebot.participants:
                     self.send_presences(vinebot, vinebot.everyone)
@@ -294,7 +294,7 @@ class LeafComponent(ComponentXMPP):
             user = FetchedUser(name=presence['from'].user)
             vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
             if user in vinebot.participants:  # [] if vinebot is not active
-                if len(vinebot.participants) >= 3:
+                if len(vinebot.participants) > 2:
                     self.send_presences(vinebot, vinebot.everyone)
                 else:  # elif len(participants) == 2:
                     remaining_user = iter(vinebot.participants.difference([user])).next()
@@ -469,7 +469,6 @@ class LeafComponent(ComponentXMPP):
         if both_users_online:
             self.add_participant(vinebot, user1)
             self.add_participant(vinebot, user2)
-            self.send_presences(vinebot, vinebot.observers)
         return both_users_online
     
     def add_participant(self, vinebot, user):
@@ -503,7 +502,7 @@ class LeafComponent(ComponentXMPP):
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
         if len(vinebot.participants) == 1:
-            #LATER if two users have two active vinebots, one with an edge, and the person leaves the one with the edge, it won't get moved ot the other
+            #LATER if two users have two active vinebots, one with an edge, and the person leaves the one with the edge, it won't get moved to the other
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
             if len(vinebot.edges) == 1:
