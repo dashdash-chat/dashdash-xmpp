@@ -45,7 +45,7 @@ class MySQLConnection(object):
                                         self.username,
                                         self.password,
                                         constants.db_name)
-            #self.conn.autocommit(True)
+            self.conn.autocommit(True)
             self.cursor = self.conn.cursor()
             logging.debug("MySQL connection %s ready" % self)
         except MySQLdb.Error, e:
