@@ -99,7 +99,7 @@ class MySQLManager(object):
                                         'body': body.encode('utf-8')
                                     })
         for recipient in recipients:
-            self.execute("""INSERT INTO message_recipients (message_id, recipient_id)
+            self.execute("""INSERT INTO recipients (message_id, recipient_id)
                             VALUES (%(log_id)s, %(recipient_id)s)
                          """, {
                                'log_id': log_id,
