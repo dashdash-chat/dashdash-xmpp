@@ -484,10 +484,7 @@ class LeafComponent(ComponentXMPP):
             if len(vinebot.edges) > 0:
                 new_vinebot = None
                 try:
-                    new_vinebot = InsertedVinebot()
-                    for edge in vinebot.edges:
-                        edge.change_vinebot(new_vinebot) 
-                        new_vinebot.add_to_roster_of(edge.f_user, new_vinebot.get_nick(edge.f_user))
+                    new_vinebot = InsertedVinebot(old_vinebot=vinebot)
                     self.send_presences(new_vinebot, new_vinebot.everyone)
                 finally:
                     if new_vinebot:

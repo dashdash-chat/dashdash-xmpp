@@ -184,7 +184,6 @@ class AbstractVinebot(object):
         return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (as of %b %d at %-I:%M%p EST)'))
     
     def delete(self, new_vinebot=None):
-        logging.info('deleting %s' % self)
         if not self.can_write:
             raise VinebotPermissionsException
         if self.is_active:
@@ -273,16 +272,22 @@ class AbstractVinebot(object):
     
 
 class InsertedVinebot(AbstractVinebot):
-    def __init__(self):
+    def __init__(self, old_vinebot=None):
         super(InsertedVinebot, self).__init__(can_write=True)
         _uuid = uuid.uuid4()
         self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
+        self.acquire_lock()  # I wish this could go in AbstractVinebot.__init__(), but that happens before we have self.jiduser
         self.id = g.db.execute("""INSERT INTO vinebots (uuid)
                                       VALUES (%(uuid)s)
                                    """, {
                                       'uuid': _uuid.bytes
                                    })
-        self.acquire_lock()  # I wish this could go in AbstractVinebot.__init__(), but that happens before we have self.jiduser
+        if old_vinebot and old_vinebot.edges:
+            self._edges = []
+            for edge in old_vinebot.edges:
+                edge.change_vinebot(self) 
+                self._edges.append(edge)
+                self.add_to_roster_of(edge.f_user, self.get_nick(edge.f_user))
     
 
 class FetchedVinebot(AbstractVinebot):
@@ -321,8 +326,8 @@ class FetchedVinebot(AbstractVinebot):
             raise NotVinebotException
         else:
             raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
-        self._topic = self._fetch_topic()
         self.acquire_lock()
+        self._topic = self._fetch_topic()
     
     @staticmethod
     def fetch_vinebots_with_participants():
