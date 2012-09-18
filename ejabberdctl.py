@@ -73,7 +73,10 @@ class EjabberdCTL(object):
             else:
                 return 'unavailable'
         except xmlrpclib.ProtocolError, e:
-            logging.error('ProtocolError in is_online, assuming %s is unavailable: %s' % (user, str(e)))
+            logging.error('ProtocolError in user_status, assuming %s is unavailable: %s' % (user, str(e)))
+            return 'unavailable'
+        except xmlrpclib.Fault, e:
+            logging.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
     
     def _xmlrpc_command(self, command, data):
