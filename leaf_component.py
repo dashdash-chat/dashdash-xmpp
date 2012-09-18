@@ -516,26 +516,17 @@ class LeafComponent(ComponentXMPP):
             vinebot.update_rosters(old_participants, vinebot.participants)
             user1, user2 = vinebot.participants
             try:
-                edge_t_user = FetchedEdge(f_user=user2, t_user=user1)
-            except NotEdgeException:
-                edge_t_user = None
-            try:
-                edge_f_user = FetchedEdge(f_user=user1, t_user=user2)
-            except NotEdgeException:
-                edge_f_user = None
-            edge = edge_t_user if edge_t_user else edge_f_user
-            old_vinebot = None
-            try:
-                if edge_t_user:
-                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge_t_user.vinebot_id)
-                elif edge_f_user:
-                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge_f_user.vinebot_id)
-                if edge and len(old_vinebot.participants) == 0:
-                    if edge_t_user:
-                        edge_t_user.change_vinebot(vinebot)
-                    if edge_f_user:
-                        edge_f_user.change_vinebot(vinebot)
-                    old_vinebot.delete()
+                try:
+                    edge = FetchedEdge(f_user=user2, t_user=user1)
+                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
+                except NotEdgeException:
+                    try:
+                        edge = FetchedEdge(f_user=user1, t_user=user2)
+                        old_vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
+                    except NotEdgeException:
+                        old_vinebot = None
+                if old_vinebot and not old_vinebot.is_active:
+                    old_vinebot.delete(new_vinebot=vinebot)
             finally:
                 if old_vinebot:
                     old_vinebot.release_lock()

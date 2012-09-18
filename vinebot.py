@@ -183,12 +183,18 @@ class AbstractVinebot(object):
     def _format_topic(self, body, created):
         return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (as of %b %d at %-I:%M%p EST)'))
     
-    def delete(self):        
+    def delete(self, new_vinebot=None):
+        logging.info('deleting %s' % self)
         if not self.can_write:
             raise VinebotPermissionsException
+        if self.is_active:
+            raise Exception
         for user in self.edge_users:
             self.remove_from_roster_of(user)
-        # don't delete the actual edges though - either they're deleted elsewhere, or will be transferred to a new vinebot
+        if new_vinebot:
+            for edge in self.edges:
+                edge.change_vinebot(new_vinebot)
+        # never delete the actual edges though - either they're deleted elsewhere, or will be transferred to a new vinebot
         g.db.execute("""DELETE FROM participants
                            WHERE vinebot_id = %(id)s
                         """, {           
@@ -199,6 +205,14 @@ class AbstractVinebot(object):
                         """, {           
                            'id': self.id
                         })
+        g.db.execute("""DELETE vinebots.*
+                        FROM vinebots, messages, commands
+                        WHERE vinebots.id = %(id)s
+                        AND vinebots.id != messages.vinebot_id
+                        AND vinebots.id != commands.vinebot_id
+                    """, {           
+                        'id': self.id
+                    })
     
     def __getattr__(self, name):
         if name == 'topic':
