@@ -204,11 +204,10 @@ class AbstractVinebot(object):
                         """, {           
                            'id': self.id
                         })
-        g.db.execute("""DELETE vinebots.*
-                        FROM vinebots, messages, commands
-                        WHERE vinebots.id = %(id)s
-                        AND vinebots.id != messages.vinebot_id
-                        AND vinebots.id != commands.vinebot_id
+        g.db.execute("""DELETE FROM vinebots
+                        WHERE id = %(id)s
+                        AND (SELECT COUNT(*) FROM messages WHERE vinebot_id = %(id)s) = 0
+                        AND (SELECT COUNT(*) FROM commands WHERE vinebot_id = %(id)s) = 0;
                     """, {           
                         'id': self.id
                     })
