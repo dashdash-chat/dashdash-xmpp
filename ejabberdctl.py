@@ -28,7 +28,7 @@ class EjabberdCTL(object):
             'localuser': user,
             'localserver': constants.server,
             'user': vinebot_user,
-            'server': '%s.%s' % (constants.leaf_name, constants.server),
+            'server': constants.leaves_domain,
             'group': constants.roster_group,
             'nick': nick,
             'subs': 'both'
@@ -39,7 +39,7 @@ class EjabberdCTL(object):
             'localuser': user,
             'localserver': constants.server,
             'user': vinebot_user,
-            'server': '%s.%s' % (constants.leaf_name, constants.server),
+            'server': constants.leaves_domain,
         })
     
     def get_roster(self, user):

@@ -128,7 +128,7 @@ class MySQLManager(object):
                                   })
     
     def lock_leaf(self, lock_name, timeout=0):
-        if not lock_name.startswith(constants.leaf_mysql_lock_name):
+        if not lock_name.startswith(constants.leaves_mysql_lock_name):
             raise Exception
         lock = self._db.execute_and_fetchall("SELECT GET_LOCK(%(lock_name)s, %(timeout)s)", {
                                                 'lock_name': lock_name,
@@ -137,7 +137,7 @@ class MySQLManager(object):
         return (lock and (lock[0] == 1))
     
     def is_unlocked_leaf(self, lock_name):
-        if not lock_name.startswith(constants.leaf_mysql_lock_name):
+        if not lock_name.startswith(constants.leaves_mysql_lock_name):
             raise Exception
         lock = self._db.execute_and_fetchall("SELECT IS_FREE_LOCK(%(lock_name)s)", {
                                                 'lock_name': lock_name

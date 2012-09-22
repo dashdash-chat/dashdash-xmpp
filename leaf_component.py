@@ -28,15 +28,15 @@ else:
 class LeafComponent(ComponentXMPP):
     def __init__(self):
         ComponentXMPP.__init__(self,
-                               '%s.%s' % (constants.leaf_name, constants.server), 
-                               constants.leaf_secret,
+                               constants.leaves_domain, 
+                               constants.leaves_secret,
                                constants.server,
                                constants.component_port)
         self.registerPlugin('xep_0030') # Service Discovery
         self.registerPlugin('xep_0199') # XMPP Ping
         self.registerPlugin('xep_0085') # Chat State Notifications
         self.acquired_lock_num = None
-        g.db = MySQLManager(constants.leaf_name, constants.leaf_mysql_password)
+        g.db = MySQLManager(constants.leaves_mysql_user, constants.leaves_mysql_password)
         g.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
         self.commands = SlashCommandRegistry()
         self.add_slash_commands()
@@ -216,7 +216,7 @@ class LeafComponent(ComponentXMPP):
         other_leaves_online = False
         for lock_num_to_check in range(constants.max_leaves):
             if self.acquired_lock_num != lock_num_to_check:
-                checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaves_mysql_lock_name, lock_num_to_check))
                 if not checked_lock:
                     other_leaves_online = True
                     break
@@ -234,13 +234,13 @@ class LeafComponent(ComponentXMPP):
     def handle_start(self, event):
         def register_leaf():  # this is a function because using return makes it cleaner
             for lock_num_to_acquire in range(constants.max_leaves):
-                acquired_lock = g.db.lock_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_acquire))
+                acquired_lock = g.db.lock_leaf('%s%s' % (constants.leaves_mysql_lock_name, lock_num_to_acquire))
                 if acquired_lock:
                     self.acquired_lock_num = lock_num_to_acquire
                     if lock_num_to_acquire > 0:
                         return True
                     for lock_num_to_check in range(lock_num_to_acquire + 1, constants.max_leaves):
-                        checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaf_mysql_lock_name, lock_num_to_check))
+                        checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaves_mysql_lock_name, lock_num_to_check))
                         if not checked_lock:
                             return True
                     return False

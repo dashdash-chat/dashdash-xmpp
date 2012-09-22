@@ -6,16 +6,17 @@ server = env_vars.server
 server_ip = env_vars.server_ip
 
 component_port = env_vars.component_port
-leaf_name = "leaves"
-leaf_secret = env_vars.leaf_secret
+leaves_domain = '%s.%s' % ('leaves', server)
+leaves_secret = env_vars.leaves_secret
 max_leaves = 10
 
 xmlrpc_port = env_vars.xmlrpc_port
 leaves_xmlrpc_user  = '_leaves'
-leaves_xmlrpc_password = env_vars.leaf_xmlrpc_password
+leaves_xmlrpc_password = env_vars.leaves_xmlrpc_password
 
-leaf_mysql_lock_name = 'leaf'
-leaf_mysql_password = env_vars.leaf_mysql_password
+leaves_mysql_user = 'leaves'
+leaves_mysql_lock_name = 'leaf'
+leaves_mysql_password = env_vars.leaves_mysql_password
 db_host = env_vars.db_host
 db_name = 'vine'
 
@@ -32,7 +33,3 @@ default_user_password = env_vars.default_user_password
 class g(object):
     db = None 
     ectl = None
-
-
-# leaf_name = "leaf"
-# leaf_xmlrpc_jid_prefix = '_leaf``'
