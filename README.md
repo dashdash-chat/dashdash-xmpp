@@ -41,12 +41,14 @@ Development Setup
 0. Create admin users and open ejabberd dashboard
   * `sudo ejabberdctl register admin1 dev.vine.im [password]`
   * `sudo ejabberdctl register admin2 dev.vine.im [password]`
-  * `sudo ejabberdctl register _leaf1 dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L9))
+  * `sudo ejabberdctl register _leaves dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L12))
+  * `sudo ejabberdctl add_rosteritem admin1 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
+  * `sudo ejabberdctl add_rosteritem admin2 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
   * Visit http://dev.vine.im:5280/admin in a browser and explore
   * (I tend to use http://dev.vine.im:5280/admin/server/dev.vine.im/users/ the most)
 0. Create the xmpp-env virtualenv 
   * `cd /vagrant`
-  * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice
+  * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice, maybe try https://github.com/pypa/virtualenv/issues/209#issuecomment-8646032
   * `sudo virtualenv xmpp-env`
   * `cd xmpp-env`
   * `source bin/activate`
@@ -63,9 +65,9 @@ Development Setup
   * `git clone git@github.com:lehrblogger/vine-xmpp.git xmpp`
   * `cd xmpp`
   * `sudo cp shared/ejabberd.cfg /etc/ejabberd && sudo ejabberdctl restart`
-  * `../bin/python ./scripts/leaf_component.py`
+  * `../bin/python ./leaf_component.py`
   * Connect as either admin user in your XMPP client of choice using 'admin1@dev.vine.im'
-  * Send a message to the account 'leaf1.dev.vine.im' (note there is no username or '@' in this JID!)
+  * Send a message to the account 'leaf@leaves.dev.vine.im' (I could have made the username not matter, but some clients expect it.)
   * Experiment with the various commands to modify users and their relationships
   * Connect as the users you create using other XMPP clients, and try sending messages between them
   * Control-c to stop the XMPP component server

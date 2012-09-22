@@ -280,7 +280,8 @@ class LeafComponent(ComponentXMPP):
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
         except NotVinebotException:
-            pass
+            if presence['to'].bare == constants.leaves_jid:
+                self.send_presences(None, [user])
         except NotUserException:
             pass
         finally:
@@ -310,7 +311,8 @@ class LeafComponent(ComponentXMPP):
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]), pshow=presence['type'])
         except NotVinebotException:
-            pass
+            if presence['to'].bare == constants.leaves_jid:
+                self.send_presences(None, [user])
         except NotUserException:
             pass
         finally:
@@ -414,11 +416,17 @@ class LeafComponent(ComponentXMPP):
     
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
+        pfrom = constants.leaves_jid
+        pstatus = None
+        if vinebot:
+            pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
+            if vinebot.topic:
+                pstatus = unicode(vinebot.topic)
         for recipient in recipients:
-            self.sendPresence(pfrom='%s@%s' % (vinebot.jiduser, self.boundjid.bare),
+            self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.server),
                                 pshow=None if pshow == 'available' else pshow,
-                                pstatus=unicode(vinebot.topic) if vinebot.topic else None)
+                                pstatus=pstatus)
     
     def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None):
         #LATER fix html, but it's a pain with reformatting
@@ -434,7 +442,7 @@ class LeafComponent(ComponentXMPP):
             if not sender or sender != recipient:
                 new_msg = msg.__copy__()
                 new_msg['to'] = '%s@%s' % (recipient.name, constants.server)
-                new_msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare)
+                new_msg['from'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
                 new_msg.send()
                 actual_recipients.append(recipient)
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
@@ -447,7 +455,7 @@ class LeafComponent(ComponentXMPP):
             return
         msg = self.Message()
         msg['body'] = '%s %s' % (prefix, body)
-        msg['from'] = '%s@%s' % (vinebot.jiduser, self.boundjid.bare) if vinebot else fromjid
+        msg['from'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain) if vinebot else fromjid
         msg['to'] = recipient.jid
         msg.send()
         g.db.log_message(sender, [recipient], body, vinebot=vinebot, parent_message_id=parent_message_id, parent_command_id=parent_command_id)

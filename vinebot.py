@@ -322,7 +322,7 @@ class FetchedVinebot(AbstractVinebot):
                 raise NotVinebotException
             self.jiduser = jiduser
             self.id = dbid[0]
-        elif jiduser == '':  # because the leaf itself has no username, and we want to fail gracefully
+        elif jiduser == constants.leaves_jid_user:  # because the leaf itself has no username, and we want to fail gracefully
             raise NotVinebotException
         else:
             raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'

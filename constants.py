@@ -7,6 +7,8 @@ server_ip = env_vars.server_ip
 
 component_port = env_vars.component_port
 leaves_domain = '%s.%s' % ('leaves', server)
+leaves_jid_user = 'leaf'
+leaves_jid = '%s@%s' % (leaves_jid_user, leaves_domain)
 leaves_secret = env_vars.leaves_secret
 max_leaves = 10
 
