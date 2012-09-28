@@ -432,6 +432,7 @@ class LeafComponent(ComponentXMPP):
         #LATER fix html, but it's a pain with reformatting
         if msg is None:  # need to pass this for chat states
             msg = self.Message()
+            msg['type'] = 'chat'
         if body and body != '':
             if sender:
                 msg['body'] = '[%s] %s' % (sender.name, body)
@@ -454,6 +455,7 @@ class LeafComponent(ComponentXMPP):
         if body == '':
             return
         msg = self.Message()
+        msg['type'] = 'chat'
         msg['body'] = '%s %s' % (prefix, body)
         msg['from'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain) if vinebot else fromjid
         msg['to'] = recipient.jid
