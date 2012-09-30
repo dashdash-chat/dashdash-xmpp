@@ -381,6 +381,7 @@ class LeafComponent(ComponentXMPP):
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                                 self.send_alert(vinebot, None, user, 'Sorry, this users is offline.', parent_message_id=parent_message_id)
+                                self.send_presences(vinebot, vinebot.edge_users, pshow='unavailable')
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user. Try another contact in your list?', parent_message_id=parent_message_id)
