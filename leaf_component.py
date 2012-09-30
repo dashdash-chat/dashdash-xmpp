@@ -408,6 +408,7 @@ class LeafComponent(ComponentXMPP):
                 del msg['id']
                 del msg['body']
                 del msg['html']
+                del msg['type']
                 self.broadcast_message(vinebot, user, vinebot.everyone, None, msg=msg)
         except NotVinebotException:
             pass
