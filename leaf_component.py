@@ -789,12 +789,13 @@ class LeafComponent(ComponentXMPP):
     def sync_roster(self, parent_command_id, username):
         try:
             user = FetchedUser(name=username)
+            user_roster = user.roster()
             expected_vinebots = frozenset([]).union(user.active_vinebots) \
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
             expected_rosteritems = frozenset([(expected.jiduser, expected.get_nick(user)) for expected in expected_vinebots])
-            actual_rosteritems = frozenset(user.roster())
+            actual_rosteritems = frozenset([(actual[0], actual[1]) for actual in user_roster])
             errors = []
             for roster_user, roster_nick in expected_rosteritems.difference(actual_rosteritems):
                 errors.append('No rosteritem found for vinebot %s with nick %s' % (roster_user, roster_nick))
@@ -802,6 +803,10 @@ class LeafComponent(ComponentXMPP):
             for roster_user, roster_nick in actual_rosteritems.difference(expected_rosteritems):
                 errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
                 g.ectl.delete_rosteritem(user.name, roster_user)
+            for roster_user, roster_nick, roster_group in user_roster:
+                if roster_group != '%s@%s' % (username, constants.server):
+                    errors.append('Incorrect group %s found for rosteritem %s with nick %s' % (roster_group, roster_user, roster_nick))
+                    g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
             if errors:
                 return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:

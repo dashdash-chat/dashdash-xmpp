@@ -29,7 +29,7 @@ class EjabberdCTL(object):
             'localserver': constants.server,
             'user': vinebot_user,
             'server': constants.leaves_domain,
-            'group': constants.roster_group,
+            'group': '%s@%s' % (user, constants.server),
             'nick': nick,
             'subs': 'both'
         })
@@ -51,12 +51,12 @@ class EjabberdCTL(object):
             rosteritem = rosteritem['contact']
             if rosteritem[2]['subscription'] != 'both':
                 logging.warning('Incorrect roster subscription for: %s' % rosteritem)
-            if rosteritem[4]['group'] != constants.roster_group:
+            if rosteritem[4]['group'] != '%s@%s' % (user, constants.server):
                 logging.warning('Incorrect roster group for rosteritem: %s' % rosteritem)
             user = rosteritem[0]['jid'].split('@')[0]
             if not user.startswith(constants.vinebot_prefix):
                 logging.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
-            roster.append((user, rosteritem[1]['nick']))
+            roster.append((user, rosteritem[1]['nick'], rosteritem[4]['group']))
         return roster
     
     def user_online(self, user):

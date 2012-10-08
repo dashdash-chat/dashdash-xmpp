@@ -23,7 +23,6 @@ db_host = env_vars.db_host
 db_name = 'vine'
 
 vinebot_prefix = 'vinebot_'
-roster_group = env_vars.roster_group
 
 admin_jids = env_vars.admin_jids
 graph_xmpp_jid = '%s@%s' % ('_graph', server)
