@@ -804,7 +804,7 @@ class LeafComponent(ComponentXMPP):
                 errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
                 g.ectl.delete_rosteritem(user.name, roster_user)
             for roster_user, roster_nick, roster_group in user_roster:
-                if roster_group != '%s@%s' % (username, constants.server):
+                if roster_group != '%s@%s ' % (username, constants.server):
                     errors.append('Incorrect group %s found for rosteritem %s with nick %s' % (roster_group, roster_user, roster_nick))
                     g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
             if errors:

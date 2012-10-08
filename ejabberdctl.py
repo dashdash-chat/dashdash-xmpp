@@ -29,7 +29,7 @@ class EjabberdCTL(object):
             'localserver': constants.server,
             'user': vinebot_user,
             'server': constants.leaves_domain,
-            'group': '%s@%s' % (user, constants.server),
+            'group': '%s@%s ' % (user, constants.server),
             'nick': nick,
             'subs': 'both'
         })
