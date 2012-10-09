@@ -38,14 +38,6 @@ Development Setup
   * `make`
   * `sudo cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
   * `sudo ejabberdctl restart`
-0. Create admin users and open ejabberd dashboard
-  * `sudo ejabberdctl register admin1 dev.vine.im [password]`
-  * `sudo ejabberdctl register admin2 dev.vine.im [password]`
-  * `sudo ejabberdctl register _leaves dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L12))
-  * `sudo ejabberdctl add_rosteritem admin1 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
-  * `sudo ejabberdctl add_rosteritem admin2 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
-  * Visit http://dev.vine.im:5280/admin in a browser and explore
-  * (I tend to use http://dev.vine.im:5280/admin/server/dev.vine.im/users/ the most)
 0. Create the xmpp-env virtualenv 
   * `cd /vagrant`
   * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice, maybe try https://github.com/pypa/virtualenv/issues/209#issuecomment-8646032
@@ -60,11 +52,24 @@ Development Setup
   * `../bin/python setup.py install`
   * `cd ..`
   * `bin/pip install sleekxmpp`
-0. Download the vine-xmpp code (easier from your local machine) and run the leaf component (from the VM)
-  * `cd xmpp-env`
+  * `deactivate`
+0. Download the vine-xmpp code (try cloning from local machine)
+  * `cd /vagrant/xmpp-env`
   * `git clone git@github.com:lehrblogger/vine-xmpp.git xmpp`
   * `cd xmpp`
   * `sudo cp shared/ejabberd.cfg /etc/ejabberd && sudo ejabberdctl restart`
+0. Create admin users and open ejabberd dashboard
+  * `sudo ejabberdctl register admin1 dev.vine.im [password]`
+  * `sudo ejabberdctl register admin2 dev.vine.im [password]`
+  * `sudo ejabberdctl register _leaves dev.vine.im [leaf_xmlrpc_password]` ([from vine-shared](https://github.com/lehrblogger/vine-shared/blob/master/env_vars.py#L12))
+  * `sudo ejabberdctl add_rosteritem admin1 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
+  * `sudo ejabberdctl add_rosteritem admin2 dev.vine.im leaf leaves.dev.vine.im Leaf Admin both`
+  * Visit https://dev.vine.im:5281/admin in a browser and explore
+  * (I tend to use https://dev.vine.im:5281/admin/server/dev.vine.im/users/ the most)
+0. Run the leaf component (from the VM)
+  * `cd /vagrant/xmpp-env`
+  * `source bin/activate`
+  * `cd xmpp`
   * `../bin/python ./leaf_component.py`
   * Connect as either admin user in your XMPP client of choice using 'admin1@dev.vine.im'
   * Send a message to the account 'leaf@leaves.dev.vine.im' (I could have made the username not matter, but some clients expect it.)
