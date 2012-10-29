@@ -514,6 +514,7 @@ class LeafComponent(ComponentXMPP):
             #LATER if two users have two active vinebots, one with an edge, and the person leaves the one with the edge, it won't get moved to the other
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
+            self.send_presences(vinebot, vinebot.observers, pshow='unavailable')
             if len(vinebot.edges) == 1:
                 vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
             elif len(vinebot.edges) == 2:
