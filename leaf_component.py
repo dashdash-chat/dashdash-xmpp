@@ -490,14 +490,14 @@ class LeafComponent(ComponentXMPP):
             pass  # this is the first participant, so assume that we're adding another one in a second
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(set([]), vinebot.participants)
-            self.send_presences(vinebot, vinebot.everyone)
+            self.send_presences(vinebot, vinebot.observers)  # here, participants get the proper presence in activate_vinebot() above
         elif len(vinebot.participants) == 3:
             vinebot.update_rosters(old_participants, vinebot.participants)
             if len(vinebot.edges) > 0:
                 new_vinebot = None
                 try:
                     new_vinebot = InsertedVinebot(old_vinebot=vinebot)
-                    self.send_presences(new_vinebot, new_vinebot.everyone)
+                    self.send_presences(new_vinebot, new_vinebot.everyone)  # for group conversations, presence can always be available
                 finally:
                     if new_vinebot:
                         new_vinebot.release_lock()
