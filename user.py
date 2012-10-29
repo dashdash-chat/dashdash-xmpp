@@ -20,6 +20,7 @@ class UserPermissionsException(Exception):
 
 class AbstractUser(object):
     def __init__(self, can_write=False, name=None, dbid=None):
+        self._status = None
         self._friends = None
         self._active_vinebots = None
         self._observed_vinebots = None
@@ -31,10 +32,12 @@ class AbstractUser(object):
         # if self.can_write:  the user doesn't actually require a lock, since deleting is really the only potential issue
     
     def status(self):
-        return g.ectl.user_status(self.name)
+        if not self._status:  # cache this, since a user status can't change during the handling of a single stanza
+            self._status = g.ectl.user_status(self.name)
+        return self._status
     
     def is_online(self):
-        return self.status() != 'unavailable'  # this function is useful for list filterss
+        return self.status() != 'unavailable'  # this function is useful for list filters
     
     def roster(self):
         return g.ectl.get_roster(self.name)
