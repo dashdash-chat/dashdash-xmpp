@@ -2,8 +2,9 @@ from shared import env_vars
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
-server = env_vars.server
+domain = env_vars.domain
 server_ip = env_vars.server_ip
+server = '%s.%s' % ('xmpp', domain)
 
 component_port = env_vars.component_port
 leaves_domain = '%s.%s' % ('leaves', server)

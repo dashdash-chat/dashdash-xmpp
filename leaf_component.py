@@ -426,7 +426,7 @@ class LeafComponent(ComponentXMPP):
                 pstatus = unicode(vinebot.topic)
         for recipient in recipients:
             self.sendPresence(pfrom=pfrom,
-                                pto='%s@%s' % (recipient.name, constants.server),
+                                pto='%s@%s' % (recipient.name, constants.domain),
                                 pshow=None if pshow == 'available' else pshow,
                                 pstatus=pstatus)
     
@@ -444,7 +444,7 @@ class LeafComponent(ComponentXMPP):
         for recipient in recipients:
             if not sender or sender != recipient:
                 new_msg = msg.__copy__()
-                new_msg['to'] = '%s@%s' % (recipient.name, constants.server)
+                new_msg['to'] = '%s@%s' % (recipient.name, constants.domain)
                 new_msg['from'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
                 new_msg.send()
                 actual_recipients.append(recipient)
@@ -805,7 +805,7 @@ class LeafComponent(ComponentXMPP):
                 errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
                 g.ectl.delete_rosteritem(user.name, roster_user)
             for roster_user, roster_nick, roster_group in user_roster:
-                if roster_group != '%s@%s ' % (username, constants.server):
+                if roster_group != '%s@%s ' % (username, constants.domain):
                     errors.append('Incorrect group %s found for rosteritem %s with nick %s' % (roster_group, roster_user, roster_nick))
                     g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
             if errors:
