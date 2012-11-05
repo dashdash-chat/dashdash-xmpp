@@ -175,7 +175,7 @@ class AbstractVinebot(object):
                                           """, {
                                              'vinebot_id': self.id
                                           })
-        if topic and len(topic) > 0:
+        if topic and len(topic) > 0 and len(topic[0]) == 2:
             body, created = topic[0]
             return self._format_topic(body, created)
         return None
