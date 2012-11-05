@@ -7,7 +7,7 @@ server_ip = env_vars.server_ip
 server = '%s.%s' % ('xmpp', domain)
 
 component_port = env_vars.component_port
-leaves_domain = '%s.%s' % ('leaves', server)
+leaves_domain = '%s.%s' % ('leaves', domain)
 leaves_jid_user = 'leaf'
 leaves_jid = '%s@%s' % (leaves_jid_user, leaves_domain)
 leaves_secret = env_vars.leaves_secret
@@ -26,7 +26,7 @@ db_name = 'vine'
 vinebot_prefix = 'vinebot_'
 
 admin_jids = env_vars.admin_jids
-graph_xmpp_jid = '%s@%s' % ('_graph', server)
+graph_xmpp_jid = '%s@%s' % ('_graph', domain)
 
 client_port = env_vars.client_port
 default_user_password = env_vars.default_user_password
