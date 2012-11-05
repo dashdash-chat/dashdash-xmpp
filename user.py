@@ -156,7 +156,7 @@ class AbstractUser(object):
     
     def __getattr__(self, name):
         if name == 'jid':
-            return '%s@%s' % (self.name, constants.server)
+            return '%s@%s' % (self.name, constants.domain)
         if name == 'friends':
             if self._friends is None:
                 self._friends = self._fetch_friends()
