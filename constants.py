@@ -4,7 +4,7 @@ shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 domain = env_vars.domain
 server_ip = env_vars.server_ip
-server = '%s.%s' % ('xmpp', domain)
+server = domain #'%s.%s' % ('xmpp', domain)
 
 component_port = env_vars.component_port
 leaves_domain = '%s.%s' % ('leaves', domain)
@@ -27,6 +27,11 @@ vinebot_prefix = 'vinebot_'
 
 admin_jids = env_vars.admin_jids
 graph_xmpp_jid = '%s@%s' % ('_graph', domain)
+
+twilio_account_sid = 'AC94ebb7a389884563bb59bcc318c6cfc8'
+twilio_auth_token = env_vars.twilio_auth_token
+twilio_from_number = '+17542276773'
+twilio_to_numbers = env_vars.twilio_to_numbers
 
 client_port = env_vars.client_port
 default_user_password = env_vars.default_user_password

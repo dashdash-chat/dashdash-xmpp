@@ -47,6 +47,7 @@ Development Setup
   * `bin/pip-2.6 install dnspython`
   * `bin/pip install mysql-python`
   * `bin/pip install python-daemon` TODO: do I still need this?
+  * `bin/pip install twilio`
   * `git clone git://github.com/lehrblogger/shortuuid.git`
   * `cd shortuuid`
   * `../bin/python setup.py install`

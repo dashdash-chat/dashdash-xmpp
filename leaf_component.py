@@ -10,6 +10,7 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
+from twilio.rest import TwilioRestClient
 import constants
 from constants import g
 from ejabberdctl import EjabberdCTL
@@ -279,6 +280,12 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
+            if user.name == 'ycombinator':
+                client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
+                for to_number in constants.twilio_to_numbers:
+                    call = client.calls.create(to=to_number,
+                                               from_=constants.twilio_from_number,
+                                               url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
