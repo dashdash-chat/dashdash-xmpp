@@ -28,6 +28,7 @@ vinebot_prefix = 'vinebot_'
 admin_jids = env_vars.admin_jids
 graph_xmpp_jid = '%s@%s' % ('_graph', domain)
 
+watched_usernames = env_vars.watched_usernames
 twilio_account_sid = 'AC94ebb7a389884563bb59bcc318c6cfc8'
 twilio_auth_token = env_vars.twilio_auth_token
 twilio_from_number = '+17542276773'

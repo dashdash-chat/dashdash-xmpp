@@ -280,12 +280,14 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
-            if user.name == 'ycombinator':
+            if user.name in constants.watched_usernames:
                 client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
                 for to_number in constants.twilio_to_numbers:
                     call = client.calls.create(to=to_number,
                                                from_=constants.twilio_from_number,
+                                               if_machine='Hangup',
                                                url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
+                logging.info('%s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
