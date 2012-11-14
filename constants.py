@@ -4,7 +4,7 @@ shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
 domain = env_vars.domain
 server_ip = env_vars.server_ip
-server = domain #'%s.%s' % ('xmpp', domain)
+xmlrpc_server = env_vars.xmlrpc_server
 
 component_port = env_vars.component_port
 leaves_domain = '%s.%s' % ('leaves', domain)

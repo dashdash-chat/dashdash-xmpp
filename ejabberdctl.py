@@ -8,7 +8,7 @@ class EjabberdCTL(object):
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
+        self.xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
     
     def register(self, user, password):
         self._xmlrpc_command('register', {

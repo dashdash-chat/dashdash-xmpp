@@ -31,7 +31,7 @@ class LeafComponent(ComponentXMPP):
         ComponentXMPP.__init__(self,
                                constants.leaves_domain, 
                                constants.leaves_secret,
-                               constants.server,
+                               constants.domain,
                                constants.component_port)
         self.registerPlugin('xep_0030') # Service Discovery
         self.registerPlugin('xep_0199') # XMPP Ping

@@ -18,22 +18,22 @@ else:
 
 
 leaf_id = 1
-xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server, constants.xmlrpc_port))
+xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
 
 def xmlrpc_command(command, data):
     fn = getattr(xmlrpc_server, command)
     return fn({
         'user': '%s%s' % (constants.leaf_xmlrpc_jid_prefix, leaf_id),
-        'server': constants.server,
+        'server': constants.domain,
         'password': constants.leaf_xmlrpc_password
     }, data)
 
 def add_proxy_rosteritem(user, vinebot_jid, nick):
     xmlrpc_command('add_rosteritem', {
         'localuser': user,
-        'localserver': constants.server,
+        'localserver': constants.domain,
         'user': vinebot_jid,
-        'server': '%s%s.%s' % (constants.leaf_name, leaf_id, constants.server),
+        'server': '%s%s.%s' % (constants.leaf_name, leaf_id, constants.domain),
         'group': constants.roster_group,
         'nick': nick,
         'subs': 'both'
@@ -42,15 +42,15 @@ def add_proxy_rosteritem(user, vinebot_jid, nick):
 def delete_proxy_rosteritem(user, vinebot_jid):
     xmlrpc_command('delete_rosteritem', {
         'localuser': user,
-        'localserver': constants.server,
+        'localserver': constants.domain,
         'user': vinebot_jid,
-        'server': '%s%s.%s' % (constants.leaf_name, leaf_id, constants.server)
+        'server': '%s%s.%s' % (constants.leaf_name, leaf_id, constants.domain)
     })
 
 def get_roster(user):
     return xmlrpc_command('get_roster', {
         'user': user, 
-        'host': constants.server
+        'host': constants.domain
     })['contacts']
 
 if __name__ == '__main__':
