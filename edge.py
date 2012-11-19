@@ -56,12 +56,12 @@ class InsertedEdge(AbstractEdge):
             raise v.VinebotPermissionsException
         super(InsertedEdge, self).__init__()
         dbid = g.db.execute("""INSERT INTO edges (from_id, to_id, vinebot_id)
-                                   VALUES (%(f_id)s, %(t_id)s, (%(vinebot_id)s))
-                                """, {           
-                                   't_id': t_user.id, 
-                                   'f_id': f_user.id,
-                                   'vinebot_id': vinebot.id
-                                })
+                               VALUES (%(f_id)s, %(t_id)s, (%(vinebot_id)s))
+                            """, {           
+                               't_id': t_user.id, 
+                               'f_id': f_user.id,
+                               'vinebot_id': vinebot.id
+                            })
         self.f_user = f_user
         self.t_user = t_user
         self.vinebot_id = vinebot.id
@@ -99,6 +99,9 @@ class FetchedEdge(AbstractEdge):
                                                   'f_id': f_user.id
                                                })
             if len(result) == 0:
+                raise NotEdgeException
+            if result[0][1] is None:
+                logging.error('Edge %s from %s to %s has no vinebot!' % (result[0][0], f_user.name, t_user.name))
                 raise NotEdgeException
             self.f_user = f_user
             self.t_user = t_user
