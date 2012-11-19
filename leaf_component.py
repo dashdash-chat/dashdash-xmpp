@@ -750,7 +750,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, e)
         try:
             FetchedEdge(f_user=f_user, t_user=t_user)
-            raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge connecting them.' % (f_user.name, t_user.name))
+            raise ExecutionError, (parent_command_id, '%s and %s already have a directed edge between them.' % (f_user.name, t_user.name))
         except NotEdgeException:  # no edge was found in the database, so we can continue
             pass
         vinebot = None
@@ -792,7 +792,7 @@ class LeafComponent(ComponentXMPP):
         try:
             edge = FetchedEdge(f_user=f_user, t_user=t_user)
         except NotEdgeException:
-            raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge connecting them.' % (f_user.name, t_user.name))
+            raise ExecutionError, (parent_command_id, '%s and %s do not have a directed edge between them.' % (f_user.name, t_user.name))
         self.cleanup_and_delete_edge(edge)
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
