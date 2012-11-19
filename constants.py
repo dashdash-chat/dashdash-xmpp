@@ -7,9 +7,9 @@ server_ip = env_vars.server_ip
 xmlrpc_server = env_vars.xmlrpc_server
 
 component_port = env_vars.component_port
-leaves_domain = '%s.%s' % ('leaves', domain)
-leaves_jid_user = 'leaf'
-leaves_jid = '%s@%s' % (leaves_jid_user, leaves_domain)
+leaves_domain = env_vars.leaves_domain
+leaves_jid_user = env_vars.leaves_jid_user
+leaves_jid = env_vars.leaves_jid
 leaves_secret = env_vars.leaves_secret
 max_leaves = 10
 
@@ -26,7 +26,7 @@ db_name = 'vine'
 vinebot_prefix = 'vinebot_'
 
 admin_jids = env_vars.admin_jids
-graph_xmpp_jid = '%s@%s' % ('_graph', domain)
+graph_xmpp_jid = env_vars.graph_xmpp_jid
 
 watched_usernames = env_vars.watched_usernames
 twilio_account_sid = 'AC94ebb7a389884563bb59bcc318c6cfc8'
