@@ -14,10 +14,10 @@ Development Setup
 0. Install ejabberd with the necessary modules
   * `sudo apt-get install libexpat1-dev`
   * `sudo apt-get install git-core subversion`
-  * `cd /vagrant`
+  * `cd ~`
   * `git clone git://github.com/lehrblogger/ejabberd.git`
   * `cd ejabberd`
-  * `git checkout -b tag-v2.1.11 v2.1.11`
+  * `git checkout 2.1.x-stanza-restrictions` # which has my fixes!
   * `cd src`
   * `./configure`
   * `make`
@@ -25,18 +25,18 @@ Development Setup
   * `sudo ejabberdctl start`
   * `cd ../..`
   * `svn co https://svn.process-one.net/ejabberd-modules`
-  * `cd /vagrant/ejabberd-modules/mod_admin_extra/trunk`
+  * `cd ~/ejabberd-modules/mod_admin_extra/trunk`
   * `./build.sh`
-  * `sudo cp /vagrant/ejabberd-modules/mod_admin_extra/trunk/ebin/mod_admin_extra.beam /lib/ejabberd/ebin/`
-  * `cd /vagrant/ejabberd-modules/ejabberd_xmlrpc/trunk`
+  * `sudo cp ~/ejabberd-modules/mod_admin_extra/trunk/ebin/mod_admin_extra.beam /lib/ejabberd/ebin/`
+  * `cd ~/ejabberd-modules/ejabberd_xmlrpc/trunk`
   * `./build.sh`
-  * `sudo cp /vagrant/ejabberd-modules/ejabberd_xmlrpc/trunk/ebin/ejabberd_xmlrpc.beam /lib/ejabberd/ebin/`
+  * `sudo cp ~/ejabberd-modules/ejabberd_xmlrpc/trunk/ebin/ejabberd_xmlrpc.beam /lib/ejabberd/ebin/`
   * `cd ~`
   * `wget http://ejabberd.jabber.ru/files/contributions/xmlrpc-1.13-ipr2.tgz`
   * `tar -xzvf xmlrpc-1.13-ipr2.tgz`
   * `cd xmlrpc-1.13/src`
   * `make`
-  * `sudo cp /home/vagrant/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
+  * `sudo cp ~/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
   * `sudo ejabberdctl restart`
 0. Create the xmpp-env virtualenv 
   * `cd /vagrant`
