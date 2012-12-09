@@ -818,6 +818,20 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
     def sync_roster(self, parent_command_id, username):
+        def parse_nick(nick):  # this is here and not in the vinebot class because we need it for the strings we get from ejabberd
+            usernames = set([])
+            ampersand_peices = nick.split('&')
+            if len(ampersand_peices) == 1:
+                usernames.add(nick.strip())
+            else:
+                usernames.add(ampersand_peices[1].strip())
+                comma_pieces = ampersand_peices[0].split(',')
+                if len(comma_pieces) == 1:
+                    usernames.add(ampersand_peices[0].strip())
+                else:
+                    for comma_piece in comma_pieces:
+                        usernames.add(comma_piece.strip())
+            return frozenset(usernames)
         try:
             user = FetchedUser(name=username)
             user_roster = user.roster()
@@ -825,8 +839,8 @@ class LeafComponent(ComponentXMPP):
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
-            expected_rosteritems = frozenset([(expected.jiduser, expected.get_nick(user)) for expected in expected_vinebots])
-            actual_rosteritems = frozenset([(actual[0], actual[1]) for actual in user_roster])
+            expected_rosteritems = frozenset([(expected.jiduser, parse_nick(expected.get_nick(user))) for expected in expected_vinebots])
+            actual_rosteritems = frozenset([(actual[0], parse_nick(actual[1])) for actual in user_roster])
             errors = []
             for roster_user, roster_nick in expected_rosteritems.difference(actual_rosteritems):
                 errors.append('No rosteritem found for vinebot %s with nick %s' % (roster_user, roster_nick))
