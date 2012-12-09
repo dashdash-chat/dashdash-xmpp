@@ -56,6 +56,7 @@ class AbstractVinebot(object):
                                                     FROM participants, users
                                                     WHERE participants.vinebot_id = %(id)s
                                                     AND participants.user_id = users.id
+                                                    AND users.is_active = true
                                                  """, {
                                                      'id': self.id
                                                  })
@@ -71,6 +72,7 @@ class AbstractVinebot(object):
                                                  AND participants.vinebot_id = %(id)s
                                                  AND participants.user_id = incoming.to_id
                                                  AND participants.user_id = outgoing.from_id
+                                                 AND users.is_active = true
                                                  AND (SELECT COUNT(*) 
                                                       FROM participants 
                                                       WHERE participants.vinebot_id = %(id)s 
@@ -277,10 +279,10 @@ class InsertedVinebot(AbstractVinebot):
         self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(_uuid))
         self.acquire_lock()  # I wish this could go in AbstractVinebot.__init__(), but that happens before we have self.jiduser
         self.id = g.db.execute("""INSERT INTO vinebots (uuid)
-                                      VALUES (%(uuid)s)
-                                   """, {
-                                      'uuid': _uuid.bytes
-                                   })
+                                  VALUES (%(uuid)s)
+                               """, {
+                                  'uuid': _uuid.bytes
+                               })
         if old_vinebot and old_vinebot.edges:
             self._edges = []
             for edge in old_vinebot.edges:
@@ -297,11 +299,11 @@ class FetchedVinebot(AbstractVinebot):
             self.id = dbid
         elif dbid:
             _uuid = g.db.execute_and_fetchall("""SELECT uuid 
-                                                     FROM vinebots
-                                                     WHERE id = %(id)s
-                                                  """, {
-                                                      'id': dbid
-                                                  }, strip_pairs=True)
+                                                 FROM vinebots
+                                                 WHERE id = %(id)s
+                                              """, {
+                                                  'id': dbid
+                                              }, strip_pairs=True)
             if not _uuid:
                 raise NotVinebotException
             self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid[0])))
@@ -312,11 +314,11 @@ class FetchedVinebot(AbstractVinebot):
             _shortuuid = jiduser.replace(constants.vinebot_prefix, '')
             _uuid = shortuuid.decode(_shortuuid)
             dbid = g.db.execute_and_fetchall("""SELECT id
-                                                    FROM vinebots
-                                                    WHERE uuid = %(uuid)s
-                                                 """, {
-                                                    'uuid': _uuid.bytes
-                                                 }, strip_pairs=True)
+                                                FROM vinebots
+                                                WHERE uuid = %(uuid)s
+                                             """, {
+                                                'uuid': _uuid.bytes
+                                             }, strip_pairs=True)
             if not dbid:
                 raise NotVinebotException
             self.jiduser = jiduser

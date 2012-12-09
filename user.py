@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import logging
+from MySQLdb import IntegrityError
 import constants
 from constants import g
 import vinebot as v
@@ -50,6 +51,7 @@ class AbstractUser(object):
                                                     AND incoming.to_id = %(id)s
                                                     AND outgoing.to_id = incoming.from_id
                                                     AND outgoing.to_id = users.id
+                                                    AND users.is_active = true
                                                  """, {
                                                     'id': self.id
                                                  })
@@ -147,7 +149,8 @@ class AbstractUser(object):
     def delete(self):
         if not self.can_write:
             raise UserPermissionsException
-        g.db.execute("""DELETE FROM users
+        g.db.execute("""UPDATE users
+                        SET is_active = false
                         WHERE id = %(id)s
                      """, {
                         'id': self.id
@@ -211,11 +214,29 @@ class AbstractUser(object):
 class InsertedUser(AbstractUser):
     def __init__(self, name, password):
         super(InsertedUser, self).__init__(can_write=True)
-        dbid = g.db.execute("""INSERT INTO users (name)
-                               VALUES (%(name)s)
-                            """, {
-                               'name': name
-                            })
+        try:
+            dbid = g.db.execute("""INSERT INTO users (name)
+                                   VALUES (%(name)s)
+                                """, {
+                                   'name': name
+                                })
+        except IntegrityError, e:
+            dbid = g.db.execute_and_fetchall("""SELECT id
+                                                FROM users
+                                                WHERE name = %(name)s
+                                                AND is_active = false
+                                             """, {
+                                                'name': name
+                                             }, strip_pairs=True)
+            if not dbid:
+                raise IntegrityError, e
+            dbid = dbid[0]
+            g.db.execute("""UPDATE users
+                            SET is_active = true
+                            WHERE id = %(id)s
+                         """, {
+                            'id': dbid
+                         })
         g.ectl.register(name, password)
         self.id = dbid
         self.name = name
@@ -231,6 +252,7 @@ class FetchedUser(AbstractUser):
             dbid = g.db.execute_and_fetchall("""SELECT id
                                                 FROM users
                                                 WHERE name = %(name)s
+                                                AND is_active = true
                                              """, {
                                                 'name': name
                                              }, strip_pairs=True)
@@ -238,11 +260,12 @@ class FetchedUser(AbstractUser):
             self.name = name
         elif dbid:
             name = g.db.execute_and_fetchall("""SELECT name
-                                                         FROM users
-                                                         WHERE id = %(id)s
-                                                      """, {
-                                                         'id': dbid
-                                                      }, strip_pairs=True)
+                                                FROM users
+                                                WHERE id = %(id)s
+                                                AND is_active = true
+                                             """, {
+                                                'id': dbid
+                                             }, strip_pairs=True)
             self.id   = dbid
             self.name = name[0] if len(name) == 1 else None
         else:
