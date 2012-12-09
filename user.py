@@ -157,10 +157,100 @@ class AbstractUser(object):
                      })
         g.ectl.unregister(self.name)
     
+    def purge(self):
+        if not self.can_write:
+            raise UserPermissionsException
+        g.db.execute("""DELETE FROM user_tasks
+                        WHERE user_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM demos
+                        WHERE user_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM invites
+                        WHERE recipient = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""UPDATE invites
+                        SET sender = NULL
+                        WHERE sender = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM blocks
+                        WHERE to_user_id = %(id)s
+                        OR from_user_id = %(id)s 
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM artificial_follows
+                        WHERE to_user_id = %(id)s
+                        OR from_user_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM twitter_follows
+                        WHERE from_twitter_id = (SELECT twitter_id
+                                                 FROM users
+                                                 WHERE id = %(id)s)
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM recipients
+                        WHERE recipient_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM recipients
+                        WHERE message_id IN (SELECT id
+                                             FROM messages
+                                             WHERE sender_id = %(id)s)
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM recipients
+                        WHERE message_id IN (SELECT id
+                                             FROM messages
+                                             WHERE parent_command_id IN (SELECT id
+                                                                         FROM commands
+                                                                         WHERE sender_id = %(id)s))
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM messages
+                        WHERE parent_command_id IN (SELECT id
+                                                    FROM commands
+                                                    WHERE sender_id = %(id)s)
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM messages
+                        WHERE sender_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM commands
+                        WHERE sender_id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.db.execute("""DELETE FROM users
+                        WHERE id = %(id)s
+                     """, {
+                        'id': self.id
+                     })
+        g.ectl.unregister(self.name)
+    
     def __getattr__(self, name):
         if name == 'jid':
             return '%s@%s' % (self.name, constants.domain)
-        if name == 'friends':
+        elif name == 'is_protected':
+            return self.jid in (constants.admin_jids + [constants.graph_xmpp_jid, '%s@%s' % (constants.leaves_xmlrpc_user, constants.domain)])
+        elif name == 'friends':
             if self._friends is None:
                 self._friends = self._fetch_friends()
             return self._friends

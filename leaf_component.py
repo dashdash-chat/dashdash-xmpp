@@ -184,10 +184,16 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        text_arg_format  = '<username>',
-                                       text_description = 'Unregister a user in ejabberd and remove her from the Vine database.',
+                                       text_description = 'Unregister a user in ejabberd and deactivate her in the Vine database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.delete_user))
+        self.commands.add(SlashCommand(command_name     = 'purge_user',
+                                       text_arg_format  = '<username> --force',
+                                       text_description = 'Unregister a user in ejabberd and purge ALL of her entries from the Vine database.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token_token,
+                                       action           = self.purge_user))
         self.commands.add(SlashCommand(command_name     = 'new_edge',
                                        text_arg_format  = '<username1> <username2>',
                                        text_description = 'Create a friendship between two users.',
@@ -728,6 +734,8 @@ class LeafComponent(ComponentXMPP):
     def delete_user(self, parent_command_id, username):
         try:
             user = FetchedUser(can_write=True, name=username)
+            if user.is_protected:
+                raise ExecutionError, (parent_command_id, 'this user is protected and cannot be deleted/deactivated.')
             for vinebot in user.active_vinebots:
                 try:
                     self.remove_participant(vinebot, user)
@@ -740,6 +748,17 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user already exists?')
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, e)
+        return parent_command_id, None
+    
+    def purge_user(self, parent_command_id, username, confirmation):
+        if confirmation != '--force':
+            raise ExecutionError, (parent_command_id, 'are you sure you want to do that? If so, please use \'--force\', but purging users with many messages may hose the database.')
+        try:
+            user = FetchedUser(can_write=True, name=username)
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+        self.delete_user(parent_command_id, username)
+        user.purge()
         return parent_command_id, None
     
     def create_edge(self, parent_command_id, from_username, to_username):
