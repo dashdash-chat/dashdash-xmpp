@@ -762,6 +762,8 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, None
     
     def create_edge(self, parent_command_id, from_username, to_username):
+        if from_username == to_username:
+            raise ExecutionError, (parent_command_id, 'users cannot have edges to themselves.')
         try:
             f_user = FetchedUser(can_write=True, name=from_username)
             t_user = FetchedUser(can_write=True, name=to_username)
