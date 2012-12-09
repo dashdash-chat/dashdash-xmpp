@@ -763,7 +763,7 @@ class LeafComponent(ComponentXMPP):
                 InsertedEdge(f_user, t_user, vinebot=vinebot)
                 for other_vinebot in f_user.calc_active_vinebot_diff().difference([vinebot]):
                     try:
-                         other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
+                        other_vinebot.add_to_roster_of(f_user, other_vinebot.get_nick(f_user))
                     finally:
                         other_vinebot.release_lock()
                     self.send_presences(other_vinebot, [f_user])
