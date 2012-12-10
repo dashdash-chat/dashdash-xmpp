@@ -59,9 +59,6 @@ class EjabberdCTL(object):
             roster.append((user, rosteritem[1]['nick'], rosteritem[4]['group']))
         return roster
     
-    def user_online(self, user):
-        return self.user_status(user) != 'unavailable'  # this function is useful for list filters
-    
     def user_status(self, user):
         try:              
             res = self._xmlrpc_command('user_sessions_info', {
