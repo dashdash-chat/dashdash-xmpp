@@ -24,7 +24,7 @@ Development Setup
   * `sudo make install`
   * `sudo ejabberdctl start`
   * `cd ../..`
-  * `svn co https://svn.process-one.net/ejabberd-modules`
+  * `git clone git@github.com:lehrblogger/ejabberd-modules.git`
   * `cd ~/ejabberd-modules/mod_admin_extra/trunk`
   * `./build.sh`
   * `sudo cp ~/ejabberd-modules/mod_admin_extra/trunk/ebin/mod_admin_extra.beam /lib/ejabberd/ebin/`
