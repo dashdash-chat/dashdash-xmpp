@@ -818,7 +818,9 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
     def sync_roster(self, parent_command_id, username):
-        def parse_nick(nick):  # this is here and not in the vinebot class because we need it for the strings we get from ejabberd
+        def parse_nick(nick):
+            # this is here and not in the vinebot class because we need it for the strings we get from ejabberd
+            # note that we're comparing nick's and not participant lists because some nick's will contain a "you" in the roster
             usernames = set([])
             ampersand_peices = nick.split('&')
             if len(ampersand_peices) == 1:
