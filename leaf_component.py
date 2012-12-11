@@ -488,11 +488,9 @@ class LeafComponent(ComponentXMPP):
         if len(vinebot.edges) == 0:
             raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
         user1, user2 = vinebot.edge_users
-        user1_status = user1.status()
-        user2_status = user2.status()
-        self.send_presences(vinebot, [user1], pshow=user2_status)
-        self.send_presences(vinebot, [user2], pshow=user1_status)
-        both_users_online = user1_status != 'unavailable' and user2_status != 'unavailable'
+        self.send_presences(vinebot, [user1], pshow=user2.status())
+        self.send_presences(vinebot, [user2], pshow=user1.status())
+        both_users_online = user1.is_online() and user2.is_online()
         if both_users_online:
             self.add_participant(vinebot, user1)
             self.add_participant(vinebot, user2)
