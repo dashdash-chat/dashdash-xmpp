@@ -39,6 +39,7 @@ Development Setup
   * `sudo cp ~/xmlrpc-1.13/ebin/*.beam /lib/ejabberd/ebin/`
   * `sudo ejabberdctl restart`
 0. Create the xmpp-env virtualenv 
+  * `sudo apt-get install libevent-dev` for gevent, but try without this first because I'm using a different version
   * `cd /vagrant`
   * `sudo virtualenv xmpp-env`  # TODO fix it so that you don't need to run this twice, maybe try https://github.com/pypa/virtualenv/issues/209#issuecomment-8646032
   * `sudo virtualenv xmpp-env`
@@ -51,6 +52,11 @@ Development Setup
   * `git clone git://github.com/lehrblogger/shortuuid.git`
   * `cd shortuuid`
   * `../bin/python setup.py install`
+  * `cd ..`
+  * `wget https://github.com/downloads/SiteSupport/gevent/gevent-1.0rc2.tar.gz` since pypi only has v0.13
+  * `tar xvzf gevent-1.0rc2.tar.gz `
+  * `cd gevent-1.0rc2/`
+  * `python setup.py install`
   * `cd ..`
   * `bin/pip install sleekxmpp`
   * `deactivate`

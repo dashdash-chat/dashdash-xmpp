@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# from gevent import monkey; monkey.patch_socket()
+import gevent
 import logging
 import xmlrpclib
 import constants
@@ -24,7 +26,7 @@ class EjabberdCTL(object):
         })
     
     def add_rosteritem(self, user, vinebot_user, nick):
-        self._xmlrpc_command('add_rosteritem', {
+        gevent.spawn(self._xmlrpc_command, 'add_rosteritem', {
             'localuser': user,
             'localserver': constants.domain,
             'user': vinebot_user,
@@ -35,7 +37,7 @@ class EjabberdCTL(object):
         })
     
     def delete_rosteritem(self, user, vinebot_user):
-        self._xmlrpc_command('delete_rosteritem', {
+        gevent.spawn(self._xmlrpc_command, 'delete_rosteritem', {
             'localuser': user,
             'localserver': constants.domain,
             'user': vinebot_user,
@@ -77,8 +79,8 @@ class EjabberdCTL(object):
             return 'unavailable'
     
     def _xmlrpc_command(self, command, data):
-        fn = getattr(self.xmlrpc_server, command)
         logging.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
+        fn = getattr(self.xmlrpc_server, command)
         return fn({
             'user': self.username,
             'server': constants.domain,
