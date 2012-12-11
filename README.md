@@ -54,7 +54,7 @@ Development Setup
   * `../bin/python setup.py install`
   * `cd ..`
   * `wget https://github.com/downloads/SiteSupport/gevent/gevent-1.0rc2.tar.gz` since pypi only has v0.13
-  * `tar xvzf gevent-1.0rc2.tar.gz `
+  * `tar xvzf gevent-1.0rc2.tar.gz`
   * `cd gevent-1.0rc2/`
   * `python setup.py install`
   * `cd ..`
