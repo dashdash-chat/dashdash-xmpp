@@ -1,6 +1,7 @@
 [program:leaf]
 command=<%= node['vine_xmpp']['xmpp_env_dir'] %>/bin/python <%= node['vine_xmpp']['xmpp_repo_dir'] %>/leaf_component.py
 directory=<%= node['vine_xmpp']['xmpp_repo_dir'] %>
+environment=PYTHON_EGG_CACHE="<%= node['vine_xmpp']['xmpp_env_dir'] %>/.python-eggs"
 user=<%= @env_data['server']['user'] %>
 numprocs=1
 stdout_logfile=<%= @log_dir %>/(program_name)s_%(process_num)02d.log
