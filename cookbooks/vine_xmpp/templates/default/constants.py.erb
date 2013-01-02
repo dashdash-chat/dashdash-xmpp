@@ -1,0 +1,42 @@
+import shortuuid
+shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
+
+domain = '<%= @env_data['server']['domain'] %>'
+server_ip = '<%= @env_data['server']['ip'] %>'
+xmlrpc_server = '<%= @env_data['server']['xmpp_domain'] %>'
+
+component_port = <%= @env_data['ports']['component'] %>
+leaves_domain = '<%= @env_data['leaves']['domain_prefix'] %>.<%= @env_data['server']['domain'] %>'
+leaves_jid_user = '<%= @env_data['leaves']['xmpp_user'] %>'
+leaves_jid = '%s@%s' % (leaves_jid_user, domain)
+leaves_secret = '<%= @env_data['leaves']['secret'] %>'
+max_leaves = <%= @env_data['leaves']['max_leaves'] %>
+
+xmlrpc_port = <%= @env_data['ports']['xmlrpc'] %>
+leaves_xmlrpc_user = '<%= @env_data['xmlrpc']['leaves_user'] %>'
+leaves_xmlrpc_password = '<%= @env_data['mysql']['leaves_password'] %>'
+
+leaves_mysql_user = '<%= @env_data['mysql']['leaves_user'] %>'
+leaves_mysql_lock_name = 'leaf'
+leaves_mysql_password ='<%= @env_data['mysql']['leaves_password'] %>'
+db_host = '<%= @env_data['mysql']['host'] %>'
+db_name = '<%= @env_data['mysql']['main_name'] %>'
+
+vinebot_prefix = 'vinebot_'
+
+admin_jids = ['%s@%s' % (user, domain) for user in <%= @env_data['xmpp']['admin_users'] %>]
+graph_xmpp_jid = '%s@%s' % ('<%= @env_data['xmlrpc']['graph_user'] %>', domain)
+
+watched_usernames = <%= @env_data['twilio']['watched_usernames'] %>
+twilio_account_sid = '<%= @env_data['twilio']['account_sid'] %>'
+twilio_auth_token = '<%= @env_data['twilio']['auth_token'] %>'
+twilio_from_number = '<%= @env_data['twilio']['from_number'] %>'
+twilio_to_numbers = <%= @env_data['twilio']['to_numbers'] %>
+
+client_port = <%= @env_data['ports']['client'] %>
+default_user_password = '<%= @env_data['xmpp']['default_password'] %>'
+
+# global variables to save the hassle of passing around the values
+class g(object):
+    db = None 
+    ectl = None
