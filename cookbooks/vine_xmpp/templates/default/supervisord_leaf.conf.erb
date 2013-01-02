@@ -1,5 +1,5 @@
 [program:leaf]
-command=<%= node['vine_xmpp']['xmpp_venv_dir'] %>/bin/python %= node['vine_xmpp']['xmpp_repo_dir'] %>/leaf_component.py
+command=<%= node['vine_xmpp']['xmpp_venv_dir'] %>/bin/python <%= node['vine_xmpp']['xmpp_repo_dir'] %>/leaf_component.py
 directory=<%= node['vine_xmpp']['xmpp_repo_dir'] %>
 user=<%= @env_data['server']['user'] %>
 numprocs=1
