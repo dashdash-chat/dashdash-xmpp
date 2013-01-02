@@ -68,6 +68,6 @@ end
       :logs_dir => "#{node['dirs']['log']}/supervisord",
       :env_data => env_data
     })
-    notifies :start, 'service[supervisor]', :delayed
+    notifies :reload, 'service[supervisor]', :delayed
   end
 end
