@@ -1,14 +1,16 @@
-[program:leaf]
+[program:leaves]
 command=<%= node['vine_xmpp']['xmpp_env_dir'] %>/bin/python <%= node['vine_xmpp']['xmpp_repo_dir'] %>/leaf_component.py
 directory=<%= node['vine_xmpp']['xmpp_repo_dir'] %>
 environment=PYTHON_EGG_CACHE="<%= node['vine_xmpp']['xmpp_env_dir'] %>/.python-eggs"
 user=<%= @env_data['server']['user'] %>
-numprocs=1
-stdout_logfile=<%= @logs_dir %>/%(program_name)s_%(process_num)02d.log
-stderr_logfile=<%= @logs_dir %>/%(program_name)s_%(process_num)02d.log
+process_name=leaf_%(process_num)02d
+numprocs=<%= @env_data['leaves']['num_leaves'] %>
+numprocs_start=1
+stdout_logfile=<%= @logs_dir %>/leaf_%(process_num)02d.log
+stderr_logfile=<%= @logs_dir %>/leaf_%(process_num)02d.log
 autostart=false
 autorestart=false
 ; Need to wait for currently executing tasks to finish at shutdown.
 ; Increase this if you have very long running tasks.
-stopwaitsecs = 300
-priority = 20
+stopwaitsecs=300
+priority=1
