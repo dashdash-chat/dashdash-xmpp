@@ -4,8 +4,8 @@ directory=<%= node['vine_xmpp']['xmpp_repo_dir'] %>
 environment=PYTHON_EGG_CACHE="<%= node['vine_xmpp']['xmpp_env_dir'] %>/.python-eggs"
 user=<%= @env_data['server']['user'] %>
 numprocs=1
-stdout_logfile=<%= @log_dir %>/(program_name)s_%(process_num)02d.log
-stderr_logfile=<%= @log_dir %>/(program_name)s_%(process_num)02d_error.log
+stdout_logfile=<%= @logs_dir %>/%(program_name)s_%(process_num)02d.log
+stderr_logfile=<%= @logs_dir %>/%(program_name)s_%(process_num)02d.log
 autostart=false
 autorestart=false
 ; Need to wait for currently executing tasks to finish at shutdown.
