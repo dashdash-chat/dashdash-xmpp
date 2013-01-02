@@ -6,4 +6,4 @@ long_description IO.read(File.join(File.dirname(__FILE__), 'README.md'))
 version          "0.1.0"
 
 #NOTE using specific versions so that I can stay aware of changes in upstream cookbooks
-depends "nginx", "= 1.1.2"
+depends "vine_shared", "~> 0.1.0"
