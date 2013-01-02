@@ -8,7 +8,7 @@ xmlrpc_server = '<%= @env_data['server']['xmpp_domain'] %>'
 component_port = <%= @env_data['ports']['component'] %>
 leaves_domain = '<%= @env_data['leaves']['domain_prefix'] %>.<%= @env_data['server']['domain'] %>'
 leaves_jid_user = '<%= @env_data['leaves']['xmpp_user'] %>'
-leaves_jid = '%s@%s' % (leaves_jid_user, domain)
+leaves_jid = '%s@%s' % (leaves_jid_user, leaves_domain)
 leaves_secret = '<%= @env_data['leaves']['secret'] %>'
 max_leaves = <%= @env_data['leaves']['max_leaves'] %>
 
