@@ -8,22 +8,6 @@
 #
 env_data = data_bag_item("dev_data", "dev_data")
 
-["leaf"
-].each do |program_name|
-  template "supervisord_#{program_name}.conf" do
-    path "/etc/supervisor/conf.d/supervisord_#{program_name}.conf"
-    source "supervisord_#{program_name}.conf.erb"
-    owner "root"
-    group "root"
-    mode 0644
-    variables ({
-      :logs_dir => "#{node['dirs']['log']}/supervisord",
-      :env_data => env_data
-    })
-    notifies :restart, 'service[supervisor]', :delayed
-  end
-end
-
 # Prepare the virtualenv for the vine-xmpp repo
 python_virtualenv "#{node['vine_xmpp']['xmpp_env_dir']}" do
   owner env_data["server"]["user"]
@@ -69,4 +53,21 @@ template "constants.py" do
   group env_data["server"]["group"]
   mode 0644
   variables :env_data => env_data
+end
+
+# Render the .conf file so that supervisor can manage these processes
+["leaf"
+].each do |program_name|
+  template "supervisord_#{program_name}.conf" do
+    path "/etc/supervisor/conf.d/supervisord_#{program_name}.conf"
+    source "supervisord_#{program_name}.conf.erb"
+    owner "root"
+    group "root"
+    mode 0644
+    variables ({
+      :logs_dir => "#{node['dirs']['log']}/supervisord",
+      :env_data => env_data
+    })
+    notifies :start, 'service[supervisor]', :delayed
+  end
 end
