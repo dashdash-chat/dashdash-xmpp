@@ -901,6 +901,7 @@ if __name__ == '__main__':
                     action='store_const', dest='loglevel',
                     const=logging.DEBUG, default=logging.INFO)
     opts, args = optp.parse_args()
+    logging.basicConfig(format=constants.log_format, level=opts.loglevel)
     g.loglevel = opts.loglevel
     g.use_new_logger('leaf__')
     xmpp = LeafComponent()

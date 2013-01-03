@@ -37,6 +37,8 @@ twilio_to_numbers = <%= @env_data['twilio']['to_numbers'] %>
 client_port = <%= @env_data['ports']['client'] %>
 default_user_password = '<%= @env_data['xmpp']['default_password'] %>'
 
+log_format = '%(asctime)-15s %(name)s %(levelname)-7s - %(message)s'
+
 # global variables to save the hassle of passing around the values
 class g(object):
     loglevel = None
@@ -46,7 +48,7 @@ class g(object):
     
     @classmethod
     def use_new_logger(self, name):
-        formatter = logging.Formatter('%(asctime)-15s %(name)-6s %(levelname)-7s - %(message)s')
+        formatter = logging.Formatter(log_format)
         ch = logging.StreamHandler()
         ch.setLevel(logging.DEBUG)
         ch.setFormatter(formatter)
