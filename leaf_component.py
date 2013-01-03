@@ -233,6 +233,7 @@ class LeafComponent(ComponentXMPP):
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow='unavailable')
+            self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids], pshow='unavailable')
         g.db.cleanup()
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
@@ -260,6 +261,7 @@ class LeafComponent(ComponentXMPP):
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
+            self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids])
         g.logger.info('Ready')
     
     def handle_presence_available(self, presence):
