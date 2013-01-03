@@ -1,3 +1,4 @@
+import logging
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
@@ -38,5 +39,18 @@ default_user_password = '<%= @env_data['xmpp']['default_password'] %>'
 
 # global variables to save the hassle of passing around the values
 class g(object):
+    loglevel = None
+    logger = None
     db = None 
     ectl = None
+    
+    @classmethod
+    def use_new_logger(self, name):
+        formatter = logging.Formatter('%(asctime)-15s %(name)-6s %(levelname)-7s - %(message)s')
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        ch.setFormatter(formatter)
+        g.logger = logging.getLogger(name)
+        g.logger.setLevel(g.loglevel)
+        g.logger.propagate = False  # otherwise the main logging.info (or whatever) gets called too. ugh this was annoying to figure out.
+        g.logger.addHandler(ch)

@@ -29,7 +29,7 @@ else:
 class LeafComponent(ComponentXMPP):
     def __init__(self):
         ComponentXMPP.__init__(self,
-                               constants.leaves_domain, 
+                               constants.leaves_domain,
                                constants.leaves_secret,
                                constants.domain,
                                constants.component_port)
@@ -253,13 +253,14 @@ class LeafComponent(ComponentXMPP):
                     return False
             return constants.max_leaves > 0  # if there are no locks to acquire, but we have to go through the whole loop to make sure we acquire one ourself
         other_leaves_online = register_leaf()
+        g.use_new_logger('%s%02d' % (constants.leaves_mysql_lock_name, self.acquired_lock_num))
         if not other_leaves_online:
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
                 self.send_presences(vinebot, vinebot.everyone)
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
-        logging.info('Ready')
+        g.logger.info('Ready')
     
     def handle_presence_available(self, presence):
         user = None
@@ -293,7 +294,7 @@ class LeafComponent(ComponentXMPP):
                                                from_=constants.twilio_from_number,
                                                if_machine='Hangup',
                                                url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
-                logging.info('%s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
+                g.logger.info('%s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
@@ -411,7 +412,7 @@ class LeafComponent(ComponentXMPP):
                     parent_message_id = g.db.log_message(user, [], msg['body'])
                     self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s. Try another contact in your list?' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
             except NotUserException:
-                logging.error('Received message from unknown user: %s' % msg)
+                g.logger.error('Received message from unknown user: %s' % msg)
             finally:
                 if vinebot:
                     vinebot.release_lock()
@@ -479,11 +480,11 @@ class LeafComponent(ComponentXMPP):
         msg.send()
         g.db.log_message(sender, [recipient], body, vinebot=vinebot, parent_message_id=parent_message_id, parent_command_id=parent_command_id)
         if parent_message_id is None and parent_command_id is None:
-            logging.error('Call to send_alert with no parent. msg=%s' % (body, msg))
+            g.logger.error('Call to send_alert with no parent. msg=%s' % (body, msg))
     
     def activate_vinebot(self, vinebot):
         if vinebot.is_active:
-            logging.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
+            g.logger.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
             return True
         if len(vinebot.edges) == 0:
             raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
@@ -894,14 +895,16 @@ if __name__ == '__main__':
     optp.add_option('-q', '--quiet', help='set logging to ERROR',
                     action='store_const', dest='loglevel',
                     const=logging.ERROR, default=logging.INFO)
-    optp.add_option('-v', '--verbose', help='set logging to COMM',
+    optp.add_option('-v', '--verbose', help='set logging to DEBUG',
                     action='store_const', dest='loglevel',
-                    const=5, default=logging.INFO)
+                    const=logging.DEBUG, default=logging.INFO)
     opts, args = optp.parse_args()
-    logging.basicConfig(level=opts.loglevel, format='%(asctime)-15s %(levelname)-8s %(message)s')
+    g.loglevel = logging.DEBUG#opts.loglevel)
+    g.use_new_logger('leaf__')
     xmpp = LeafComponent()
     if xmpp.connect(constants.server_ip, constants.component_port):
         xmpp.process(block=True)
-        logging.info("Done")
+        g.logger.info("Done")
     else:    
-        logging.error("Leaf was unable to connect")
+        g.logger.error("Unable to connect")
+    logging.shutdown()

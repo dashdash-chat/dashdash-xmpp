@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
-import logging
 from MySQLdb import IntegrityError
 import constants
 from constants import g

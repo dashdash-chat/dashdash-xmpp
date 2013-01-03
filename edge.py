@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
-import logging
 from constants import g
 import user as u
 import vinebot as v
@@ -101,7 +100,7 @@ class FetchedEdge(AbstractEdge):
             if len(result) == 0:
                 raise NotEdgeException
             if result[0][1] is None:
-                logging.error('Edge %s from %s to %s has no vinebot!' % (result[0][0], f_user.name, t_user.name))
+                g.logger.error('Edge %s from %s to %s has no vinebot!' % (result[0][0], f_user.name, t_user.name))
                 raise NotEdgeException
             self.f_user = f_user
             self.t_user = t_user

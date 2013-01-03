@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import gevent
-import logging
 import xmlrpclib
 import constants
+from constants import g
 
 class EjabberdCTL(object):
     def __init__(self, username, password):
@@ -51,12 +51,12 @@ class EjabberdCTL(object):
         for rosteritem in rosteritems['contacts']:
             rosteritem = rosteritem['contact']
             if rosteritem[2]['subscription'] != 'both':
-                logging.warning('Incorrect roster subscription for: %s' % rosteritem)
+                g.logger.warning('Incorrect roster subscription for: %s' % rosteritem)
             if rosteritem[4]['group'] != '%s@%s' % (user, constants.domain):
-                logging.warning('Incorrect roster group for rosteritem: %s' % rosteritem)
+                g.logger.warning('Incorrect roster group for rosteritem: %s' % rosteritem)
             user = rosteritem[0]['jid'].split('@')[0]
             if not user.startswith(constants.vinebot_prefix):
-                logging.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
+                g.logger.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
             roster.append((user, rosteritem[1]['nick'], rosteritem[4]['group']))
         return roster
     
@@ -71,14 +71,14 @@ class EjabberdCTL(object):
             else:
                 return 'unavailable'
         except xmlrpclib.ProtocolError, e:
-            logging.error('ProtocolError in user_status, assuming %s is unavailable: %s' % (user, str(e)))
+            g.logger.error('ProtocolError in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
         except xmlrpclib.Fault, e:
-            logging.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
+            g.logger.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
     
     def _xmlrpc_command(self, command, data):
-        logging.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
+        g.logger.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
         fn = getattr(self.xmlrpc_server, command)
         return fn({
             'user': self.username,

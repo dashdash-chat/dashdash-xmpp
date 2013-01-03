@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import sys
-import logging
+from constants import g
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -67,7 +67,7 @@ class SlashCommandRegistry(object):
         message = message.strip().lstrip('/')
         command_name, _, arg_string = message.partition(' ')
         if len(command_name) > MAX_COMMAND_LENGTH:
-            logging.warning("Max command length of %d exceeded: %s" % (MAX_COMMAND_LENGTH, message))
+            g.logger.warning("Max command length of %d exceeded: %s" % (MAX_COMMAND_LENGTH, message))
             if len(arg_string) > 0:
                 arg_string = command_name[MAX_COMMAND_LENGTH:] + ' ' + arg_string
             else:
@@ -110,9 +110,9 @@ class SlashCommandRegistry(object):
     
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
-            logging.error('/%s is already a registered command.' % slash_command.name)
+            g.logger.error('/%s is already a registered command.' % slash_command.name)
         elif slash_command.name == 'help':
-            logging.error('The /help command is built in and can not be added.' % slash_command.name)
+            g.logger.error('The /help command is built in and can not be added.' % slash_command.name)
         else:
             self.slash_commands[slash_command.name] = slash_command
     
@@ -120,7 +120,7 @@ class SlashCommandRegistry(object):
         if command_name in self.slash_commands:
             del self.slash_commands[command_name]
         elif command_name == 'help':
-            logging.error('The /help command is built-in and can not be removed.' % command_name)
+            g.logger.error('The /help command is built-in and can not be removed.' % command_name)
         else:
-            logging.error('/%s is not a registered command.' % command_name)
+            g.logger.error('/%s is not a registered command.' % command_name)
     

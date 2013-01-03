@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import logging
+# -*- coding: utf-8 -*-\
 import MySQLdb
 import constants
+from constants import g
 
 class MySQLConnection(object):
     def __init__(self, username, password):
@@ -23,15 +23,15 @@ class MySQLConnection(object):
         return []
     
     def execute(self, query, data={}):
-        logging.debug(query % data)
+        g.logger.debug(query % data)
         if not self.conn or not self.cursor:
-            logging.debug("MySQL connection %s missing, attempting to reconnect and retry query" % self)
+            g.logger.debug("MySQL connection %s missing, attempting to reconnect and retry query" % self)
             self.connect()
         try:
             self.cursor.execute(query, data)
         except MySQLdb.OperationalError, e:
             if e[0] > 2000:  # error codes at http://dev.mysql.com/doc/refman/5.5/en/error-handling.html
-                logging.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
+                g.logger.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
                 self.connect()  # Try again, but only once
                 self.cursor.execute(query, data)
             else:
@@ -47,9 +47,9 @@ class MySQLConnection(object):
                                         constants.db_name)
             self.conn.autocommit(True)
             self.cursor = self.conn.cursor()
-            logging.debug("MySQL connection %s ready" % self)
+            g.logger.debug("MySQL connection %s ready" % self)
         except MySQLdb.Error, e:
-            logging.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
+            g.logger.error('MySQL connection and/or cursor creation failed with %d: %s' % (e.args[0], e.args[1]))
             self.cleanup()
     
     def cleanup(self):
@@ -156,10 +156,10 @@ class MySQLManager(object):
         lock_was_acquired = (lock and (lock[0] == 1))
         if lock_was_acquired:
             self._vinebot_conn_dict[lock_name] = db
-            logging.debug('Acquired lock %s with MySQL conn %s' % (lock_name, db))
+            g.logger.debug('Acquired lock %s with MySQL conn %s' % (lock_name, db))
         else:
             self._vinebot_conn_pool.add(db)
-            logging.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
+            g.logger.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
         return lock_was_acquired
     
     def release_vinebot(self, lock_name):
@@ -168,5 +168,5 @@ class MySQLManager(object):
         db = self._vinebot_conn_dict.pop(lock_name)
         db.execute("SELECT RELEASE_LOCK(%(lock_name)s)", {'lock_name': lock_name})
         self._vinebot_conn_pool.add(db)
-        logging.debug('Released lock %s with MySQL conn %s' % (lock_name, db))
+        g.logger.debug('Released lock %s with MySQL conn %s' % (lock_name, db))
     
