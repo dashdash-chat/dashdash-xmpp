@@ -55,19 +55,21 @@ template "constants.py" do
   variables :env_data => env_data
 end
 
-# Render the .conf file so that supervisor can manage these processes
-["leaf"
-].each do |program_name|
-  template "supervisord_#{program_name}.conf" do
-    path "/etc/supervisor/conf.d/supervisord_#{program_name}.conf"
-    source "supervisord_#{program_name}.conf.erb"
-    owner "root"
-    group "root"
-    mode 0644
-    variables ({
-      :logs_dir => "#{node['dirs']['log']}/supervisord",
-      :env_data => env_data
-    })
-    notifies :reload, 'service[supervisor]', :delayed
-  end
+# Create the supervisor program
+supervisor_service "leaves" do
+  command "#{node['vine_xmpp']['xmpp_env_dir']}/bin/python #{node['vine_xmpp']['xmpp_repo_dir']}/leaf_component.py"
+  environment :PYTHON_EGG_CACHE => "#{node['vine_xmpp']['xmpp_env_dir']}/.python-eggs"
+  directory node['vine_xmpp']['xmpp_repo_dir']
+  user env_data['server']['user']
+  process_name "leaf_%(process_num)02d"
+  stdout_logfile "#{node['supervisor']['log_dir']}/leaves.log"
+  stderr_logfile "#{node['supervisor']['log_dir']}/leaves.log"
+  numprocs env_data['leaves']['max_leaves']
+  stopsignal "INT"  # this is the only one that properly logs "Done" from the leaf (I haven't checked which do presence cleanup)
+  autostart false
+  autorestart false
+  priority 2
+  startsecs 10
+  stopwaitsecs 300
+  action :enable
 end
