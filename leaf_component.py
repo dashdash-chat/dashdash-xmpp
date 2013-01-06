@@ -82,6 +82,15 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
                 return [parent_command_id, vinebot, sender, token]
             return False
+        def logid_vinebot_sender_token_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot and len(arg_tokens) <= 1:
+                if len(arg_tokens) == 1:
+                    token = arg_tokens[0]
+                else:
+                    token = None
+                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
+                return [parent_command_id, vinebot, sender, token]
+            return False
         def logid_vinebot_sender_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot:
                 string_or_none = arg_string if len(arg_string.strip()) > 0 else None
@@ -168,6 +177,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string,
                                        action           = self.whisper_msg))
+        self.commands.add(SlashCommand(command_name     = 'foursquare',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Find out where your friend has recently checked in on Foursquare.',
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token_or_none,
+                                       action           = self.foursquare))
         self.commands.add(SlashCommand(command_name     = 'topic',
                                        text_arg_format  = '<new topic>',
                                        text_description = 'Set the topic for the conversation, which friends of participants can see.',
@@ -703,6 +718,22 @@ class LeafComponent(ComponentXMPP):
             return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient.name
         else:
             return parent_command_id, 'You whispered to %s, and no one noticed!' % recipient.name
+    
+    def foursquare(self, parent_command_id, vinebot, sender, friend):
+        if friend:
+            try:
+                friend = FetchedUser(name=friend)
+            except NotUserException:
+                raise ExecutionError, (parent_command_id, 'you can only get the recent checkins of Vine users.')
+        else:  # assume two person conversation
+            if len(vinebot.participants) != 2:
+                raise ExecutionError, (parent_command_id, 'please specify which user\'s check-ins you want.')
+            friend = iter(vinebot.participants.difference([sender])).next()
+        #TODO insert foursquare stuff here
+        if False: #foursquare account found
+            return parent_command_id, 'wtf we shouldnt be here'
+        else:
+            raise ExecutionError, (parent_command_id, 'we couldn\'t find a Foursquare account for %s. Have they connected the same Twitter account to both Vine and Foursquare?' % friend.name)
     
     def set_topic(self, parent_command_id, vinebot, sender, topic):
         if topic and len(topic) > 100:
