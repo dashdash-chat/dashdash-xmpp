@@ -819,7 +819,7 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
     def sync_roster(self, parent_command_id, username):
-        def parse_nick(nick):
+        def marshall_nick(nick):
             # this is here and not in the vinebot class because we need it for the strings we get from ejabberd
             # note that we're comparing nick's and not participant lists because some nick's will contain a "you" in the roster
             usernames = set([])
@@ -835,6 +835,15 @@ class LeafComponent(ComponentXMPP):
                     for comma_piece in comma_pieces:
                         usernames.add(comma_piece.strip())
             return frozenset(usernames)
+        def unmarshall_nick(usernames):
+            if len(usernames) == 1:
+                return list(usernames)[0]
+            else:
+                if 'you' in usernames:
+                    usernames = list(s.difference(['you']))
+                    usernames.insert(0, 'you')
+                comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
+                return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
         try:
             user = FetchedUser(name=username)
             user_roster = user.roster()
@@ -842,19 +851,19 @@ class LeafComponent(ComponentXMPP):
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
-            expected_rosteritems = frozenset([(expected.jiduser, parse_nick(expected.get_nick(user))) for expected in expected_vinebots])
-            actual_rosteritems = frozenset([(actual[0], parse_nick(actual[1])) for actual in user_roster])
+            expected_rosteritems = frozenset([(expected.jiduser, marshall_nick(expected.get_nick(user))) for expected in expected_vinebots])
+            actual_rosteritems = frozenset([(actual[0], marshall_nick(actual[1])) for actual in user_roster])
             errors = []
             for roster_user, roster_nick in expected_rosteritems.difference(actual_rosteritems):
                 errors.append('No rosteritem found for vinebot %s with nick %s' % (roster_user, roster_nick))
-                g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
+                g.ectl.add_rosteritem(user.name, roster_user, unmarshall_nick(roster_nick))
             for roster_user, roster_nick in actual_rosteritems.difference(expected_rosteritems):
                 errors.append('No vinebot found for rosteritem %s with nick %s' % (roster_user, roster_nick))
                 g.ectl.delete_rosteritem(user.name, roster_user)
             for roster_user, roster_nick, roster_group in user_roster:
                 if roster_group != '%s@%s ' % (username, constants.domain):
                     errors.append('Incorrect group %s found for rosteritem %s with nick %s' % (roster_group, roster_user, roster_nick))
-                    g.ectl.add_rosteritem(user.name, roster_user, roster_nick)
+                    g.ectl.add_rosteritem(user.name, roster_user, unmarshall_nick(roster_nick))
             if errors:
                 return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:
