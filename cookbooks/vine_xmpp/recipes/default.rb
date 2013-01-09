@@ -15,21 +15,12 @@ python_virtualenv "#{node['vine_xmpp']['xmpp_env_dir']}" do
   action :create
 end
 ["mysql-python", "dnspython", #'python-daemon' # TODO: do I still need this?
- "twilio", "shortuuid", "sleekxmpp",
+ "twilio", "shortuuid", "sleekxmpp"
 ].each do |library|
   python_pip "#{library}" do
     virtualenv node['vine_xmpp']['xmpp_env_dir']
     action :install
   end
-end
-bash "install gevent 1.0rc2" do  #since pypi only has v0.13
-  cwd node['vine_xmpp']['xmpp_env_dir']
-  code <<-EOH
-    wget https://github.com/downloads/SiteSupport/gevent/gevent-1.0rc2.tar.gz
-    tar xvzf gevent-1.0rc2.tar.gz
-    cd gevent-1.0rc2/
-    #{node['vine_xmpp']['xmpp_env_dir']}/bin/python setup.py install
-  EOH
 end
 
 # Check out the application files and render the python constants template
