@@ -2,40 +2,41 @@ import logging
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
 
-domain = '<%= @env_data['server']['domain'] %>'
-server_ip = '<%= @env_data['server']['ip'] %>'
-xmlrpc_server = '<%= @env_data['server']['xmpp_domain'] %>'
+domain = '<%= node.run_state['config']['domain'] %>'
+server_ip = '<%= node.run_state['config']['xmlrpc']['ip'] %>'
+xmlrpc_server = '<%= node.run_state['config']['xmlrpc']['domain'] %>'
 
-component_port = <%= @env_data['ports']['component'] %>
-leaves_domain = '<%= @env_data['leaves']['domain_prefix'] %>.<%= @env_data['server']['domain'] %>'
-leaves_jid_user = '<%= @env_data['leaves']['xmpp_user'] %>'
+component_port = <%= node.run_state['config']['leaves']['port'] %>
+leaves_domain = '%s.%s' % ('<%= node.run_state['config']['leaves']['subdomain'] %>', domain)
+leaves_jid_user = '<%= node.run_state['config']['leaves']['jid_user'] %>'
 leaves_jid = '%s@%s' % (leaves_jid_user, leaves_domain)
-leaves_secret = '<%= @env_data['leaves']['secret'] %>'
-max_leaves = <%= @env_data['leaves']['max_leaves'] %>
+leaves_secret = '<%= node.run_state['config']['leaves']['secret'] %>'
+max_leaves = <%= node.run_state['config']['leaves']['max_leaves'] %>
 
-xmlrpc_port = <%= @env_data['ports']['xmlrpc'] %>
-leaves_xmlrpc_user = '<%= @env_data['xmlrpc']['leaves_user'] %>'
-leaves_xmlrpc_password = '<%= @env_data['xmlrpc']['leaves_password'] %>'
+xmlrpc_port = <%= node.run_state['config']['xmlrpc']['port'] %>
+leaves_xmlrpc_user = '<%= node.run_state['config']['xmlrpc']['leaves_user'] %>'
+leaves_xmlrpc_password = '<%= node.run_state['config']['xmlrpc']['leaves_password'] %>'
 
-leaves_mysql_user = '<%= @env_data['mysql']['leaves_user'] %>'
+leaves_mysql_user = '<%= node.run_state['config']['mysql']['leaves_user'] %>'
 leaves_mysql_lock_name = 'leaf'
-leaves_mysql_password ='<%= @env_data['mysql']['leaves_password'] %>'
-db_host = '<%= @env_data['mysql']['host'] %>'
-db_name = '<%= @env_data['mysql']['main_name'] %>'
+leaves_mysql_password ='<%= node.run_state['config']['mysql']['leaves_password'] %>'
+db_host = '<%= node.run_state['config']['mysql']['host'] %>'
+db_name = '<%= node.run_state['config']['mysql']['main_name'] %>'
 
 vinebot_prefix = 'vinebot_'
 
-admin_jids = ['%s@%s' % (user, domain) for user in <%= @env_data['xmpp']['admin_users'] %>]
-graph_xmpp_jid = '%s@%s' % ('<%= @env_data['xmlrpc']['graph_user'] %>', domain)
+admin_jids = ['%s@%s' % (user, domain) for user in <%= node.run_state['config']['xmpp_users']['admins'] %>]
+graph_xmpp_jid = '%s@%s' % ('<%= node.run_state['config']['xmlrpc']['graph_user'] %>', domain)
 
-watched_usernames = <%= @env_data['twilio']['watched_usernames'] %>
-twilio_account_sid = '<%= @env_data['twilio']['account_sid'] %>'
-twilio_auth_token = '<%= @env_data['twilio']['auth_token'] %>'
-twilio_from_number = '<%= @env_data['twilio']['from_number'] %>'
-twilio_to_numbers = <%= @env_data['twilio']['to_numbers'] %>
+watched_usernames = <%= node.run_state['config']['twilio']['watched_usernames'] %>
+twilio_account_sid = '<%= node.run_state['config']['twilio']['account_sid'] %>'
+twilio_auth_token = '<%= node.run_state['config']['twilio']['auth_token'] %>'
+twilio_from_number = '<%= node.run_state['config']['twilio']['from_number'] %>'
+twilio_to_numbers = <%= node.run_state['config']['twilio']['to_numbers'] %>
 
-client_port = <%= @env_data['ports']['client'] %>
-default_user_password = '<%= @env_data['xmpp']['default_password'] %>'
+client_port = <%= node.run_state['config']['xmpp_users']['port'] %>
+echo_user = '<%= node.run_state['config']['xmpp_users']['echo_user'] %>'
+default_user_password = '<%= node.run_state['config']['xmpp_users']['default_password'] %>'
 
 log_format = '%(asctime)-15s %(name)s %(levelname)-7s - %(message)s'
 

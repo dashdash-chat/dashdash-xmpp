@@ -7,3 +7,4 @@ version          "0.1.0"
 
 #NOTE using specific versions so that I can stay aware of changes in upstream cookbooks
 depends "vine_shared", "~> 0.1.0"
+depends "deploy_wrapper", "= 0.0.2"
