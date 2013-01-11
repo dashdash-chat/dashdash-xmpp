@@ -87,7 +87,8 @@ vine_ejabberd_ctl "ctl" do  #TODO make sure this sets the correct password too
 end
 
 # Add commonly-used commands to the bash history
-["cd #{xmpp_env_dir} && source bin/activate && cd #{xmpp_repo_dir}"
+["cd #{xmpp_env_dir} && source bin/activate && cd #{xmpp_repo_dir}",
+ "cd #{xmpp_repo_dir} && ../bin/python ./leaf_component.py"
 ].each do |command|
   ruby_block "append line to history" do
     block do
