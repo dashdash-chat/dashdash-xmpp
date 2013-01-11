@@ -47,7 +47,7 @@ template 'constants.py' do
   mode 0644
 end
 
-# Create the supervisor program
+# Create the supervisor programs
 supervisor_service "leaves" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/leaf_component.py"
   environment :PYTHON_EGG_CACHE => "#{xmpp_env_dir}/.python-eggs"
@@ -65,7 +65,22 @@ supervisor_service "leaves" do
   stopwaitsecs 300
   action :enable
 end
+supervisor_service "echobot" do
+  command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/echobot.py"
+  directory xmpp_repo_dir
+  user node.run_state['config']['user']
+  stdout_logfile "#{node['supervisor']['log_dir']}/echobot.log"
+  stderr_logfile "#{node['supervisor']['log_dir']}/echobot.log"
+  stopsignal "INT"
+  autostart true
+  autorestart false
+  priority 10
+  startsecs 10
+  stopwaitsecs 10
+  action :enable
+end
 
+# Add commonly-used commands to the bash history
 ["cd #{xmpp_env_dir} && source bin/activate && cd #{xmpp_repo_dir}"
 ].each do |command|
   ruby_block "append line to history" do
