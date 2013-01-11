@@ -50,7 +50,6 @@ end
 # Create the supervisor programs
 supervisor_service "leaves" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/leaf_component.py"
-  environment :PYTHON_EGG_CACHE => "#{xmpp_env_dir}/.python-eggs"
   directory xmpp_repo_dir
   user node.run_state['config']['user']
   process_name "leaf_%(process_num)02d"
