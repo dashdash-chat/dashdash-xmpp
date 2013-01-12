@@ -83,7 +83,7 @@ vine_ejabberd_ctl "ctl" do  #TODO make sure this sets the correct password too
   localuser node.run_state['config']['xmpp_users']['echo_user']
   localserver node.run_state['config']['domain']
   password node.run_state['config']['xmpp_users']['default_password']
-  action :register
+  action :register_or_update
 end
 
 # Add commonly-used commands to the bash history
