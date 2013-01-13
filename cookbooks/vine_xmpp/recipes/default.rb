@@ -78,13 +78,6 @@ supervisor_service "echobot" do
   stopwaitsecs 10
   action :enable
 end
-vine_ejabberd_ctl "ctl" do  #TODO make sure this sets the correct password too
-  provider "vine_ejabberd_ejabberdctl"
-  localuser node.run_state['config']['xmpp_users']['echo_user']
-  localserver node.run_state['config']['domain']
-  password node.run_state['config']['xmpp_users']['default_password']
-  action :register_or_update
-end
 
 # Add commonly-used commands to the bash history
 ["cd #{xmpp_env_dir} && source bin/activate && cd #{xmpp_repo_dir}",
