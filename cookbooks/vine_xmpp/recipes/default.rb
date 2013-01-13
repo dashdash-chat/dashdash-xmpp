@@ -34,7 +34,7 @@ deploy_wrapper 'xmpp' do
 end
 git xmpp_repo_dir do
     repository "git@github.com:lehrblogger/vine-xmpp.git"
-    branch "leaves-edges"
+    branch "master"
     destination xmpp_repo_dir
     ssh_wrapper "#{node['dirs']['ssl']}/xmpp_deploy_wrapper.sh"
     action :sync
