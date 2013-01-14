@@ -79,6 +79,10 @@ supervisor_service "echobot" do
   action :enable
 end
 
+# Send the leaves and echobot logs to Papertrail
+node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/leaves.log" ] = 'leaves'
+node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/echobot.log"] = 'echobot'
+
 # Add commonly-used commands to the bash history
 ["cd #{xmpp_env_dir} && source bin/activate && cd #{xmpp_repo_dir}",
  "cd #{xmpp_repo_dir} && ../bin/python ./leaf_component.py"
