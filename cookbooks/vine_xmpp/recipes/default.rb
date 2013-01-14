@@ -16,6 +16,15 @@ python_virtualenv xmpp_env_dir do
   group node.run_state['config']['group']
   action :create
 end
+bash "install gevent 1.0rc2" do  #since pypi only has v0.13
+  cwd xmpp_env_dir
+  code <<-EOH
+    wget https://github.com/downloads/SiteSupport/gevent/gevent-1.0rc2.tar.gz
+    tar xvzf gevent-1.0rc2.tar.gz
+    cd gevent-1.0rc2/
+    #{xmpp_env_dir}/bin/python setup.py install
+  EOH
+end
 ['mysql-python', 'dnspython',
  'twilio', 'shortuuid', 'sleekxmpp',
 ].each do |library|

@@ -1,3 +1,4 @@
+from gevent import monkey; monkey.patch_all()
 import sys
 from datetime import datetime
 import MySQLdb
