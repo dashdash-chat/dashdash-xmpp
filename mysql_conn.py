@@ -31,7 +31,7 @@ class MySQLConnection(object):
             self.cursor.execute(query, data)
         except MySQLdb.OperationalError, e:
             if e[0] > 2000:  # error codes at http://dev.mysql.com/doc/refman/5.5/en/error-handling.html
-                g.logger.info('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
+                g.logger.warn('MySQL OperationalError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
                 self.connect()  # Try again, but only once
                 self.cursor.execute(query, data)
             else:

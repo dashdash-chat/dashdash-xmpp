@@ -296,7 +296,7 @@ class LeafComponent(ComponentXMPP):
                                                from_=constants.twilio_from_number,
                                                if_machine='Hangup',
                                                url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
-                g.logger.info('%s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
+                g.logger.info('[twilio] %s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
@@ -315,7 +315,8 @@ class LeafComponent(ComponentXMPP):
             if user in vinebot.participants:  # [] if vinebot is not active
                 if len(vinebot.participants) > 2:
                     self.send_presences(vinebot, vinebot.everyone)
-                else:  # elif len(participants) == 2:
+                else:  # elif len(participants) == 2:    
+                    g.logger.info('[away] %03d participants' % len(vinebot.participants))
                     remaining_user = iter(vinebot.participants.difference([user])).next()
                     self.remove_participant(vinebot, user)  # this deactivates the vinebot
                     self.send_presences(vinebot, [user], pshow=remaining_user.status())
@@ -349,6 +350,7 @@ class LeafComponent(ComponentXMPP):
                         self.send_presences(vinebot, vinebot.everyone.difference([user]))
                     else:  # elif len(participants) == 2:
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
+                    g.logger.info('[offline] %03d participants' % len(vinebot.participants))
                     self.remove_participant(vinebot, user)
                     self.broadcast_alert(vinebot, '%s has disconnected and left the conversation' % user.name)
                 elif user in vinebot.edge_users:
@@ -386,6 +388,7 @@ class LeafComponent(ComponentXMPP):
                         if user in vinebot.participants:
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                         elif user in vinebot.observers:
+                            g.logger.info('[enter] %03d participants' % len(vinebot.participants))
                             self.add_participant(vinebot, user)
                             self.broadcast_alert(vinebot, '%s has joined the conversation' % user.name)
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
@@ -466,6 +469,10 @@ class LeafComponent(ComponentXMPP):
                 new_msg['from'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
                 new_msg.send()
                 actual_recipients.append(recipient)
+                if body and body != '' and sender:
+                    g.logger.info('[message] received')
+        if body and body != '' and sender:
+            g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
     def broadcast_alert(self, vinebot, body, parent_command_id=None):
@@ -474,6 +481,8 @@ class LeafComponent(ComponentXMPP):
     def send_alert(self, vinebot, sender, recipient, body, prefix='***', fromjid=None, parent_message_id=None, parent_command_id=None):
         if body == '':
             return
+        elif body.startswith('Sorry, '):
+            g.logger.info('[error] %s' % body)
         msg = self.Message()
         msg['type'] = 'chat'
         msg['body'] = '%s %s' % (prefix, body)
@@ -490,6 +499,7 @@ class LeafComponent(ComponentXMPP):
             return True
         if len(vinebot.edges) == 0:
             raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
+        g.logger.info('[activate] %03d participants' % len(vinebot.participants))
         user1, user2 = vinebot.edge_users
         self.send_presences(vinebot, [user1], pshow=user2.status())
         self.send_presences(vinebot, [user2], pshow=user1.status())
@@ -500,6 +510,7 @@ class LeafComponent(ComponentXMPP):
         return both_users_online
     
     def add_participant(self, vinebot, user):
+        g.logger.info('[add_participant] %03d participants' % len(vinebot.participants))
         old_participants = vinebot.participants.copy()  # makes a shallow copy, which is good, because it saves queries on User.friends 
         vinebot.add_participant(user)
         if len(vinebot.participants) < 2:
@@ -524,6 +535,7 @@ class LeafComponent(ComponentXMPP):
             self.send_presences(vinebot, vinebot.everyone)
     
     def remove_participant(self, vinebot, user):
+        g.logger.info('[remove_participant] %03d participants' % len(vinebot.participants))
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
         if len(vinebot.participants) == 1:
@@ -600,7 +612,8 @@ class LeafComponent(ComponentXMPP):
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user.name, vinebot.topic)
         else:
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user.name
-        try:
+        try:    
+            g.logger.info('[join] %03d participants' % len(vinebot.participants))
             self.add_participant(vinebot, user)
         except IntegrityError, e:
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
@@ -609,7 +622,8 @@ class LeafComponent(ComponentXMPP):
         self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
-    def user_left(self, parent_command_id, vinebot, user):
+    def user_left(self, parent_command_id, vinebot, user):    
+        g.logger.info('[left] %03d participants' % len(vinebot.participants))
         if len(vinebot.participants) == 2:  # revert to previous status states
             user1, user2 = vinebot.participants
             self.send_presences(vinebot, [user1], pshow=user2.status())
@@ -633,6 +647,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'You can\'t invite someone before the conversation has started.')
         if not invitee.is_online():
             raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee.name)
+        g.logger.info('[invite] %03d participants' % len(vinebot.participants))
         if vinebot.topic:
             alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter.name, invitee.name, vinebot.topic)
         else:
@@ -654,6 +669,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?')
         if not kickee in vinebot.participants:
             raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee.name)
+        g.logger.info('[kick] %03d participants' % len(vinebot.participants))
         self.remove_participant(vinebot, kickee)
         self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
         self.send_alert(vinebot, None, kickee, '%s has kicked you from the conversation' % kicker.name, parent_command_id=parent_command_id)
@@ -695,10 +711,11 @@ class LeafComponent(ComponentXMPP):
         except NotUserException:
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
         if recipient == sender:
-            raise ExecutionError, (parent_command_id, 'you can\'t whisper to youerself.')
+            raise ExecutionError, (parent_command_id, 'you can\'t whisper to yourself.')
         if recipient not in vinebot.participants and recipient.jid not in constants.admin_jids:
             raise ExecutionError, (parent_command_id, 'you can\'t whisper to someone who isn\'t a participant in this conversation.')
         self.send_alert(vinebot, sender, recipient, body, prefix='[%s, whispering]' % sender.name, parent_command_id=parent_command_id)
+        g.logger.info('[whisper] %03d participants' % len(vinebot.participants))
         if len(vinebot.participants) == 2:
             return parent_command_id, 'You whispered to %s, but it\'s just the two of you here so no one would have heard you anyway...' % recipient.name
         else:
@@ -722,6 +739,7 @@ class LeafComponent(ComponentXMPP):
                 else:
                     body = 'You\'ve cleared the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
                 self.send_alert(vinebot, None, sender, body, parent_command_id=None)
+        g.logger.info('[topic] %03d participants' % len(vinebot.participants))
         return parent_command_id, ''
     
     ##### admin /commands
