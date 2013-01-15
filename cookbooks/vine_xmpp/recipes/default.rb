@@ -60,6 +60,7 @@ end
 supervisor_service "leaves" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/leaf_component.py"
   directory xmpp_repo_dir
+  environment :PYTHON_EGG_CACHE => "#{xmpp_env_dir}/.python-eggs"
   user node.run_state['config']['user']
   process_name "leaf_%(process_num)02d"
   stdout_logfile "#{node['supervisor']['log_dir']}/leaves.log"
