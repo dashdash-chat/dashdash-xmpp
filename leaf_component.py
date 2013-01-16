@@ -16,6 +16,7 @@ from constants import g
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLManager
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
+from invite import FetchedInvite, InsertedInvite, NotInviteException, ImmutableInviteException
 from user import FetchedUser, InsertedUser, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
 from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
@@ -218,6 +219,36 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.list_edges))
+        self.commands.add(SlashCommand(command_name     = 'hide_invite',
+                                       text_arg_format  = '<code>',
+                                       text_description = 'Mark an invite as hidden, so that it isn\'t listed on http://vine.im',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.hide_invite))
+        self.commands.add(SlashCommand(command_name     = 'show_invite',
+                                       text_arg_format  = '<code>',
+                                       text_description = 'Mark an invite as visible, so that it is listed on http://vine.im.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.show_invite))
+        self.commands.add(SlashCommand(command_name     = 'new_invite',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Generate a new invite with the given user as the sender.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.new_invite))
+        self.commands.add(SlashCommand(command_name     = 'del_invite',
+                                       text_arg_format  = '<code>',
+                                       text_description = 'Delete the specified invite, but onlf it it\'s unsed.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.del_invite))
+        self.commands.add(SlashCommand(command_name     = 'invites',
+                                       text_arg_format  = '<username>',
+                                       text_description = 'List all of the invites for the specified user.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.list_invites))
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
@@ -914,6 +945,71 @@ class LeafComponent(ComponentXMPP):
             output += '\n\t%d outgoing edges' % len(outgoing)
             if len(outgoing) > 0: output += '\n\t\t'
             output += '\n\t\t'.join(['%d %s' % (edge.t_user.id, edge.t_user.name) for edge in outgoing ])
+            return parent_command_id, output
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
+    def hide_invite(self, parent_command_id, invite_code):
+        try:
+            invite = FetchedInvite(invite_code)
+            if not invite.visible:
+                return parent_command_id, '%s\'s invite %s was already hidden.' % (invite.sender.name, invite.code)
+            invite.hide()
+            return parent_command_id, '%s\'s invite %s has been hidden.' % (invite.sender.name, invite.code)
+        except NotInviteException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
+        except ImmutableInviteException, e:
+            raise ExecutionError, (parent_command_id, 'this invite has been used, so you can\'t hide it.')
+    
+    def show_invite(self, parent_command_id, invite_code):
+        try:
+            invite = FetchedInvite(invite_code)
+            if invite.visible:
+                return parent_command_id, '%s\'s invite %s was already visible.' % (invite.sender.name, invite.code)
+            invite.show()
+            return parent_command_id, '%s\'s invite %s has been set to visible.' % (invite.sender.name, invite.code)
+        except NotInviteException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
+        except ImmutableInviteException, e:
+            raise ExecutionError, (parent_command_id, 'this invite has been used, so is already visible.')
+    
+    def new_invite(self, parent_command_id, username):
+        try:
+            sender = FetchedUser(name=username)
+            invite = InsertedInvite(sender)
+            return parent_command_id, 'http://%s/invite/%s created for %s.' % (constants.domain, invite.code, sender.name)
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
+    def del_invite(self, parent_command_id, invite_code):
+        try:
+            invite = FetchedInvite(invite_code)
+            invite.delete()
+            return parent_command_id, '%s\'s invite %s has been deleted.' % (invite.sender.name, invite.code)
+        except NotInviteException, e:
+            raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
+        except ImmutableInviteException, e:
+            raise ExecutionError, (parent_command_id, 'you can\'t delete an invite that\'s been used.')
+        
+    def list_invites(self, parent_command_id, username):
+        try:
+            sender = FetchedUser(name=username)
+            invites = FetchedInvite.fetch_sender_invites(sender)
+            visible = filter(lambda invite: invite.visible and invite.recipient is None, invites)
+            used = filter(lambda invite: invite.recipient is not None, invites)
+            hidden = filter(lambda invite: not invite.visible and invite.recipient is None, invites)
+            if (len(visible) + len(used) + len(hidden)) != len(invites):
+                raise ExecutionError, (parent_command_id, 'something bad happened to the invite list calculations for %s' % user)
+            output = '%d %s has:' % (sender.id, sender.name)
+            output += '\n\t%d visible invites' % len(visible)
+            if len(visible) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['http://%s/invite/%s' % (constants.domain, invite.code) for invite in visible])
+            output += '\n\t%d used invites' % len(used)
+            if len(used) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['http://%s/invite/%s - %s' % (constants.domain, invite.code, invite.recipient.name) for invite in used])
+            output += '\n\t%d hidden invites' % len(hidden)
+            if len(hidden) > 0: output += '\n\t\t'
+            output += '\n\t\t'.join(['http://%s/invite/%s' % (constants.domain, invite.code) for invite in hidden])
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
