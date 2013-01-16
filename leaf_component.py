@@ -936,15 +936,15 @@ class LeafComponent(ComponentXMPP):
             if (len(outgoing) + len(incoming) + len(symmetric)) != len(edges):
                 raise ExecutionError, (parent_command_id, 'something bad happened to the edge set calculations for %s' % user)
             output = '%d %s has:' % (user.id, user.name)
-            output += '\n\t%d friends (symmetric edges)' % len(user.friends)
-            if len(user.friends) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['%d %s' % (friend.id, friend.name) for friend in user.friends])
-            output += '\n\t%d incoming edges' % len(incoming)
-            if len(incoming) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['%d %s' % (edge.f_user.id, edge.f_user.name) for edge in incoming ])
-            output += '\n\t%d outgoing edges' % len(outgoing)
-            if len(outgoing) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['%d %s' % (edge.t_user.id, edge.t_user.name) for edge in outgoing ])
+            output += self._format_list_output(user.friends,
+                                               'friends (symmetric edges)',
+                                               lambda friend: '%d %s' % (friend.id, friend.name))
+            output += self._format_list_output(incoming,
+                                               'incoming edges',
+                                               lambda edge: '%d %s' % (edge.f_user.id, edge.f_user.name))
+            output += self._format_list_output(outgoing,
+                                               'outgoing edges',
+                                               lambda edge: '%d %s' % (edge.t_user.id, edge.t_user.name))
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
@@ -1001,18 +1001,25 @@ class LeafComponent(ComponentXMPP):
             if (len(visible) + len(used) + len(hidden)) != len(invites):
                 raise ExecutionError, (parent_command_id, 'something bad happened to the invite list calculations for %s' % user)
             output = '%d %s has:' % (sender.id, sender.name)
-            output += '\n\t%d visible invites' % len(visible)
-            if len(visible) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['http://%s/invite/%s' % (constants.domain, invite.code) for invite in visible])
-            output += '\n\t%d used invites' % len(used)
-            if len(used) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['http://%s/invite/%s - %s' % (constants.domain, invite.code, invite.recipient.name) for invite in used])
-            output += '\n\t%d hidden invites' % len(hidden)
-            if len(hidden) > 0: output += '\n\t\t'
-            output += '\n\t\t'.join(['http://%s/invite/%s' % (constants.domain, invite.code) for invite in hidden])
+            output += self._format_list_output(visible,
+                                               'visible invites',
+                                               lambda invite: 'http://%s/invite/%s' % (constants.domain, invite.code))
+            output += self._format_list_output(used,
+                                               'used invites',
+                                               lambda invite: 'http://%s/invite/%s by %s' % (constants.domain, invite.code, invite.recipient.name))
+            output += self._format_list_output(hidden,
+                                               'hidden invites',
+                                               lambda invite: 'http://%s/invite/%s' % (constants.domain, invite.code))
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
+    def _format_list_output(self, items, title, item_formatter):
+        output = '\n\t%d %s' % (len(items), title)
+        if len(items) > 0:
+            output += '\n\t\t'
+        output += '\n\t\t'.join([item_formatter(item) for item in items])
+        return output
     
 
 if __name__ == '__main__':
