@@ -3,6 +3,7 @@
 import MySQLdb
 import sys
 import os, random, string  # for password generation    
+import constants
 from constants import g
 import user as u
 
@@ -21,6 +22,8 @@ class ImmutableInviteException(Exception):
     pass
 
 class AbstractInvite(object):
+    url_prefix = 'http://%s/invite/' % constants.domain
+    
     def __init__(self):
         self.code = None
         self.sender = None
@@ -67,6 +70,11 @@ class AbstractInvite(object):
                         'code': self.code
                      })
     
+    def __getattr__(self, name):
+        if name == 'url':
+            return '%s%s' % (AbstractInvite.url_prefix, self.code)
+        # __getattr__ is only called as a last resort, so we don't need a catchall
+    
     def __str__(self):
         return self.__repr__()
     
@@ -109,6 +117,8 @@ class InsertedInvite(AbstractInvite):
 class FetchedInvite(AbstractInvite):
     def __init__(self, code, sender_id=None, recipient_id=None, visible=None):
         super(FetchedInvite, self).__init__()
+        if code.startswith(super(FetchedInvite, self).url_prefix):
+            code = code.replace(super(FetchedInvite, self).url_prefix, '')
         self.code = code
         if sender_id and visible is not None:  # recipient_id can be None
             self.sender = u.FetchedUser(dbid=sender_id)

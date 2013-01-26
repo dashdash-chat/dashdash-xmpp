@@ -977,7 +977,7 @@ class LeafComponent(ComponentXMPP):
         try:
             sender = FetchedUser(name=username)
             invite = InsertedInvite(sender)
-            return parent_command_id, 'http://%s/invite/%s created for %s.' % (constants.domain, invite.code, sender.name)
+            return parent_command_id, '%s created for %s.' % (invite.url, sender.name)
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
     
@@ -1003,13 +1003,13 @@ class LeafComponent(ComponentXMPP):
             output = '%d %s has:' % (sender.id, sender.name)
             output += self._format_list_output(visible,
                                                'visible invites',
-                                               lambda invite: 'http://%s/invite/%s' % (constants.domain, invite.code))
+                                               lambda invite: invite.url)
             output += self._format_list_output(used,
                                                'used invites',
-                                               lambda invite: 'http://%s/invite/%s by %s' % (constants.domain, invite.code, invite.recipient.name))
+                                               lambda invite: '%s by %s' % (invite.url, invite.recipient.name))
             output += self._format_list_output(hidden,
                                                'hidden invites',
-                                               lambda invite: 'http://%s/invite/%s' % (constants.domain, invite.code))
+                                               lambda invite: invite.url)
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
