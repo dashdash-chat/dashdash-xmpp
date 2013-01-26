@@ -175,6 +175,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_string_or_none,
                                        action           = self.set_topic))
+        self.commands.add(SlashCommand(command_name     = 'invites',
+                                       text_arg_format  = '',
+                                       text_description = 'List your own invites',
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.invites))
+       
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -243,12 +250,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.del_invite))
-        self.commands.add(SlashCommand(command_name     = 'invites',
+        self.commands.add(SlashCommand(command_name     = 'invites_for',
                                        text_arg_format  = '<username>',
                                        text_description = 'List all of the invites for the specified user.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
-                                       action           = self.list_invites))
+                                       action           = self.invites_for))
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
@@ -990,10 +997,14 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
         except ImmutableInviteException, e:
             raise ExecutionError, (parent_command_id, 'you can\'t delete an invite that\'s been used.')
-        
-    def list_invites(self, parent_command_id, username):
+    
+    def invites(self, parent_command_id, vinebot, sender):
+        return self.invites_for(parent_command_id, None, sender)
+    
+    def invites_for(self, parent_command_id, username, sender=None):
         try:
-            sender = FetchedUser(name=username)
+            if not sender:
+                sender = FetchedUser(name=username)
             invites = FetchedInvite.fetch_sender_invites(sender)
             visible = filter(lambda invite: invite.visible and invite.recipient is None, invites)
             used = filter(lambda invite: invite.recipient is not None, invites)

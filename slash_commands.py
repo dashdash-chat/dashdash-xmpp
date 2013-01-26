@@ -79,7 +79,7 @@ class SlashCommandRegistry(object):
         command_name, arg_string = self.parse_command(message)
         if command_name in self.slash_commands:
             slash_command = self.slash_commands[command_name]
-            try: 
+            try:
                 parent_command_id, result_message = slash_command.execute(sender, arg_string, vinebot)
                 if result_message is not None:  # this way we can return an empty string to send no response
                     return parent_command_id, result_message
