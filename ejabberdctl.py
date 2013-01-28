@@ -6,35 +6,13 @@ import xmlrpclib
 import constants
 from constants import g
 
-class FireAndForget(xmlrpclib.Transport):
-    mock_xml_response = u'<?xml version="1.0"?><methodResponse><params><param><value><struct><member><name>res</name><value><int>0</int></value></member></struct></value></param></params></methodResponse>'
-    
-    def single_request(self, host, handler, request_body, verbose=0):
-        h = self.make_connection(host)
-        if verbose:
-            h.set_debuglevel(1)
-        try:
-            self.send_request(h, handler, request_body)
-            self.send_host(h, host)
-            self.send_user_agent(h)
-            self.send_content(h, request_body)
-            self.verbose = verbose
-            h.close()  # h is closed by the standard transport anyway, so it's fine to ignore the response by doing this.
-            response = io.StringIO(self.mock_xml_response)
-            return self.parse_response(response)
-        except xmlrpclib.Fault:
-            raise
-        except Exception:
-            # All unexpected errors leave connection in a strange state, so we clear it.
-            self.close()
-            raise
-    
+NUM_RETRIES = 3
 
 class EjabberdCTL(object):
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.xmlrpc_server_needsresponse = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+        self.xmlrpc_server_shared = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
     
     def register(self, user, password):
         self._xmlrpc_command('register', {
@@ -50,23 +28,39 @@ class EjabberdCTL(object):
         })
     
     def add_rosteritem(self, user, vinebot_user, nick):
-        gevent.spawn(self._xmlrpc_command, 'add_rosteritem', {
-            'localuser': user,
-            'localserver': constants.domain,
-            'user': vinebot_user,
-            'server': constants.leaves_domain,
-            'group': '%s@%s ' % (user, constants.domain),
-            'nick': nick,
-            'subs': 'both'
-        }, fire_and_forget=True)
-    
+        def wrapped_add_rosteritem(user, vinebot_user, nick):
+            xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+            for i in range(1, NUM_RETRIES + 1):
+                result = self._xmlrpc_command('add_rosteritem', {
+                    'localuser': user,
+                    'localserver': constants.domain,
+                    'user': vinebot_user,
+                    'server': constants.leaves_domain,
+                    'group': '%s@%s ' % (user, constants.domain),
+                    'nick': nick,
+                    'subs': 'both'
+                }, xmlrpc_server)
+                if result['res'] == 0:
+                    return
+                else:
+                    g.logger.warning('Failed add_rosteritem XMLRPC request #%d for %s with %s and %s: %s' % (i, user, vinebot_user, nick, result))
+        gevent.spawn(wrapped_add_rosteritem, user, vinebot_user, nick)
+        
     def delete_rosteritem(self, user, vinebot_user):
-        gevent.spawn(self._xmlrpc_command, 'delete_rosteritem', {
-            'localuser': user,
-            'localserver': constants.domain,
-            'user': vinebot_user,
-            'server': constants.leaves_domain,
-        }, fire_and_forget=True)
+        def wrapped_delete_rosteritem(user, vinebot_user):
+            xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+            for i in range(1, NUM_RETRIES + 1):
+                result = self._xmlrpc_command('delete_rosteritem', {
+                    'localuser': user,
+                    'localserver': constants.domain,
+                    'user': vinebot_user,
+                    'server': constants.leaves_domain
+                }, xmlrpc_server)
+                if result['res'] == 0:
+                    return
+                else:
+                    g.logger.warning('Failed delete_rosteritem XMLRPC request #%d for %s with %s: %s' % (i, user, vinebot_user, result))
+        gevent.spawn(wrapped_delete_rosteritem, user, vinebot_user)
     
     def get_roster(self, user):
         rosteritems = self._xmlrpc_command('get_roster', {
@@ -102,13 +96,10 @@ class EjabberdCTL(object):
             g.logger.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
     
-    def _xmlrpc_command(self, command, data, fire_and_forget=False):        
+    def _xmlrpc_command(self, command, data, xmlrpc_server=None):        
         g.logger.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
-        if fire_and_forget:
-            xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port),
-                                                  transport=FireAndForget())
-        else:
-            xmlrpc_server = self.xmlrpc_server_needsresponse
+        if xmlrpc_server is None:
+            xmlrpc_server = self.xmlrpc_server_shared
         fn = getattr(xmlrpc_server, command)
         return fn({
             'user': self.username,
