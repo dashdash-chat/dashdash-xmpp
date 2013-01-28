@@ -5,6 +5,7 @@ import MySQLdb
 from MySQLdb import IntegrityError, OperationalError
 import logging
 from optparse import OptionParser
+import random
 import uuid
 import shortuuid
 import sleekxmpp
@@ -26,6 +27,8 @@ if sys.version_info < (3, 0):
     sys.setdefaultencoding('utf8')
 else:
     raw_input = input
+
+ROSTER_SYNC_PROBABILITY = 100
 
 class LeafComponent(ComponentXMPP):
     def __init__(self):
@@ -335,6 +338,9 @@ class LeafComponent(ComponentXMPP):
                                                if_machine='Hangup',
                                                url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
                 g.logger.info('[twilio] %s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
+            if random.randint(1, ROSTER_SYNC_PROBABILITY) == 1:
+                _, result = self.sync_roster(None, user.name)
+                g.logger.info('Auto sync_roster in handle_presence_available: %s' % result)
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
