@@ -328,12 +328,30 @@ class FetchedVinebot(AbstractVinebot):
         self._topic = self._fetch_topic()
     
     @staticmethod
-    def fetch_vinebots_with_participants():
-        vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id 
-                                                   FROM participants
-                                                   GROUP BY vinebot_id
-                                                """, strip_pairs=True)
-        return [FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids]
+    def fetch_vinebots_with_participants(participants=[]):
+        if len(participants) == 0:
+            vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id 
+                                                       FROM participants
+                                                       GROUP BY vinebot_id
+                                                    """, strip_pairs=True)   
+            return [FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids]
+        elif len(participants) == 2:
+            participants = list(participants)
+            vinebot_ids = g.db.execute_and_fetchall("""SELECT first_participants.vinebot_id 
+                                                       FROM participants AS first_participants
+                                                       WHERE first_participants.user_id = %(first_user_id)s
+                                                       AND (SELECT COUNT(*) 
+                                                            FROM participants AS second_participants
+                                                            WHERE second_participants.user_id = %(second_user_id)s
+                                                            AND second_participants.vinebot_id = first_participants.vinebot_id
+                                                           ) > 0
+                                                        """, {
+                                                            'first_user_id': participants[0].id,
+                                                            'second_user_id': participants[1].id
+                                                        }, strip_pairs=True)
+            return [FetchedVinebot(can_write=True, dbid=vinebot_id) for vinebot_id in vinebot_ids]  #NOTE these vinebots need write privileges to change edges
+        else:
+            raise Exception, 'Passed invalid number of participants %d to fetch_vinebots_with_participants.' % len(participants)
     
     @staticmethod
     def fetch_vinebots_with_edges():

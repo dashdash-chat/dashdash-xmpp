@@ -577,14 +577,25 @@ class LeafComponent(ComponentXMPP):
         old_participants = vinebot.participants.copy()
         vinebot.remove_participant(user)
         if len(vinebot.participants) == 1:
-            #LATER if two users have two active vinebots, one with an edge, and the person leaves the one with the edge, it won't get moved to the other
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
             self.send_presences(vinebot, vinebot.observers, pshow='unavailable')
-            if len(vinebot.edges) == 1:
-                vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
-            elif len(vinebot.edges) == 2:
-                vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)
+            if len(vinebot.edges) > 0:
+                # Get the active vinebots that have only these two participants, but not the ones that already have edges!
+                active_vinebots = FetchedVinebot.fetch_vinebots_with_participants(participants=old_participants)
+                active_vinebots = filter(lambda active_vinebot: len(active_vinebot.edges) == 0, active_vinebots)
+                if len(active_vinebots) > 0:  # These two users still have an active vinebot, so we need to transfer their edge(s)
+                    for edge in vinebot.edges:
+                        edge.change_vinebot(active_vinebots[0])  # It doesn't matter which active vinebot they get transferred to though
+                    for active_vinebot in active_vinebots:
+                        active_vinebot.release_lock()
+                    vinebot.update_rosters(old_participants, set([]))
+                    vinebot.delete()
+                else:
+                    if len(vinebot.edges) == 1:
+                        vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
+                    else:#if len(vinebot.edges) == 2:
+                        vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)
             else:
                 vinebot.update_rosters(old_participants, set([]))
                 vinebot.delete()
