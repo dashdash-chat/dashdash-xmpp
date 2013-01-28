@@ -62,7 +62,7 @@ class EjabberdCTL(object):
                     g.logger.warning('Failed delete_rosteritem XMLRPC request #%d for %s with %s: %s' % (i, user, vinebot_user, result))
         gevent.spawn(wrapped_delete_rosteritem, user, vinebot_user)
     
-    def get_roster(self, user):
+    def get_roster(self, user):    
         rosteritems = self._xmlrpc_command('get_roster', {
             'user': user, 
             'host': constants.domain})
@@ -80,7 +80,7 @@ class EjabberdCTL(object):
         return roster
     
     def user_status(self, user):
-        try:              
+        try:
             res = self._xmlrpc_command('user_sessions_info', {
                 'user': user,
                 'host': constants.domain
