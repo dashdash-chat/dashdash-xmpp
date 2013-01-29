@@ -38,9 +38,9 @@ class SlashCommand(object):
         # and the sender in case the args depend on it or in case it *should* be an arg
         # and the recipient so that the leaf can figure out which vinebot this command was for
         # and the original string in case not all of the tokens in the list should be treated as individual arguments
-        # and the tokenized args, all converted to lowercase (.split(' ') returns arrays with '' as an element, so filter those out)
+        # and the tokenized args (.split(' ') returns arrays with '' as an element, so filter those out)
         # note that, if successful, this will also return the parent_command_id, to be used by the command's action method
-        arg_tokens = [arg.lower() for arg in filter(lambda arg: arg != '', arg_string.split(' '))]
+        arg_tokens = filter(lambda arg: arg != '', arg_string.split(' '))
         args = self.transform_args(self.name, sender, vinebot, arg_string, arg_tokens)
         if args is False:
             raise ArgFormatError

@@ -303,6 +303,7 @@ class AbstractUser(object):
 class InsertedUser(AbstractUser):
     def __init__(self, name, password):
         super(InsertedUser, self).__init__(can_write=True)
+        name = name.lower()
         try:
             dbid = g.db.execute("""INSERT INTO users (name)
                                    VALUES (%(name)s)
@@ -336,17 +337,17 @@ class FetchedUser(AbstractUser):
         super(FetchedUser, self).__init__(can_write)
         if name and dbid:
             self.id = dbid
-            self.name = name
+            self.name = name.lower()
         elif name:
             dbid = g.db.execute_and_fetchall("""SELECT id
                                                 FROM users
                                                 WHERE name = %(name)s
                                                 AND is_active = true
                                              """, {
-                                                'name': name
+                                                'name': name.lower()
                                              }, strip_pairs=True)
             self.id = dbid[0] if len(dbid) == 1 else None
-            self.name = name
+            self.name = name.lower()
         elif dbid:
             name = g.db.execute_and_fetchall("""SELECT name
                                                 FROM users
@@ -360,5 +361,5 @@ class FetchedUser(AbstractUser):
         else:
             raise Exception, 'User objects must be initialized with either a name or id.'
         if not self.id or not self.name:
-            raise NotUserException, 'User with name=%s and id=%s was not found in the database' % (name, dbid)
+            raise NotUserException, 'User with name=%s and id=%s was not found in the database' % (name.lower(), dbid)
     
