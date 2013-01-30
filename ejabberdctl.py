@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import io
+import errno
+import socket
 import gevent
 import xmlrpclib
 import constants
@@ -31,15 +33,21 @@ class EjabberdCTL(object):
         def wrapped_add_rosteritem(user, vinebot_user, nick):
             xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
             for i in range(1, NUM_RETRIES + 1):
-                result = self._xmlrpc_command('add_rosteritem', {
-                    'localuser': user,
-                    'localserver': constants.domain,
-                    'user': vinebot_user,
-                    'server': constants.leaves_domain,
-                    'group': '%s@%s ' % (user, constants.domain),
-                    'nick': nick,
-                    'subs': 'both'
-                }, xmlrpc_server)
+                try:
+                    result = self._xmlrpc_command('add_rosteritem', {
+                        'localuser': user,
+                        'localserver': constants.domain,
+                        'user': vinebot_user,
+                        'server': constants.leaves_domain,
+                        'group': '%s@%s ' % (user, constants.domain),
+                        'nick': nick,
+                        'subs': 'both'
+                    }, xmlrpc_server)    
+                except socket.error as e:
+                    if e.errno == errno.ECONNRESET:
+                        g.logger.warning('Failed add_rosteritem XMLRPC request #%d for %s with %s and %s: %s' % (i, user, vinebot_user, nick, e))
+                    else:
+                        raise e
                 if result['res'] == 0:
                     return
                 else:
@@ -50,12 +58,18 @@ class EjabberdCTL(object):
         def wrapped_delete_rosteritem(user, vinebot_user):
             xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
             for i in range(1, NUM_RETRIES + 1):
-                result = self._xmlrpc_command('delete_rosteritem', {
-                    'localuser': user,
-                    'localserver': constants.domain,
-                    'user': vinebot_user,
-                    'server': constants.leaves_domain
-                }, xmlrpc_server)
+                try:
+                    result = self._xmlrpc_command('delete_rosteritem', {
+                        'localuser': user,
+                        'localserver': constants.domain,
+                        'user': vinebot_user,
+                        'server': constants.leaves_domain
+                    }, xmlrpc_server)
+                except socket.error as e:
+                    if e.errno == errno.ECONNRESET:
+                        g.logger.warning('Failed delete_rosteritem XMLRPC request #%d for %s with %s: %s' % (i, user, vinebot_user, e))
+                    else:
+                        raise e
                 if result['res'] == 0:
                     return
                 else:
