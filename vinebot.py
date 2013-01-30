@@ -343,8 +343,13 @@ class FetchedVinebot(AbstractVinebot):
                                                        AND (SELECT COUNT(*) 
                                                             FROM participants AS second_participants
                                                             WHERE second_participants.user_id = %(second_user_id)s
-                                                            AND second_participants.vinebot_id = first_participants.vinebot_id
+                                                            AND first_participants.vinebot_id = second_participants.vinebot_id
                                                            ) > 0
+                                                       AND (SELECT COUNT(*) 
+                                                            FROM participants AS other_participants
+                                                            WHERE other_participants.user_id NOT IN (%(first_user_id)s, %(second_user_id)s)
+                                                            AND first_participants.vinebot_id = other_participants.vinebot_id
+                                                           ) = 0
                                                         """, {
                                                             'first_user_id': participants[0].id,
                                                             'second_user_id': participants[1].id
