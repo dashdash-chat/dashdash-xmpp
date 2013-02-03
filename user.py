@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import re
 import sys
 from MySQLdb import IntegrityError
 import constants
@@ -304,6 +305,8 @@ class InsertedUser(AbstractUser):
     def __init__(self, name, password):
         super(InsertedUser, self).__init__(can_write=True)
         name = name.lower()
+        if not re.search('^\w{1,15}$', name):
+            raise NotUserException, 'Usernames must match /^\w{1,15}$/'
         try:
             dbid = g.db.execute("""INSERT INTO users (name)
                                    VALUES (%(name)s)
