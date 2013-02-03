@@ -91,7 +91,6 @@ class InsertedInvite(AbstractInvite):
         for i in range(10):
             try:
                 new_code = self._generate_code()
-                g.logger.warn('%s, %s' % (sender.id, new_code))
                 g.db.execute("""INSERT INTO invites (code, sender)
                                 VALUES (%(code)s, %(sender)s)
                              """, {
