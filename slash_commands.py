@@ -98,9 +98,9 @@ class SlashCommandRegistry(object):
             for slash_command in self.slash_commands.values():
                 if slash_command.validate_sender(sender, vinebot):
                     if slash_command.arg_format == '':
-                        command_string += '\t/%s: %s\n' % (slash_command.name, slash_command.description)
+                        command_string += '*\t/%s: %s\n' % (slash_command.name, slash_command.description)
                     else:
-                        command_string += '\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
+                        command_string += '*\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
                 return None, 'You do not have permission to send any commands to this vinebot.'
             else:
