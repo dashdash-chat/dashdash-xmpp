@@ -78,6 +78,16 @@ class AbstractUser(object):
         else:
             return False
     
+    def blockees(self):
+        block_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
+                                                   FROM blocks, users
+                                                   WHERE blocks.to_user_id = users.id
+                                                   AND blocks.from_user_id = %(from_user_id)s
+                                                """, {
+                                                   'from_user_id': self.id
+                                                })
+        return frozenset([FetchedUser(name=block_pair[0], dbid=block_pair[1]) for block_pair in block_pairs])
+    
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                     FROM users, edges AS outgoing, edges AS incoming

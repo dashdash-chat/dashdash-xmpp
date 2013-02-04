@@ -159,6 +159,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token,
                                        action           = self.unblock_user))
+        self.commands.add(SlashCommand(command_name     = 'blocks',
+                                       list_rank        = 702,
+                                       text_arg_format  = '',
+                                       text_description = 'List the users you currently have blocked.',
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.list_blockees))
         self.commands.add(SlashCommand(command_name     = 'join',
                                        list_rank        = 900,
                                        text_arg_format  = '',
@@ -825,6 +832,14 @@ class LeafComponent(ComponentXMPP):
         else:
             g.logger.info('[unblock] missing')
             raise ExecutionError, (parent_command_id, '%s wasn\'t blocked.' % unblockee.name)
+    
+    def list_blockees(self, parent_command_id, vinebot, user):
+        blockees = user.blockees()
+        if len(blockees) > 0:
+            output = ''.join(['\t%s\n' % blockee.name for blockee in blockees]).strip('\n')
+            return parent_command_id, 'You\'ve blocked %d user%s:\n%s' % (len(blockees), 's' if len(blockees) > 1 else '', output)
+        else:
+            return parent_command_id, 'You don\'t currently have any users blocked.'
     
     def list_participants(self, parent_command_id, vinebot, user):
         usernames = [participant.name for participant in vinebot.participants.difference([user])]
