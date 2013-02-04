@@ -28,6 +28,9 @@ vinebot_prefix = 'vinebot_'
 admin_jids = ['%s@%s' % (user, domain) for user in <%= node.run_state['config']['xmpp_users']['admins'] %>]
 graph_xmpp_jid = '%s@%s' % ('<%= node.run_state['config']['xmlrpc']['graph_user'] %>', domain)
 
+twitter_consumer_key = '<%= node.run_state['config']['twitter']['consumer_key'] %>'
+twitter_consumer_secret = '<%= node.run_state['config']['twitter']['consumer_secret'] %>'
+
 watched_usernames = <%= node.run_state['config']['twilio']['watched_usernames'] %>
 twilio_account_sid = '<%= node.run_state['config']['twilio']['account_sid'] %>'
 twilio_auth_token = '<%= node.run_state['config']['twilio']['auth_token'] %>'

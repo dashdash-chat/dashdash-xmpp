@@ -334,36 +334,56 @@ class InsertedUser(AbstractUser):
             g.ectl.register(name, password)
         self.id = dbid
         self.name = name
+        self.twitter_id = None  # Newly-created users won't ever have tokens, since they haven't auth'd on the site yet
+        self.twitter_token = None
+        self.twitter_secret = None
     
 
 class FetchedUser(AbstractUser):
     def __init__(self, can_write=False, name=None, dbid=None):
         super(FetchedUser, self).__init__(can_write)
+        self.name = None
+        self.id = None
         if name and dbid:
-            self.id = dbid
-            self.name = name.lower()
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret
+                                               FROM users
+                                               WHERE id = %(id)s
+                                            """, {
+                                               'id': dbid
+                                            })
+            if res and len(res) == 1:  # Otherwise something bad has happened and we should raise the exception below
+                res = res[0]
+                self.id = dbid
+                self.name = name.lower()
         elif name:
-            dbid = g.db.execute_and_fetchall("""SELECT id
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret
                                                 FROM users
                                                 WHERE name = %(name)s
                                                 AND is_active = true
                                              """, {
                                                 'name': name.lower()
-                                             }, strip_pairs=True)
-            self.id = dbid[0] if len(dbid) == 1 else None
-            self.name = name.lower()
+                                             })
+            if res and len(res) == 1:
+                res = res[0]
+                self.id = res[0]
+                self.name = name.lower()
         elif dbid:
-            name = g.db.execute_and_fetchall("""SELECT name
+            res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret
                                                 FROM users
                                                 WHERE id = %(id)s
                                                 AND is_active = true
                                              """, {
                                                 'id': dbid
-                                             }, strip_pairs=True)
-            self.id   = dbid
-            self.name = name[0] if len(name) == 1 else None
+                                             })
+            if res and len(res) == 1:
+                res = res[0]
+                self.id = dbid
+                self.name = res[0]
         else:
             raise Exception, 'User objects must be initialized with either a name or id.'
         if not self.id or not self.name:
             raise NotUserException, 'User with name=%s and id=%s was not found in the database' % (name.lower(), dbid)
+        self.twitter_id     = res[1]
+        self.twitter_token  = res[2]
+        self.twitter_secret = res[3]
     

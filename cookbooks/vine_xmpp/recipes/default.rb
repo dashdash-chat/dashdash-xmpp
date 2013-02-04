@@ -26,7 +26,7 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
   EOH
 end
 ['mysql-python', 'dnspython',
- 'twilio', 'shortuuid', 'sleekxmpp',
+ 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp'
 ].each do |library|
   python_pip library do
     virtualenv xmpp_env_dir

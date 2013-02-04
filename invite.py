@@ -42,6 +42,18 @@ class AbstractInvite(object):
                 self.recipient = u.FetchedUser(dbid=recipient_id)
         return self.recipient is not None
     
+    def use(self, recipient):
+        if self._has_been_used():
+            raise ImmutableInviteException
+        g.db.execute("""UPDATE invites
+                        SET recipient = %(recipient_id)s
+                        WHERE code = %(code)s
+                        AND recipient IS NULL
+                     """, {
+                        'recipient_id': recipient.id,
+                        'code': self.code
+                     })
+    
     def hide(self):
         self._set_visible(False)
         
