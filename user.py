@@ -302,7 +302,7 @@ class AbstractUser(object):
     
 
 class InsertedUser(AbstractUser):
-    def __init__(self, name, password):
+    def __init__(self, name, password, should_register=True):
         super(InsertedUser, self).__init__(can_write=True)
         name = name.lower()
         if not re.search('^\w{1,15}$', name):
@@ -330,7 +330,8 @@ class InsertedUser(AbstractUser):
                          """, {
                             'id': dbid
                          })
-        g.ectl.register(name, password)
+        if should_register and password:
+            g.ectl.register(name, password)
         self.id = dbid
         self.name = name
     
