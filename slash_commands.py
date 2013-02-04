@@ -23,8 +23,9 @@ class ArgFormatError(Exception):
 
 
 class SlashCommand(object):
-    def __init__(self, command_name, text_arg_format, text_description, validate_sender, transform_args, action):
+    def __init__(self, command_name, list_rank, text_arg_format, text_description, validate_sender, transform_args, action):
         self._command_name = command_name
+        self._list_rank = list_rank
         self._text_arg_format = text_arg_format
         self._text_description = text_description
         self.validate_sender = validate_sender
@@ -49,6 +50,8 @@ class SlashCommand(object):
     def __getattr__(self, name):
         if name == 'name':
             return self._command_name
+        elif name == 'list_rank':
+            return self._list_rank
         elif name == 'arg_format':
             return self._text_arg_format
         elif name == 'description':
@@ -95,7 +98,8 @@ class SlashCommandRegistry(object):
                     (slash_command.name, slash_command.arg_format)
         elif command_name == 'help':
             command_string = ''
-            for slash_command in self.slash_commands.values():
+            ordered_commands = sorted(self.slash_commands.values(), key=lambda command: command.list_rank)
+            for slash_command in ordered_commands:
                 if slash_command.validate_sender(sender, vinebot):
                     if slash_command.arg_format == '':
                         command_string += '*\t/%s: %s\n' % (slash_command.name, slash_command.description)
