@@ -9,6 +9,7 @@
 
 xmpp_env_dir  = "#{node['dirs']['source']}/xmpp-env"
 xmpp_repo_dir = "#{xmpp_env_dir}/xmpp"
+web_repo_dir = "#{xmpp_repo_dir}/web"
 
 # Prepare the virtualenv for the vine-xmpp repo
 python_virtualenv xmpp_env_dir do
@@ -26,7 +27,8 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
   EOH
 end
 ['mysql-python', 'dnspython',
- 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp'
+ 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp',
+ 'boto', 'celery', 'Flask-OAuth', 'Flask-SQLAlchemy'  #TODO re-use the python-twitter library for all OAuth, so we don't need flask here
 ].each do |library|
   python_pip library do
     virtualenv xmpp_env_dir
@@ -54,6 +56,33 @@ template 'constants.py' do
   owner node.run_state['config']['user']
   group node.run_state['config']['group']
   mode 0644
+end
+# We need the web repo too for Celery tasks
+deploy_wrapper 'web' do
+    ssh_wrapper_dir node['dirs']['ssl']
+    ssh_key_dir node['dirs']['ssl']
+    ssh_key_data Chef::EncryptedDataBagItem.load(node.chef_environment, "vine_web")['deploy_key']
+    sloppy true
+end
+git web_repo_dir do
+    repository "git@github.com:lehrblogger/vine-web.git"
+    branch "master"
+    destination web_repo_dir
+    ssh_wrapper "#{node['dirs']['ssl']}/web_deploy_wrapper.sh"
+    action :sync
+end
+template "constants.py" do
+  path "#{web_repo_dir}/constants.py"
+  source "constants.py.erb"
+  owner node.run_state['config']['user']
+  group node.run_state['config']['group']
+  mode 00644
+end
+file "#{web_repo_dir}/__init__.py" do
+  owner node.run_state['config']['user']
+  group node.run_state['config']['group']
+  mode 00644
+  action :create
 end
 
 # Create the supervisor programs

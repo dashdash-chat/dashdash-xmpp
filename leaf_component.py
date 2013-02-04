@@ -22,7 +22,11 @@ from invite import FetchedInvite, InsertedInvite, AbstractInvite, NotInviteExcep
 from user import FetchedUser, InsertedUser, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
 from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
-
+try:
+    import web.celery_tasks as celery_tasks
+except ImportError:
+    celery_tasks = None
+    
 if sys.version_info < (3, 0):
     reload(sys)
     sys.setdefaultencoding('utf8')
