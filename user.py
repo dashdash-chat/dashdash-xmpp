@@ -43,6 +43,41 @@ class AbstractUser(object):
     def roster(self):
         return g.ectl.get_roster(self.name)
     
+    def block(self, blockee):
+        try:
+            g.db.execute_and_fetchall("""INSERT INTO blocks (from_user_id, to_user_id)
+                                         VALUES (%(from_user_id)s, %(to_user_id)s)
+                                      """, {
+                                         'from_user_id': self.id,
+                                         'to_user_id': blockee.id
+                                      })
+            return True
+        except IntegrityError, e:
+            if e[0] == 1062:
+                return False
+            raise e
+    
+    def unblock(self, unblockee):
+        res = g.db.execute_and_fetchall("""SELECT COUNT(*)
+                                           FROM blocks
+                                           WHERE to_user_id = %(to_user_id)s
+                                           AND from_user_id = %(from_user_id)s
+                                        """, {
+                                           'from_user_id': self.id,
+                                           'to_user_id': unblockee.id
+                                        }, strip_pairs=True)
+        if res and res[0] > 0:
+            g.db.execute_and_fetchall("""DELETE FROM blocks
+                                         WHERE to_user_id = %(to_user_id)s
+                                         AND from_user_id = %(from_user_id)s
+                                    """, {
+                                       'from_user_id': self.id,
+                                       'to_user_id': unblockee.id
+                                    })
+            return True
+        else:
+            return False
+    
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                     FROM users, edges AS outgoing, edges AS incoming

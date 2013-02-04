@@ -145,6 +145,20 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.debug_vinebot))
+        self.commands.add(SlashCommand(command_name     = 'block',
+                                       list_rank        = 700,
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Prevent a user from seeing if you\'re online or joining your conversations.',
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token,
+                                       action           = self.block_user))
+        self.commands.add(SlashCommand(command_name     = 'unblock',
+                                       list_rank        = 701,
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Allow a previously-blocked user to see if you\'re online and join your conversations.',
+                                       validate_sender  = participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token,
+                                       action           = self.unblock_user))
         self.commands.add(SlashCommand(command_name     = 'join',
                                        list_rank        = 900,
                                        text_arg_format  = '',
@@ -771,6 +785,46 @@ class LeafComponent(ComponentXMPP):
         self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
         self.send_alert(vinebot, None, kickee, '%s has kicked you from the conversation' % kicker.name, parent_command_id=parent_command_id)
         return parent_command_id, ''
+    
+    def block_user(self, parent_command_id, vinebot, blocker, blockee):
+        try:
+            blockee = FetchedUser(name=blockee)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, '%s isn\'t a Vine.IM user, so can\'t be blocked.' % blockee)
+        if blocker == blockee:
+            raise ExecutionError, (parent_command_id, 'you can\'t block yourself.')
+        if blockee.name in constants.protected_users:
+            raise ExecutionError, (parent_command_id, 'you can\'t block administrator accounts.')
+        if blocker.block(blockee):
+            if celery_tasks:
+                celery_tasks.score_edges.delay(blockee.id)
+                g.logger.info('[block] success, celery task queued')
+            else:
+                g.logger.info('[block] success, no celery task queued')
+            return parent_command_id, 'You blocked %s.' % blockee.name
+        else:
+            g.logger.info('[block] duplicate')
+            raise ExecutionError, (parent_command_id, '%s was already blocked.' % blockee.name)
+    
+    def unblock_user(self, parent_command_id, vinebot, unblocker, unblockee):
+        try:
+            unblockee = FetchedUser(name=unblockee)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, '%s isn\'t a Vine.IM user, so can\'t be unblocked.' % unblockee)
+        if unblocker == unblockee:
+            raise ExecutionError, (parent_command_id, 'you can\'t unblock yourself.')
+        if unblockee.name in constants.protected_users:
+            raise ExecutionError, (parent_command_id, 'you can\'t unblock administrator accounts.')
+        if unblocker.unblock(unblockee):
+            if celery_tasks:
+                celery_tasks.score_edges.delay(unblocker.id)
+                g.logger.info('[unblock] success, celery task queued')
+            else:
+                g.logger.info('[unblock] success, no celery task queued')
+            return parent_command_id, 'You unblocked %s.' % unblockee.name
+        else:
+            g.logger.info('[unblock] missing')
+            raise ExecutionError, (parent_command_id, '%s wasn\'t blocked.' % unblockee.name)
     
     def list_participants(self, parent_command_id, vinebot, user):
         usernames = [participant.name for participant in vinebot.participants.difference([user])]
