@@ -12,12 +12,13 @@ import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
 from twilio.rest import TwilioRestClient
+import twitter
 import constants
 from constants import g
 from ejabberdctl import EjabberdCTL
 from mysql_conn import MySQLManager
 from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
-from invite import FetchedInvite, InsertedInvite, NotInviteException, ImmutableInviteException
+from invite import FetchedInvite, InsertedInvite, AbstractInvite, NotInviteException, ImmutableInviteException
 from user import FetchedUser, InsertedUser, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
 from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
@@ -29,6 +30,7 @@ else:
     raw_input = input
 
 ROSTER_SYNC_PROBABILITY = 100
+CURRENT_TCO_LENGTH = 20
 
 class LeafComponent(ComponentXMPP):
     def __init__(self):
@@ -98,6 +100,14 @@ class LeafComponent(ComponentXMPP):
                 string = arg_string.partition(arg_tokens[0])[2].strip()
                 parent_command_id = g.db.log_command(sender, command_name, token, string, vinebot=vinebot)
                 return [parent_command_id, vinebot, sender, token, string]
+            return False
+        def logid_vinebot_sender_token_string_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
+            if vinebot and len(arg_tokens) >= 1:
+                token = arg_tokens[0]
+                string = arg_string.partition(arg_tokens[0])[2].strip()
+                string_or_none = string if len(string) > 0 else None
+                parent_command_id = g.db.log_command(sender, command_name, token, string_or_none, vinebot=vinebot)
+                return [parent_command_id, vinebot, sender, token, string_or_none]
             return False
         def logid_token(command_name, sender, vinebot, arg_string, arg_tokens):
             if len(arg_tokens) == 1:
@@ -184,7 +194,12 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender,
                                        action           = self.invites))
-       
+        self.commands.add(SlashCommand(command_name     = 'tweet_invite',
+                                       text_arg_format  = '<twitter_username tweet_body>',
+                                       text_description = 'Invite a Twitter user to Vine.IM with a tweet that reads "@username tweet_body %s/invite_code"' % AbstractInvite.url_prefix,
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token_string_or_none,
+                                       action           = self.tweet_invite))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -691,7 +706,7 @@ class LeafComponent(ComponentXMPP):
         try:
             invitee = FetchedUser(name=invitee)
         except NotUserException:
-            raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee)
+            raise ExecutionError, (parent_command_id, '%s isn\'t yet using Vine. Perhaps you meant "/tweet_invite %s"?' % (invitee, invitee))
         if inviter == invitee:
             raise ExecutionError, (parent_command_id, 'you can\'t invite yourself.')
         if invitee.jid in (constants.admin_jids + [constants.graph_xmpp_jid, constants.leaves_xmlrpc_user]):
@@ -797,10 +812,65 @@ class LeafComponent(ComponentXMPP):
         g.logger.info('[topic] %03d participants' % len(vinebot.participants))
         return parent_command_id, ''
     
+    def tweet_invite(self, parent_command_id, vinebot, sender, twitter_username, tweet_body):
+        max_tweet_body = 140 - (len(twitter_username) + len(' ') + len(' ') + CURRENT_TCO_LENGTH)
+        if tweet_body:
+            tweet_body = tweet_body.strip()
+            if tweet_body and len(tweet_body) > max_tweet_body:
+                raise ExecutionError, (parent_command_id, 'The tweet you specified was %d characters, and can\'t be longer than %d characters. Try again?' % (len(tweet_body), max_tweet_body))    
+        else:
+            other_participants = list(vinebot.participants.difference([sender]))
+            tweet_first = 'Come chat with me'
+            tweet_last =  ' and @%s on @VineIM!' % other_participants.pop().name
+            tweet_extra = ' It\'s like a cocktail party, but on the Internet:'
+            for other_participant in other_participants:
+                tweet_body = tweet_first + tweet_last
+                tweet_more = ', @%s' % other_participant.name
+                if len(tweet_body + tweet_more) > max_tweet_body:
+                    break
+                else:
+                    tweet_first += ', @%s' % other_participant.name
+            if len(tweet_first + tweet_last + tweet_extra) > max_tweet_body:
+                tweet_body = tweet_first + tweet_last
+            else:
+                tweet_body = tweet_first + tweet_last + tweet_extra
+        try:
+            new_user = InsertedUser(twitter_username, None, should_register=False)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, 'Twitter usernames only contain letters, numbers, and underscores.')
+        except IntegrityError:
+            old_user = FetchedUser(name=twitter_username)
+            if old_user.is_online():
+                raise ExecutionError, (parent_command_id, '%s is already using Vine.IM. Try /invite-ing them to this conversation?' % old_user.name)
+            else:
+                raise ExecutionError, (parent_command_id, '%s is already using Vine.IM, but is offline right now.' % old_user.name)
+        try:
+            invite = InsertedInvite(sender)
+            invite.use(new_user)
+        except IntegrityError:
+            pass  # We don't need to worry if the user already has an invite
+        tweet = '@%s %s %s' % (new_user.name, tweet_body, invite.url)
+        api = twitter.Api(consumer_key=constants.twitter_consumer_key, consumer_secret=constants.twitter_consumer_secret,
+                          access_token_key=sender.twitter_token, access_token_secret=sender.twitter_secret)
+        try:
+            status = api.PostUpdate(tweet)
+            alert_msg = '%s has invited %s to the conversation on Twitter.\n\thttp://twitter.com/%s/status/%s' % (sender.name, twitter_username, sender.name, status.id)
+            self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
+            return parent_command_id, ''
+        except UnicodeDecodeError:
+            return parent_command_id, 'Something went wrong encoding your tweet. Perhaps it contains non-ASCII characters?' + \
+                                      'Here\'s what would have been tweeted:\n\t%s' % tweet
+        except Exception, e:
+            g.logger.warn('Error posting tweet from %s: %s' % (sender, e))
+            return parent_command_id, 'Something went wrong posting to Twitter - try signing in again at http://%s.\n' % constants.domain + \
+                                      'Here\'s what would have been tweeted:\n\t%s' % tweet
+    
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
         try:
             InsertedUser(username, password)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, 'usernames can only contain letters, numbers, and underscores.')
         except IntegrityError:
             raise ExecutionError, (parent_command_id, 'there was an IntegrityError - are you sure the user doesn\'t already exist?')
         return parent_command_id, None
