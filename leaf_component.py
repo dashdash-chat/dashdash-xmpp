@@ -937,12 +937,15 @@ class LeafComponent(ComponentXMPP):
             status = api.PostUpdate(tweet)
             alert_msg = '%s has invited %s to the conversation on Twitter.\n\thttp://twitter.com/%s/status/%s' % (sender.name, twitter_username, sender.name, status.id)
             self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
+            g.logger.info('[tweet_invite] success')
             return parent_command_id, ''
         except UnicodeDecodeError:
+            g.logger.info('[tweet_invite] unicode error')
             return parent_command_id, 'Something went wrong encoding your tweet. Perhaps it contains non-ASCII characters?' + \
                                       'Here\'s what would have been tweeted:\n\t%s' % tweet
         except Exception, e:
             g.logger.warn('Error posting tweet from %s: %s' % (sender, e))
+            g.logger.info('[tweet_invite] other error')
             return parent_command_id, 'Something went wrong posting to Twitter - try signing in again at http://%s.\n' % constants.domain + \
                                       'Here\'s what would have been tweeted:\n\t%s' % tweet
     
