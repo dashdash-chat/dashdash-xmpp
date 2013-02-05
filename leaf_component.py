@@ -946,9 +946,9 @@ class LeafComponent(ComponentXMPP):
         except IntegrityError:
             pass  # We don't need to worry if the user already has an invite
         tweet = '@%s %s %s' % (new_user.name, tweet_body, invite.url)
-        api = twitter.Api(consumer_key=constants.twitter_consumer_key, consumer_secret=constants.twitter_consumer_secret,
-                          access_token_key=sender.twitter_token, access_token_secret=sender.twitter_secret)
         try:
+            api = twitter.Api(consumer_key=constants.twitter_consumer_key, consumer_secret=constants.twitter_consumer_secret,
+                              access_token_key=sender.twitter_token, access_token_secret=sender.twitter_secret)
             status = api.PostUpdate(tweet)
             alert_msg = '%s has invited %s to the conversation on Twitter.\n\thttp://twitter.com/%s/status/%s' % (sender.name, twitter_username, sender.name, status.id)
             self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
