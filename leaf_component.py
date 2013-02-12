@@ -231,7 +231,7 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.invites))
         self.commands.add(SlashCommand(command_name     = 'tweet_invite',
                                        list_rank        = 10,
-                                       text_arg_format  = '<twitter_username tweet_body>',
+                                       text_arg_format  = '<twitter_username> <optional tweet_body>',
                                        text_description = 'Post a tweet inviting someone to sign up that reads: "@username tweet_body %sinvite_code"' % AbstractInvite.url_prefix,
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string_or_none,
