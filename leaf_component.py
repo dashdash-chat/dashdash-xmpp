@@ -49,6 +49,7 @@ class LeafComponent(ComponentXMPP):
         self.acquired_lock_num = None
         g.db = MySQLManager(constants.leaves_mysql_user, constants.leaves_mysql_password)
         g.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
+        g.send_presences = self.send_presences
         self.commands = SlashCommandRegistry()
         self.add_slash_commands()
         self.add_event_handler("session_start",        self.handle_start)

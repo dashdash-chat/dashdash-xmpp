@@ -46,6 +46,7 @@ class AbstractVinebot(object):
     def remove_from_roster_of(self, user):
         if not self.can_write:
             raise VinebotPermissionsException
+        g.send_presences(self, [user], pshow='unavailable')
         g.ectl.delete_rosteritem(user.name, self.jiduser)
     
     def _fetch_participants(self):
