@@ -30,11 +30,7 @@ class EjabberdCTL(object):
         })
     
     def add_rosteritem(self, user, vinebot_user, nick):
-        def wrapped_add_rosteritem(user, vinebot_user, nick):
-            xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
-            for i in range(1, NUM_RETRIES + 1):
-                try:
-                    result = self._xmlrpc_command('add_rosteritem', {
+        gevent.spawn(self._retried_xmlrpc_command, 'add_rosteritem', {
                         'localuser': user,
                         'localserver': constants.domain,
                         'user': vinebot_user,
@@ -42,39 +38,15 @@ class EjabberdCTL(object):
                         'group': '%s@%s ' % (user, constants.domain),
                         'nick': nick,
                         'subs': 'both'
-                    }, xmlrpc_server)    
-                except socket.error as e:
-                    if e.errno == errno.ECONNRESET:
-                        g.logger.warning('Failed add_rosteritem XMLRPC request #%d for %s with %s and %s: %s' % (i, user, vinebot_user, nick, e))
-                    else:
-                        raise e
-                if result['res'] == 0:
-                    return
-                else:
-                    g.logger.warning('Failed add_rosteritem XMLRPC request #%d for %s with %s and %s: %s' % (i, user, vinebot_user, nick, result))
-        gevent.spawn(wrapped_add_rosteritem, user, vinebot_user, nick)
-        
+                    })
+    
     def delete_rosteritem(self, user, vinebot_user):
-        def wrapped_delete_rosteritem(user, vinebot_user):
-            xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
-            for i in range(1, NUM_RETRIES + 1):
-                try:
-                    result = self._xmlrpc_command('delete_rosteritem', {
+        gevent.spawn(self._retried_xmlrpc_command, 'delete_rosteritem', {
                         'localuser': user,
                         'localserver': constants.domain,
                         'user': vinebot_user,
                         'server': constants.leaves_domain
-                    }, xmlrpc_server)
-                except socket.error as e:
-                    if e.errno == errno.ECONNRESET:
-                        g.logger.warning('Failed delete_rosteritem XMLRPC request #%d for %s with %s: %s' % (i, user, vinebot_user, e))
-                    else:
-                        raise e
-                if result['res'] == 0:
-                    return
-                else:
-                    g.logger.warning('Failed delete_rosteritem XMLRPC request #%d for %s with %s: %s' % (i, user, vinebot_user, result))
-        gevent.spawn(wrapped_delete_rosteritem, user, vinebot_user)
+                    })
     
     def get_roster(self, user):    
         rosteritems = self._xmlrpc_command('get_roster', {
@@ -109,6 +81,22 @@ class EjabberdCTL(object):
         except xmlrpclib.Fault, e:
             g.logger.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
+    
+    def _retried_xmlrpc_command(self, command, data):
+        xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+        for i in range(1, NUM_RETRIES + 1):
+            try:
+                result = self._xmlrpc_command(command, data, xmlrpc_server)
+            except socket.error as e:
+                if e.errno == errno.ECONNRESET:
+                    g.logger.warning('Failed %s XMLRPC command #%d for %s with %s: %s' % (command, i, user, vinebot_user, e))
+                else:
+                    raise e
+            if result['res'] == 0:
+                return True
+            else:
+                g.logger.warning('Failed %s XMLRPC connabd #%d for %s with %s: %s' % (command, i, user, vinebot_user, result))
+        return False
     
     def _xmlrpc_command(self, command, data, xmlrpc_server=None):        
         g.logger.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
