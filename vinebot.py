@@ -41,7 +41,7 @@ class AbstractVinebot(object):
     def add_to_roster_of(self, user, nick):
         if not self.can_write:
             raise VinebotPermissionsException
-        g.ectl.add_rosteritem(user.name, self.jiduser, nick)
+        g.ectl.add_rosteritem(user.name, self.jiduser, self.group, nick)
     
     def remove_from_roster_of(self, user):
         if not self.can_write:
@@ -115,19 +115,16 @@ class AbstractVinebot(object):
                      })
     
     def get_nick(self, viewer):
-        if self.is_active:
-            usernames = [user.name for user in self.participants.difference([viewer])]
-        else:
-            usernames = [user.name for user in self.edge_users.difference([viewer])]
-        if len(usernames) < 1:
+        if not self.is_active:
+            users = list(self.edge_users.difference([viewer]))
+            if len(users) > 0:
+                return users[0].name
             return self.jiduser
-        elif len(usernames) == 1:
-            return usernames[0]
-        else:
-            if viewer and viewer in self.participants:
-                usernames.insert(0, 'you')
-            comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
-            return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
+        usernames = [user.name for user in self.participants.difference([viewer])]
+        if viewer and viewer in self.participants:
+            usernames.append('you')
+        comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
+        return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
     
     def update_rosters(self, old_participants, new_participants, protected_participants=set([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
@@ -142,7 +139,7 @@ class AbstractVinebot(object):
         # Then, update the participants
         for old_participant in old_participants.difference(new_observers).difference(new_participants).difference(protected_participants):
             self.remove_from_roster_of(old_participant)
-        for new_participant in new_participants.difference(protected_participants):
+        for new_participant in new_participants.union(protected_participants):  # we still need to give the old edge users the updated nick
             self.add_to_roster_of(new_participant, self.get_nick(new_participant))
         # Finally, update the observers
         for old_observer in old_observers.difference(new_participants).difference(protected_participants).difference(new_observers):
@@ -217,6 +214,13 @@ class AbstractVinebot(object):
             return self._topic
         elif name == 'is_active':
             return len(self.participants) >= 2
+        elif name == 'group':
+            group = 'Contacts'
+            if self.is_active:
+                group = 'Conversations' 
+            if constants.debug:
+                return 'Vine %s (Dev)' % group
+            return 'Vine %s' % group
         elif name == 'edges':
             if self._edges is None:
                 self._edges = self._fetch_edges()

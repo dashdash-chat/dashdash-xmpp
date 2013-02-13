@@ -1,6 +1,7 @@
 import logging
 import shortuuid
 shortuuid.set_alphabet('1234567890abcdefghijklmnopqrstuvwxyz')
+debug = '<%= node.chef_environment == 'dev' %>' == 'true'  # grr ruby
 
 domain = '<%= node.run_state['config']['domain'] %>'
 server_ip = '<%= node.run_state['config']['xmlrpc']['ip'] %>'

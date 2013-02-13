@@ -29,13 +29,13 @@ class EjabberdCTL(object):
             'host': constants.domain,
         })
     
-    def add_rosteritem(self, user, vinebot_user, nick):
+    def add_rosteritem(self, user, vinebot_user, group, nick):
         gevent.spawn(self._retried_xmlrpc_command, 'add_rosteritem', {
                         'localuser': user,
                         'localserver': constants.domain,
                         'user': vinebot_user,
                         'server': constants.leaves_domain,
-                        'group': '%s@%s ' % (user, constants.domain),
+                        'group': group,
                         'nick': nick,
                         'subs': 'both'
                     })
@@ -57,12 +57,10 @@ class EjabberdCTL(object):
             rosteritem = rosteritem['contact']
             if rosteritem[2]['subscription'] != 'both':
                 g.logger.warning('Incorrect roster subscription for: %s' % rosteritem)
-            if rosteritem[4]['group'] != '%s@%s ' % (user, constants.domain):
-                g.logger.warning('Incorrect roster group for rosteritem: %s' % rosteritem)
             vinebot_user = rosteritem[0]['jid'].split('@')[0]
             if not vinebot_user.startswith(constants.vinebot_prefix):
                 g.logger.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
-            roster.append((vinebot_user, rosteritem[1]['nick'], rosteritem[4]['group']))
+            roster.append((vinebot_user, rosteritem[4]['group'], rosteritem[1]['nick']))
         return roster
     
     def user_status(self, user):
