@@ -457,6 +457,7 @@ class LeafComponent(ComponentXMPP):
                     if len(vinebot.participants) > 2:
                         self.send_presences(vinebot, vinebot.everyone.difference([user]))
                     else:  # elif len(participants) == 2:
+                        self.send_presences(vinebot, vinebot.participants.difference([user]))
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
                     g.logger.info('[offline] %03d participants' % len(vinebot.participants))
                     self.remove_participant(vinebot, user)
@@ -509,6 +510,7 @@ class LeafComponent(ComponentXMPP):
                                 self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
+                                self.send_presences(vinebot, vinebot.edge_users)
                                 self.send_presences(vinebot, vinebot.edge_users, pshow='unavailable')
                                 self.send_alert(vinebot, None, user, 'Sorry, this user is offline.', parent_message_id=parent_message_id)
                         else:
@@ -649,6 +651,7 @@ class LeafComponent(ComponentXMPP):
         if len(vinebot.participants) == 1:
             other_user = iter(vinebot.participants.difference([user])).next()
             vinebot.remove_participant(other_user)
+            self.send_presences(vinebot, vinebot.observers)
             self.send_presences(vinebot, vinebot.observers, pshow='unavailable')
             if len(vinebot.edges) > 0:
                 # Get the active vinebots that have only these two participants, but not the ones that already have edges!
