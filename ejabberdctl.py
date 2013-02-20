@@ -87,13 +87,13 @@ class EjabberdCTL(object):
                 result = self._xmlrpc_command(command, data, xmlrpc_server)
             except socket.error as e:
                 if e.errno == errno.ECONNRESET:
-                    g.logger.warning('Failed %s XMLRPC command #%d for %s with %s: %s' % (command, i, user, vinebot_user, e))
+                    g.logger.warning('Failed %s XMLRPC command #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], e))
                 else:
                     raise e
             if result['res'] == 0:
                 return True
             else:
-                g.logger.warning('Failed %s XMLRPC connabd #%d for %s with %s: %s' % (command, i, user, vinebot_user, result))
+                g.logger.warning('Failed %s XMLRPC connabd #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], result))
         return False
     
     def _xmlrpc_command(self, command, data, xmlrpc_server=None):        
