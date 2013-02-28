@@ -505,7 +505,7 @@ class LeafComponent(ComponentXMPP):
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
-                        if len(vinebot.edges) > 0:
+                        if len(vinebot.edges) > 0 and user in vinebot.edge_users:
                             if self.activate_vinebot(vinebot):
                                 self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
                             else:
