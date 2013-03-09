@@ -138,6 +138,23 @@ class LeafComponent(ComponentXMPP):
                 parent_command_id = g.db.log_command(sender, command_name, token1, token2, vinebot=vinebot)
                 return [parent_command_id, token1, token2]
             return False
+        def logid_token_int_or_none(command_name, sender, vinebot, arg_string, arg_tokens):
+            if len(arg_tokens) == 2:
+                token1 = arg_tokens[0]
+                token2 = arg_tokens[1]
+                parent_command_id = g.db.log_command(sender, command_name, token1, token2, vinebot=vinebot)
+                try:  # convert to int here to prevent string error when logging, see comment in logid_token_token
+                    token2 = int(token2)
+                except ValueError:
+                    return False
+                if token2 < 1:
+                    return False
+                return [parent_command_id, token1, token2]
+            elif len(arg_tokens) == 1:
+                token = arg_tokens[0]
+                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
+                return [parent_command_id, token]
+            return False
         # Register vinebot commands
         self.commands.add(SlashCommand(command_name     = 'debug',
                                        list_rank        = 1000,
@@ -304,10 +321,10 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.show_invite))
         self.commands.add(SlashCommand(command_name     = 'new_invite',
                                        list_rank        = 8,
-                                       text_arg_format  = '<username>',
-                                       text_description = 'Generate a new invite with the given user as the sender.',
+                                       text_arg_format  = '<username> <optional max_uses (default 1)>',
+                                       text_description = 'Generate a new invite code with the given user as the sender.',
                                        validate_sender  = admin_to_leaf,
-                                       transform_args   = logid_token,
+                                       transform_args   = logid_token_int_or_none,
                                        action           = self.new_invite))
         self.commands.add(SlashCommand(command_name     = 'del_invite',
                                        list_rank        = 9,
@@ -1177,11 +1194,11 @@ class LeafComponent(ComponentXMPP):
         except ImmutableInviteException, e:
             raise ExecutionError, (parent_command_id, 'this invite has been used, so is already visible.')
     
-    def new_invite(self, parent_command_id, username):
+    def new_invite(self, parent_command_id, username, max_uses=1):
         try:
             sender = FetchedUser(name=username)
-            invite = InsertedInvite(sender)
-            return parent_command_id, '%s created for %s.' % (invite.url, sender.name)
+            invite = InsertedInvite(sender, max_uses=max_uses)
+            return parent_command_id, '%s created for %s with %d use%s.' % (invite.url, sender.name, max_uses, '' if max_uses == 1 else 's')
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
     
@@ -1193,7 +1210,8 @@ class LeafComponent(ComponentXMPP):
         except NotInviteException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
         except ImmutableInviteException, e:
-            raise ExecutionError, (parent_command_id, 'you can\'t delete an invite that\'s been used.')
+            invite.disable():
+            raise ExecutionError, (parent_command_id, 'this invite has already been used so can\'t be deleted, but now it can\'t be used again.')
     
     def invites(self, parent_command_id, vinebot, sender):
         return self.invites_for(parent_command_id, None, sender)
@@ -1203,21 +1221,21 @@ class LeafComponent(ComponentXMPP):
             if not sender:
                 sender = FetchedUser(name=username)
             invites = FetchedInvite.fetch_sender_invites(sender)
-            visible = filter(lambda invite: invite.visible and invite.recipient is None, invites)
-            used = filter(lambda invite: invite.recipient is not None, invites)
-            hidden = filter(lambda invite: not invite.visible and invite.recipient is None, invites)
+            visible = filter(lambda invite: invite.visible and len(invite.recipients) == 0, invites)
+            used = filter(lambda invite: len(invite.recipients) > 0, invites)
+            hidden = filter(lambda invite: not invite.visible and len(invite.recipients) == 0, invites)
             if (len(visible) + len(used) + len(hidden)) != len(invites):
                 raise ExecutionError, (parent_command_id, 'something bad happened to the invite list calculations for %s' % user)
             output = '%d %s has:' % (sender.id, sender.name)
             output += self._format_list_output(visible,
                                                'visible invites',
-                                               lambda invite: invite.url)
+                                               lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
             output += self._format_list_output(used,
                                                'used invites',
-                                               lambda invite: '%s by %s' % (invite.url, invite.recipient.name))
+                                               lambda invite: '%s by %s' % (invite.url, ",".join([r.name for r in invite.recipients])))
             output += self._format_list_output(hidden,
                                                'hidden invites',
-                                               lambda invite: invite.url)
+                                               lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
