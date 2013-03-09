@@ -1087,7 +1087,7 @@ class LeafComponent(ComponentXMPP):
             else:
                 if 'you' in usernames:
                     usernames = list(usernames.difference(['you']))
-                    usernames.insert(0, 'you')
+                    usernames.append('you')
                 else:
                     usernames = list(usernames)
                 comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
