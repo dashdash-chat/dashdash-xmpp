@@ -150,11 +150,7 @@ class LeafComponent(ComponentXMPP):
                 if token2 < 1:
                     return False
                 return [parent_command_id, token1, token2]
-            elif len(arg_tokens) == 1:
-                token = arg_tokens[0]
-                parent_command_id = g.db.log_command(sender, command_name, token, None, vinebot=vinebot)
-                return [parent_command_id, token]
-            return False
+            return logid_token(command_name, sender, vinebot, arg_string, arg_tokens)
         # Register vinebot commands
         self.commands.add(SlashCommand(command_name     = 'debug',
                                        list_rank        = 1000,
