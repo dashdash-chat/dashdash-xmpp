@@ -45,7 +45,7 @@ class AbstractInvite(object):
         return len(self.recipients) >= self.max_uses
     
     def _has_been_used(self):
-        return len(self.recipients) == 0
+        return len(self.recipients) > 0
     
     def use(self, recipient):
         if self._is_used_up():
@@ -93,6 +93,7 @@ class AbstractInvite(object):
                      """, {
                         'max_uses': len(self.recipients),
                         'id': self.id
+                     })
     
     def __getattr__(self, name):
         if name == 'url':

@@ -1210,7 +1210,7 @@ class LeafComponent(ComponentXMPP):
         except NotInviteException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this invite exists?')
         except ImmutableInviteException, e:
-            invite.disable():
+            invite.disable()
             raise ExecutionError, (parent_command_id, 'this invite has already been used so can\'t be deleted, but now it can\'t be used again.')
     
     def invites(self, parent_command_id, vinebot, sender):
@@ -1232,7 +1232,7 @@ class LeafComponent(ComponentXMPP):
                                                lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
             output += self._format_list_output(used,
                                                'used invites',
-                                               lambda invite: '%s by %s' % (invite.url, ",".join([r.name for r in invite.recipients])))
+                                               lambda invite: '%s by %s' % (invite.url, ", ".join([r.name for r in invite.recipients])))
             output += self._format_list_output(hidden,
                                                'hidden invites',
                                                lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
