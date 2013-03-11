@@ -1221,11 +1221,9 @@ class LeafComponent(ComponentXMPP):
             if not sender:
                 sender = FetchedUser(name=username)
             invites = FetchedInvite.fetch_sender_invites(sender)
-            visible = filter(lambda invite: invite.visible and len(invite.recipients) == 0, invites)
+            visible = filter(lambda invite: invite.visible and len(invite.recipients) < invite.max_uses, invites)
             used = filter(lambda invite: len(invite.recipients) > 0, invites)
             hidden = filter(lambda invite: not invite.visible and len(invite.recipients) == 0, invites)
-            if (len(visible) + len(used) + len(hidden)) != len(invites):
-                raise ExecutionError, (parent_command_id, 'something bad happened to the invite list calculations for %s' % user)
             output = '%d %s has:' % (sender.id, sender.name)
             output += self._format_list_output(visible,
                                                'visible invites',
