@@ -215,8 +215,8 @@ class AbstractUser(object):
                      """, {
                         'id': self.id
                      })
-        g.db.execute("""DELETE FROM invites
-                        WHERE recipient = %(id)s
+        g.db.execute("""DELETE FROM invitees
+                        WHERE invitee_id = %(id)s
                      """, {
                         'id': self.id
                      })
