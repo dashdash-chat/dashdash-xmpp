@@ -9,6 +9,8 @@ from constants import g
 import user as u
 import edge as e
 
+IDLE_MINUTES = 10
+
 if sys.version_info < (3, 0):
     reload(sys)
     sys.setdefaultencoding('utf8')
@@ -147,6 +149,36 @@ class AbstractVinebot(object):
             self.remove_from_roster_of(old_observer)
         for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
+    
+    def check_recent_activity(self, excluded_user):
+        datetime_cutoff = datetime.now() - timedelta(minutes=IDLE_MINUTES)
+        recent_messages = g.db.execute_and_fetchall("""SELECT COUNT(*)
+                                                       FROM messages
+                                                       WHERE vinebot_id = %(vinebot_id)s
+                                                       AND sender_id != %(excluded_user_id)s
+                                                       AND sender_id IS NOT NULL
+                                                       AND parent_command_id IS NULL
+                                                       AND body IS NOT NULL
+                                                       AND sent_on > %(datetime_cutoff)s
+                                                    """, {
+                                                       'vinebot_id': self.id,
+                                                       'excluded_user_id': excluded_user.id,
+                                                       'datetime_cutoff': datetime_cutoff
+                                                    }, strip_pairs=True)
+        recent_commands = g.db.execute_and_fetchall("""SELECT COUNT(*)
+                                                       FROM commands
+                                                       WHERE vinebot_id = %(vinebot_id)s
+                                                       AND sender_id != %(excluded_user_id)s
+                                                       AND sender_id IS NOT NULL
+                                                       AND command_name IN ('join', 'topic', 'whisper', 'invite', 'tweet_invite')
+                                                       AND is_valid IS TRUE
+                                                       AND sent_on > %(datetime_cutoff)s
+                                                    """, {
+                                                       'vinebot_id': self.id,
+                                                       'excluded_user_id': excluded_user.id,
+                                                       'datetime_cutoff': datetime_cutoff
+                                                    }, strip_pairs=True)
+        return (recent_messages and recent_messages[0] > 0) or (recent_commands and recent_commands[0] > 0)
     
     def _set_topic(self, body):        
         if not self.can_write:

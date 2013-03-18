@@ -519,8 +519,8 @@ class LeafComponent(ComponentXMPP):
                             self.send_alert(vinebot, None, user, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
                         if len(vinebot.edges) > 0 and user in vinebot.edge_users:
-                            if self.activate_vinebot(vinebot):
-                                self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
+                            if self.activate_vinebot(vinebot, user):
+                                self.broadcast_message(vinebot, user, vinebot.edge_users, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                                 self.send_presences(vinebot, vinebot.edge_users)
@@ -616,21 +616,24 @@ class LeafComponent(ComponentXMPP):
         if parent_message_id is None and parent_command_id is None:
             g.logger.error('Call to send_alert with no parent. msg=%s' % (body, msg))
     
-    def activate_vinebot(self, vinebot):
+    def activate_vinebot(self, vinebot, activater):
         if vinebot.is_active:
             g.logger.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
             return True
         if len(vinebot.edges) == 0:
             raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
-        g.logger.info('[activate] %03d participants' % len(vinebot.participants))
         user1, user2 = vinebot.edge_users
-        self.send_presences(vinebot, [user1], pshow=user2.status())
-        self.send_presences(vinebot, [user2], pshow=user1.status())
         both_users_online = user1.is_online() and user2.is_online()
-        if both_users_online:
-            self.add_participant(vinebot, user1)
-            self.add_participant(vinebot, user2)
-        return both_users_online
+        if vinebot.check_recent_activity(excluded_user=activater):    
+            g.logger.info('[activate] %03d participants' % len(vinebot.participants))
+            self.send_presences(vinebot, [user1], pshow=user2.status())
+            self.send_presences(vinebot, [user2], pshow=user1.status())
+            if both_users_online:
+                self.add_participant(vinebot, user1)
+                self.add_participant(vinebot, user2)
+        else:
+            g.logger.info('[activate] primed for %03d participants' % len(vinebot.participants))
+        return both_users_online  # As long as both users are online, return true, even if no participants were *actually* added
     
     def add_participant(self, vinebot, user):
         g.logger.info('[add_participant] %03d participants' % len(vinebot.participants))
@@ -909,13 +912,16 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
         else:
             vinebot.topic = topic  # using a fancy custom setter!
-            if vinebot.is_active or self.activate_vinebot(vinebot):  # short-circuit prevents unnecessary vinebot activation
+            if vinebot.is_active or self.activate_vinebot(vinebot, sender):  # short-circuit prevents unnecessary vinebot activation
                 self.send_presences(vinebot, vinebot.everyone)
                 if vinebot.topic:
                     body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
                 else:
                     body = '%s has cleared the topic of conversation.' % sender.name
-                self.broadcast_alert(vinebot, body, parent_command_id=parent_command_id)
+                if vinebot.is_active:
+                    self.broadcast_alert(vinebot, body, parent_command_id=parent_command_id)
+                else:  # same as broadcast_alert, but use vinebot.edge_users since there are no participants yet
+                    self.broadcast_message(vinebot, None, vinebot.edge_users, body, parent_command_id=parent_command_id)
             else:
                 if vinebot.topic:
                     body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
