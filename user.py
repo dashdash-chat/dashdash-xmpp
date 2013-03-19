@@ -135,6 +135,7 @@ class AbstractUser(object):
                                                      WHERE outgoing.to_id = incoming.from_id
                                                      AND outgoing.from_id = %(id)s
                                                     ) = 0
+                                                AND (SELECT COUNT(*) FROM participants WHERE vinebot_id = vinebots.id) = 0
                                                 GROUP BY vinebots.id
                                              """, {
                                                 'id': self.id
@@ -151,6 +152,7 @@ class AbstractUser(object):
                                                      WHERE incoming.to_id = %(id)s
                                                      AND incoming.from_id = outgoing.to_id
                                                     ) = 0
+                                                AND (SELECT COUNT(*) FROM participants WHERE vinebot_id = vinebots.id) = 0
                                                 GROUP BY vinebots.id
                                              """, {
                                                 'id': self.id
