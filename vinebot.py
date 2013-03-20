@@ -9,7 +9,7 @@ from constants import g
 import user as u
 import edge as e
 
-IDLE_MINUTES = 10
+IDLE_MINUTES = 9
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -29,6 +29,7 @@ class AbstractVinebot(object):
         self._edges = None
         self._participants = None
         self._observers = None
+        self._last_active_time = None
         self.can_write = can_write
         #TODO add transactions?
     
@@ -150,35 +151,46 @@ class AbstractVinebot(object):
         for new_observer in new_observers.difference(new_participants).difference(protected_participants):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
-    def check_recent_activity(self, excluded_user):
-        datetime_cutoff = datetime.now() - timedelta(minutes=IDLE_MINUTES)
-        recent_messages = g.db.execute_and_fetchall("""SELECT COUNT(*)
-                                                       FROM messages
-                                                       WHERE vinebot_id = %(vinebot_id)s
-                                                       AND sender_id != %(excluded_user_id)s
-                                                       AND sender_id IS NOT NULL
-                                                       AND parent_command_id IS NULL
-                                                       AND body IS NOT NULL
-                                                       AND sent_on > %(datetime_cutoff)s
-                                                    """, {
-                                                       'vinebot_id': self.id,
-                                                       'excluded_user_id': excluded_user.id,
-                                                       'datetime_cutoff': datetime_cutoff
-                                                    }, strip_pairs=True)
-        recent_commands = g.db.execute_and_fetchall("""SELECT COUNT(*)
-                                                       FROM commands
-                                                       WHERE vinebot_id = %(vinebot_id)s
-                                                       AND sender_id != %(excluded_user_id)s
-                                                       AND sender_id IS NOT NULL
-                                                       AND command_name IN ('join', 'topic', 'whisper', 'invite', 'tweet_invite')
-                                                       AND is_valid IS TRUE
-                                                       AND sent_on > %(datetime_cutoff)s
-                                                    """, {
-                                                       'vinebot_id': self.id,
-                                                       'excluded_user_id': excluded_user.id,
-                                                       'datetime_cutoff': datetime_cutoff
-                                                    }, strip_pairs=True)
-        return (recent_messages and recent_messages[0] > 0) or (recent_commands and recent_commands[0] > 0)
+    def check_recent_activity(self, excluded_user=None):
+        return self._fetch_last_active_time(excluded_user) > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
+    
+    def _fetch_last_active_time(self, excluded_user=None):
+        if self._last_active_time is None:
+            last_message = g.db.execute_and_fetchall("""SELECT sent_on
+                                                        FROM messages
+                                                        WHERE vinebot_id = %(vinebot_id)s
+                                                        AND sender_id != %(excluded_user_id)s
+                                                        AND sender_id IS NOT NULL
+                                                        AND parent_command_id IS NULL
+                                                        AND body IS NOT NULL
+                                                        ORDER BY sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id,
+                                                        'excluded_user_id': excluded_user.id if excluded_user else 0 #TODO for some reason NULL doesn't work here, but 0 is kinda hacky
+                                                     }, strip_pairs=True)
+            last_command = g.db.execute_and_fetchall("""SELECT sent_on
+                                                        FROM commands
+                                                        WHERE vinebot_id = %(vinebot_id)s
+                                                        AND sender_id != %(excluded_user_id)s
+                                                        AND sender_id IS NOT NULL
+                                                        AND command_name IN ('join', 'topic', 'invite', 'tweet_invite')
+                                                        AND is_valid IS TRUE
+                                                        ORDER BY sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id,
+                                                        'excluded_user_id': excluded_user.id if excluded_user else 0
+                                                     }, strip_pairs=True)
+            if last_message and last_command:
+                self._last_active_time = last_message[0] if last_message[0] > last_command [0] else last_command[0]
+            elif last_message:
+                self._last_active_time = last_message[0]
+            elif last_command:
+                self._last_active_time = last_command[0]
+            else:
+                self._last_active_time = datetime.now() #TODO find a better default
+        return self._last_active_time
     
     def _set_topic(self, body):        
         if not self.can_write:
@@ -211,7 +223,20 @@ class AbstractVinebot(object):
         return None
     
     def _format_topic(self, body, created):
-        return "%s%s" % (body, (created - timedelta(hours=6)).strftime(' (as of %b %d at %-I:%M%p EST)'))
+        return "\"%s\" as of %s ago" % (body, self._format_time_since_stamp(created))
+    
+    def _format_time_since_stamp(self, timestamp):
+        # generates strings that look like "1 day, 5 hours, 6 mins", FML
+        remainder = (datetime.now() - timestamp).total_seconds()
+        days,    remainder = divmod(remainder, 60 * 60 * 24)
+        hours,   remainder = divmod(remainder, 60 * 60)
+        minutes, remainder = divmod(remainder, 60)
+        if (days + hours + minutes) == 0:
+            return 'a moment'
+        count_units =  [(days, 'day'), (hours, 'hour'), (minutes, 'minute')]
+        return ', '.join(['%d %s%s' %  (count, unit, '' if count == 1 else 's')
+                          for count, unit in count_units
+                          if count > 0])
     
     def delete(self, new_vinebot=None):
         if not self.can_write:
@@ -247,6 +272,10 @@ class AbstractVinebot(object):
             return self._topic
         elif name == 'is_active':
             return len(self.participants) >= 2
+        elif name == 'last_active':
+            return "last active %s ago" % self._format_time_since_stamp(self._fetch_last_active_time())
+        elif name == 'is_idle':
+            return not self.check_recent_activity(None)
         elif name == 'group':
             group = 'Contacts'
             if self.is_active:
@@ -284,7 +313,7 @@ class AbstractVinebot(object):
     def __setattr__(self, name, value):
         if name == 'topic':
             self._set_topic(value)
-        elif name in ['topic', 'is_active', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
+        elif name in ['topic', 'is_active', 'last_active', 'is_idle', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)

@@ -11,6 +11,7 @@ import shortuuid
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
 from sleekxmpp.exceptions import IqError, IqTimeout
+from sleekxmpp.xmlstream.scheduler import Task
 from twilio.rest import TwilioRestClient
 import twitter
 import constants
@@ -352,9 +353,9 @@ class LeafComponent(ComponentXMPP):
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow='unavailable')
             self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids], pshow='unavailable')
-        g.db.cleanup()
         kwargs['wait'] = True
         super(LeafComponent, self).disconnect(*args, **kwargs)
+        g.db.cleanup()  # Cleanup after last scheduled task is done
     
     ##### event handlers
     def handle_start(self, event):
@@ -375,11 +376,12 @@ class LeafComponent(ComponentXMPP):
         g.use_new_logger('%s%02d' % (constants.leaves_mysql_lock_name, self.acquired_lock_num))
         if not other_leaves_online:
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
-                self.send_presences(vinebot, vinebot.everyone)
+                self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
             self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids])
+        self.schedule(name='vinebot_idler', seconds=120, callback=self.send_idle_presences, repeat=True)
         g.logger.info('Ready')
     
     def handle_presence_available(self, presence):
@@ -390,9 +392,9 @@ class LeafComponent(ComponentXMPP):
             vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
             if vinebot.is_active:
                 if user in vinebot.participants:
-                    self.send_presences(vinebot, vinebot.everyone)
+                    self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
                 elif user in vinebot.observers:
-                    self.send_presences(vinebot, [user])
+                    self.send_presences(vinebot, [user], pshow='away' if vinebot.is_idle else 'available')
             else:
                 try:
                     edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
@@ -434,14 +436,8 @@ class LeafComponent(ComponentXMPP):
             user = FetchedUser(name=presence['from'].user)
             vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
             if user in vinebot.participants:  # [] if vinebot is not active
-                if len(vinebot.participants) > 2:
-                    self.send_presences(vinebot, vinebot.everyone)
-                else:  # elif len(participants) == 2:    
-                    g.logger.info('[away] %03d participants' % len(vinebot.participants))
-                    remaining_user = iter(vinebot.participants.difference([user])).next()
-                    self.remove_participant(vinebot, user)  # this deactivates the vinebot
-                    self.send_presences(vinebot, [user], pshow=remaining_user.status())
-                    self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
+                g.logger.info('[away] %03d participants' % len(vinebot.participants))
+                self.send_presences(vinebot, vinebot.everyone, pshow=presence['type'])
             else:
                 try:
                     edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
@@ -468,7 +464,7 @@ class LeafComponent(ComponentXMPP):
             if not user.is_online():
                 if user in vinebot.participants:  # [] if vinebot is not active
                     if len(vinebot.participants) > 2:
-                        self.send_presences(vinebot, vinebot.everyone.difference([user]))
+                        self.send_presences(vinebot, vinebot.everyone.difference([user]), pshow='away' if vinebot.is_idle else 'available')
                     else:  # elif len(participants) == 2:
                         self.send_presences(vinebot, vinebot.participants.difference([user]))
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
@@ -508,12 +504,12 @@ class LeafComponent(ComponentXMPP):
                 else:
                     if vinebot.is_active:
                         if user in vinebot.participants:
-                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
+                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'], activate=True)
                         elif user in vinebot.observers:
                             g.logger.info('[enter] %03d participants' % len(vinebot.participants))
                             self.add_participant(vinebot, user)
                             self.broadcast_alert(vinebot, '%s has joined the conversation' % user.name)
-                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'])
+                            self.broadcast_message(vinebot, user, vinebot.participants, msg['body'], activate=True)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
@@ -568,13 +564,20 @@ class LeafComponent(ComponentXMPP):
             pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
             if vinebot.topic:
                 pstatus = unicode(vinebot.topic)
+            elif vinebot.is_active and vinebot.is_idle:
+                pstatus = unicode(vinebot.last_active)
         for recipient in recipients:
             self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.domain),
                                 pshow=None if pshow == 'available' else pshow,
                                 pstatus=pstatus)
     
-    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None):
+    def send_idle_presences(self):
+        for active_vinebot in FetchedVinebot.fetch_vinebots_with_participants():
+            self.send_presences(active_vinebot, active_vinebot.everyone, pshow='away' if active_vinebot.is_idle else 'available')
+            g.logger.info('[idle] %03d participants' % len(active_vinebot.participants))
+    
+    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None, activate=False):
         #LATER fix html, but it's a pain with reformatting
         if msg is None:  # need to pass this for chat states
             msg = self.Message()
@@ -596,10 +599,12 @@ class LeafComponent(ComponentXMPP):
                     g.logger.info('[message] received')
         if body and body != '' and sender:
             g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
+        if activate and vinebot.is_idle:
+            self.send_presences(vinebot, vinebot.everyone)
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
-    def broadcast_alert(self, vinebot, body, parent_command_id=None):
-        self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id)
+    def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
+        self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
     
     def send_alert(self, vinebot, sender, recipient, body, prefix='***', fromjid=None, parent_message_id=None, parent_command_id=None):
         if body == '':
@@ -626,8 +631,8 @@ class LeafComponent(ComponentXMPP):
         both_users_online = user1.is_online() and user2.is_online()
         if vinebot.check_recent_activity(excluded_user=activater):    
             g.logger.info('[activate] %03d participants' % len(vinebot.participants))
-            self.send_presences(vinebot, [user1], pshow=user2.status())
-            self.send_presences(vinebot, [user2], pshow=user1.status())
+            self.send_presences(vinebot, [user1])  # just activated vinebots are never idle
+            self.send_presences(vinebot, [user2])
             if both_users_online:
                 self.add_participant(vinebot, user1)
                 self.add_participant(vinebot, user2)
@@ -643,7 +648,7 @@ class LeafComponent(ComponentXMPP):
             pass  # this is the first participant, so assume that we're adding another one in a second
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(set([]), vinebot.participants)
-            self.send_presences(vinebot, vinebot.observers)  # here, participants get the proper presence in activate_vinebot() above
+            self.send_presences(vinebot, vinebot.observers)  # participants get the proper presence in activate_vinebot() above
         elif len(vinebot.participants) == 3:
             vinebot.update_rosters(old_participants, vinebot.participants)
             if len(vinebot.edges) > 0:
@@ -709,7 +714,7 @@ class LeafComponent(ComponentXMPP):
         else:
             # this conversation had more than three people so start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
-        self.send_presences(vinebot, vinebot.everyone)
+        self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
     
     def cleanup_and_delete_edge(self, edge):
         vinebot = None
@@ -757,7 +762,7 @@ class LeafComponent(ComponentXMPP):
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
                 raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
             raise e
-        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True)
         return parent_command_id, ''
     
     def user_left(self, parent_command_id, vinebot, user):    
@@ -791,7 +796,7 @@ class LeafComponent(ComponentXMPP):
         else:
             alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter.name, invitee.name)
         self.add_participant(vinebot, invitee)
-        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True)
         return parent_command_id, ''
     
     def kick_user(self, parent_command_id, vinebot, kicker, kickee):
@@ -913,15 +918,16 @@ class LeafComponent(ComponentXMPP):
         else:
             vinebot.topic = topic  # using a fancy custom setter!
             if vinebot.is_active or self.activate_vinebot(vinebot, sender):  # short-circuit prevents unnecessary vinebot activation
-                self.send_presences(vinebot, vinebot.everyone)
                 if vinebot.topic:
                     body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
                 else:
                     body = '%s has cleared the topic of conversation.' % sender.name
                 if vinebot.is_active:
-                    self.broadcast_alert(vinebot, body, parent_command_id=parent_command_id)
+                    self.send_presences(vinebot, vinebot.everyone)
+                    self.broadcast_alert(vinebot, body, parent_command_id=parent_command_id, activate=True)
                 else:  # same as broadcast_alert, but use vinebot.edge_users since there are no participants yet
-                    self.broadcast_message(vinebot, None, vinebot.edge_users, body, parent_command_id=parent_command_id)
+                    self.send_presences(vinebot, vinebot.edge_users)
+                    self.broadcast_message(vinebot, None, vinebot.edge_users, body, parent_command_id=parent_command_id, activate=True)
             else:
                 if vinebot.topic:
                     body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
@@ -974,7 +980,7 @@ class LeafComponent(ComponentXMPP):
                               access_token_key=sender.twitter_token, access_token_secret=sender.twitter_secret)
             status = api.PostUpdate(tweet)
             alert_msg = '%s has invited %s to the conversation on Twitter.\n\thttp://twitter.com/%s/status/%s' % (sender.name, twitter_username, sender.name, status.id)
-            self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id)
+            self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True)
             g.logger.info('[tweet_invite] success')
             return parent_command_id, ''
         except UnicodeDecodeError:
