@@ -381,7 +381,7 @@ class LeafComponent(ComponentXMPP):
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
             self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids])
-        self.schedule(name='vinebot_idler', seconds=120, callback=self.send_idle_presences, repeat=True)
+        self.schedule(name='vinebot_idler', seconds=180, callback=self.send_idle_presences, repeat=True)
         g.logger.info('Ready')
     
     def handle_presence_available(self, presence):
