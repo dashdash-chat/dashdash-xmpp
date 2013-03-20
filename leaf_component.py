@@ -575,7 +575,8 @@ class LeafComponent(ComponentXMPP):
     def send_idle_presences(self):
         for active_vinebot in FetchedVinebot.fetch_vinebots_with_participants():
             self.send_presences(active_vinebot, active_vinebot.everyone, pshow='away' if active_vinebot.is_idle else 'available')
-            g.logger.info('[idle] %03d participants' % len(active_vinebot.participants))
+            if active_vinebot.is_idle:
+                g.logger.info('[idle] %03d participants' % len(active_vinebot.participants))
     
     def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None, activate=False):
         #LATER fix html, but it's a pain with reformatting
@@ -747,7 +748,7 @@ class LeafComponent(ComponentXMPP):
     
     ##### user /commands
     def debug_vinebot(self, parent_command_id, vinebot, user):
-        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
+        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.last_active, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def user_joined(self, parent_command_id, vinebot, user):
