@@ -9,7 +9,7 @@ from constants import g
 import user as u
 import edge as e
 
-IDLE_MINUTES = 9
+IDLE_MINUTES = 1
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -29,7 +29,7 @@ class AbstractVinebot(object):
         self._edges = None
         self._participants = None
         self._observers = None
-        self._last_active_time = None
+        self._last_active = None
         self.can_write = can_write
         #TODO add transactions?
     
@@ -152,45 +152,43 @@ class AbstractVinebot(object):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
     def check_recent_activity(self, excluded_user=None):
-        return self._fetch_last_active_time(excluded_user) > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
-    
-    def _fetch_last_active_time(self, excluded_user=None):
-        if self._last_active_time is None:
-            last_message = g.db.execute_and_fetchall("""SELECT sent_on
-                                                        FROM messages
-                                                        WHERE vinebot_id = %(vinebot_id)s
-                                                        AND sender_id != %(excluded_user_id)s
-                                                        AND sender_id IS NOT NULL
-                                                        AND parent_command_id IS NULL
-                                                        AND body IS NOT NULL
-                                                        ORDER BY sent_on DESC
-                                                        LIMIT 1
-                                                     """, {
-                                                        'vinebot_id': self.id,
-                                                        'excluded_user_id': excluded_user.id if excluded_user else 0 #TODO for some reason NULL doesn't work here, but 0 is kinda hacky
-                                                     }, strip_pairs=True)
-            last_command = g.db.execute_and_fetchall("""SELECT sent_on
-                                                        FROM commands
-                                                        WHERE vinebot_id = %(vinebot_id)s
-                                                        AND sender_id != %(excluded_user_id)s
-                                                        AND sender_id IS NOT NULL
-                                                        AND command_name IN ('join', 'topic', 'invite', 'tweet_invite')
-                                                        AND is_valid IS TRUE
-                                                        ORDER BY sent_on DESC
-                                                        LIMIT 1
-                                                     """, {
-                                                        'vinebot_id': self.id,
-                                                        'excluded_user_id': excluded_user.id if excluded_user else 0
-                                                     }, strip_pairs=True)
-            if last_message and last_command:
-                self._last_active_time = last_message[0] if last_message[0] > last_command [0] else last_command[0]
-            elif last_message:
-                self._last_active_time = last_message[0]
-            elif last_command:
-                self._last_active_time = last_command[0]
-            else:
-                self._last_active_time = datetime.now() #TODO find a better default
-        return self._last_active_time
+        return self._fetch_last_active(excluded_user) > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
+        
+    def _fetch_last_active(self, excluded_user=None):        
+        last_message = g.db.execute_and_fetchall("""SELECT sent_on
+                                                    FROM messages
+                                                    WHERE vinebot_id = %(vinebot_id)s
+                                                    AND sender_id != %(excluded_user_id)s
+                                                    AND sender_id IS NOT NULL
+                                                    AND parent_command_id IS NULL
+                                                    AND body IS NOT NULL
+                                                    ORDER BY sent_on DESC
+                                                    LIMIT 1
+                                                 """, {
+                                                    'vinebot_id': self.id,
+                                                    'excluded_user_id': excluded_user.id if excluded_user else 0 #TODO for some reason NULL doesn't work here, but 0 is kinda hacky
+                                                 }, strip_pairs=True)
+        last_command = g.db.execute_and_fetchall("""SELECT sent_on
+                                                    FROM commands
+                                                    WHERE vinebot_id = %(vinebot_id)s
+                                                    AND sender_id != %(excluded_user_id)s
+                                                    AND sender_id IS NOT NULL
+                                                    AND command_name IN ('join', 'topic', 'invite', 'tweet_invite')
+                                                    AND is_valid IS TRUE
+                                                    ORDER BY sent_on DESC
+                                                    LIMIT 1
+                                                 """, {
+                                                    'vinebot_id': self.id,
+                                                    'excluded_user_id': excluded_user.id if excluded_user else 0
+                                                 }, strip_pairs=True)
+        if last_message and last_command:
+            return last_message[0] if last_message[0] > last_command [0] else last_command[0]
+        elif last_message:
+            return last_message[0]
+        elif last_command:
+            return last_command[0]
+        else:
+            return datetime.now() #TODO find a better default
     
     def _set_topic(self, body):        
         if not self.can_write:
@@ -273,9 +271,11 @@ class AbstractVinebot(object):
         elif name == 'is_active':
             return len(self.participants) >= 2
         elif name == 'last_active':
-            return "last active %s ago" % self._format_time_since_stamp(self._fetch_last_active_time())
+            if self._last_active is None:
+                self._last_active = self._format_time_since_stamp(self._fetch_last_active())
+            return self._last_active
         elif name == 'is_idle':
-            return not self.check_recent_activity(None)
+            return not self.check_recent_activity()
         elif name == 'group':
             group = 'Contacts'
             if self.is_active:

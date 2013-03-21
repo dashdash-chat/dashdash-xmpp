@@ -565,7 +565,7 @@ class LeafComponent(ComponentXMPP):
             if vinebot.topic:
                 pstatus = unicode(vinebot.topic)
             elif vinebot.is_active and vinebot.is_idle:
-                pstatus = unicode(vinebot.last_active)
+                pstatus = 'last active %s ago' % vinebot.last_active
         for recipient in recipients:
             self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.domain),
@@ -601,7 +601,7 @@ class LeafComponent(ComponentXMPP):
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
         if body and body != '' and sender:
             g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
-        if activate and vinebot.is_idle:
+        if activate and not vinebot.is_idle:
             self.send_presences(vinebot, vinebot.everyone)
     
     def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
