@@ -9,7 +9,7 @@ from constants import g
 import user as u
 import edge as e
 
-IDLE_MINUTES = 1
+IDLE_MINUTES = 10
 
 if sys.version_info < (3, 0):
     reload(sys)

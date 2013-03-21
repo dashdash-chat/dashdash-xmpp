@@ -599,10 +599,11 @@ class LeafComponent(ComponentXMPP):
                 if body and body != '' and sender:
                     g.logger.info('[message] received')
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
-        if body and body != '' and sender:
-            g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
-        if activate and not vinebot.is_idle:
-            self.send_presences(vinebot, vinebot.everyone)
+        if body and body != '':
+            if sender:
+                g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
+            if activate and not vinebot.is_idle:
+                self.send_presences(vinebot, vinebot.everyone)
     
     def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
         self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
