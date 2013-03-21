@@ -598,11 +598,11 @@ class LeafComponent(ComponentXMPP):
                 actual_recipients.append(recipient)
                 if body and body != '' and sender:
                     g.logger.info('[message] received')
+        g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
         if body and body != '' and sender:
             g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
         if activate and vinebot.is_idle:
             self.send_presences(vinebot, vinebot.everyone)
-        g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
     
     def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
         self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
@@ -768,12 +768,13 @@ class LeafComponent(ComponentXMPP):
     
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
-        if len(vinebot.participants) == 2:  # revert to previous status states
+        if len(vinebot.participants) == 2:
             user1, user2 = vinebot.participants
-            self.send_presences(vinebot, [user1], pshow=user2.status())
-            self.send_presences(vinebot, [user2], pshow=user1.status())
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
+        if len(vinebot.participants) == 0:  # revert to the statuses of the users, not of the conversation
+            self.send_presences(vinebot, [user1], pshow=user2.status())
+            self.send_presences(vinebot, [user2], pshow=user1.status())
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
