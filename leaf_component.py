@@ -436,8 +436,14 @@ class LeafComponent(ComponentXMPP):
             user = FetchedUser(name=presence['from'].user)
             vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
             if user in vinebot.participants:  # [] if vinebot is not active
-                g.logger.info('[away] %03d participants' % len(vinebot.participants))
-                self.send_presences(vinebot, vinebot.everyone, pshow=presence['type'])
+                if len(vinebot.participants) > 2:
+                    self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
+                else:  # elif len(participants) == 2:    
+                    g.logger.info('[away] %03d participants' % len(vinebot.participants))
+                    remaining_user = iter(vinebot.participants.difference([user])).next()
+                    self.remove_participant(vinebot, user)  # this deactivates the vinebot
+                    self.send_presences(vinebot, [user], pshow=remaining_user.status())
+                    self.send_presences(vinebot, [remaining_user], pshow=presence['type'])
             else:
                 try:
                     edge_t_user = FetchedEdge(t_user=user, vinebot_id=vinebot.id)
