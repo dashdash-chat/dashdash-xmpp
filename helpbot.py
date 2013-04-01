@@ -30,32 +30,22 @@ class EchoBot(sleekxmpp.ClientXMPP):
     
     def message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            g.logger.info(msg['body'])
-            if not msg['from'].user.startswith(constants.vinebot_prefix):
+            if msg['body'].startswith('*** '):
                 try:
-                    _, username = msg['body'].split('*** ')
-                except ValueError:
-                    g.logger.warning('Message ignored: %s' % msg)
-                    return
-                try:
-                    helpbot = FetchedUser(name=constants.help_jid_user)
+                    _, username = msg['body'].split('*** %s ' % constants.onboarding_continue)
                     user = FetchedUser(can_write=True, name=username)
-                    outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
-                    vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
-                    if not user.is_onboarded():
-                        new_msg = self.Message()
-                        new_msg['type'] = 'chat'
-                        new_msg['body'] = constants.onboarding_messages[user.onboarding_stage]
-                        new_msg['to'] = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
-                        new_msg.send()
+                    if user.needs_onboarding():
+                        msg.reply(constants.onboarding_messages[user.onboarding_stage]).send()
                         user.increment_onboarding_stage()
+                except ValueError:  # from the string split    
+                    g.logger.warning('Message ignored: %s' % msg)
                 except NotUserException:
                     g.logger.warning('User not found for %s' % username)
                 except NotEdgeException:
                     g.logger.warning('Edge not found from %s to %s' % (constants.help_jid_user, username))
                 except NotVinebotException:
                     g.logger.warning('Vinebot not found for %s and %s with id=%d' % (constants.help_jid_user, username, outgoing_edge.vinebot_id))
-            else:
+            else: 
                 msg.reply('Sorry, but I\'m not the smartest of chat bots. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
 
 if __name__ == '__main__':

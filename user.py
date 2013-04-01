@@ -89,8 +89,8 @@ class AbstractUser(object):
                                                 })
         return frozenset([FetchedUser(name=block_pair[0], dbid=block_pair[1]) for block_pair in block_pairs])
     
-    def is_onboarded(self):
-        return self._onboarding_stage >= len(constants.onboarding_messages)
+    def needs_onboarding(self):
+        return self._onboarding_stage < len(constants.onboarding_messages)
     
     def increment_onboarding_stage(self):
         if not self.can_write:

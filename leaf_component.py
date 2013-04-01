@@ -408,15 +408,17 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
-            if user.name != constants.help_jid_user and not user.is_onboarded():
+            if user.name != constants.help_jid_user and user.needs_onboarding():
                 try:
                     helpbot = FetchedUser(name=constants.help_jid_user)
-                    try:
-                        self.create_edge(None, helpbot.name, user.name)
-                    except ExecutionError:
-                        pass
                     if helpbot.is_online():
-                        self.broadcast_message(vinebot, None, [helpbot], user.name)
+                        try:
+                            self.create_edge(None, helpbot.name, user.name)
+                        except ExecutionError:
+                            pass
+                        outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)  # either the edge that existed, or the one we just made
+                        edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
+                        self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.onboarding_continue, user.name))
                 except NotUserException:
                     g.logger.error('%s user does not exist in the database!' % constants.help_jid_user)
             if user.name in constants.watched_usernames:
