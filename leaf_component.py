@@ -1,7 +1,6 @@
 from gevent import monkey; monkey.patch_all()
 import sys
 from datetime import datetime
-import MySQLdb
 from MySQLdb import IntegrityError, OperationalError
 import logging
 from optparse import OptionParser
@@ -409,6 +408,17 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
+            if user.name != constants.help_jid_user and not user.is_onboarded():
+                try:
+                    helpbot = FetchedUser(name=constants.help_jid_user)
+                    try:
+                        self.create_edge(None, helpbot.name, user.name)
+                    except ExecutionError:
+                        pass
+                    if helpbot.is_online():
+                        self.broadcast_message(vinebot, None, [helpbot], user.name)
+                except NotUserException:
+                    g.logger.error('%s user does not exist in the database!' % constants.help_jid_user)
             if user.name in constants.watched_usernames:
                 client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
                 for to_number in constants.twilio_to_numbers:

@@ -103,6 +103,20 @@ supervisor_service "leaves" do
   stopwaitsecs 300
   action :enable
 end
+supervisor_service "helpbot" do
+  command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/helpbot.py"
+  directory xmpp_repo_dir
+  user node.run_state['config']['user']
+  stdout_logfile "#{node['supervisor']['log_dir']}/helpbot.log"
+  stderr_logfile "#{node['supervisor']['log_dir']}/helpbot.log"
+  stopsignal "INT"
+  autostart false
+  autorestart false
+  priority 5
+  startsecs 10
+  stopwaitsecs 10
+  action :enable
+end
 supervisor_service "echobot" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/echobot.py"
   directory xmpp_repo_dir
@@ -118,8 +132,9 @@ supervisor_service "echobot" do
   action :enable
 end
 
-# Send the leaves and echobot logs to Papertrail
+# Send the leaves, helpbot, and echobot logs to Papertrail
 node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/leaves.log" ] = 'leaves'
+node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/helpbot.log"] = 'helpbot'
 node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/echobot.log"] = 'echobot'
 
 # Add commonly-used commands to the bash history
