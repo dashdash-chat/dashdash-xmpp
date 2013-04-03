@@ -17,7 +17,7 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-class EchoBot(sleekxmpp.ClientXMPP):
+class HelpBot(sleekxmpp.ClientXMPP):
     def __init__(self, jid, password):
         sleekxmpp.ClientXMPP.__init__(self, jid, password)
         g.db = MySQLManager(constants.help_mysql_user, constants.help_mysql_password)
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     logging.basicConfig(format=constants.log_format, level=opts.loglevel)
     g.loglevel = opts.loglevel
     g.use_new_logger('helpbot')
-    xmpp = EchoBot('%s@%s' % (constants.help_jid_user, constants.domain), constants.help_xmpp_password)
+    xmpp = HelpBot('%s@%s' % (constants.help_jid_user, constants.domain), constants.help_xmpp_password)
     xmpp.register_plugin('xep_0030') # Service Discovery
     xmpp.register_plugin('xep_0004') # Data Forms
     xmpp.register_plugin('xep_0060') # PubSub

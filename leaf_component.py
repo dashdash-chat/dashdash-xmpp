@@ -577,18 +577,18 @@ class LeafComponent(ComponentXMPP):
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
         pfrom = constants.leaves_jid
-        pstatus = None
+        statuses = []
         if vinebot:
             pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
             if vinebot.topic:
-                pstatus = unicode(vinebot.topic)
-            elif vinebot.is_active and vinebot.is_idle:
-                pstatus = 'last active %s ago' % vinebot.last_active
+                statuses.append(unicode(vinebot.topic))
+            if vinebot.is_active and vinebot.is_idle:
+                statuses.append('last active %s ago' % vinebot.last_active)
         for recipient in recipients:
             self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.domain),
                                 pshow=None if pshow == 'available' else pshow,
-                                pstatus=pstatus)
+                                pstatus=', '.join(statuses))
     
     def send_idle_presences(self):
         for active_vinebot in FetchedVinebot.fetch_vinebots_with_participants():
@@ -870,7 +870,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t unblock administrator accounts.')
         if unblocker.unblock(unblockee):
             if celery_tasks:
-                celery_tasks.score_edges.delay(unblocker.id)
+                celery_tasks.score_edges.delay(unblockee.id)
                 g.logger.info('[unblock] success, celery task queued')
             else:
                 g.logger.info('[unblock] success, no celery task queued')
