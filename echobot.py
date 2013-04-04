@@ -28,7 +28,7 @@ class EchoBot(sleekxmpp.ClientXMPP):
             body = msg['body'].split(']')[1].strip()
             if self.last_message != body:  # simple guard against infinite loops between demobots
                 self.last_message = body
-                if self.boundjid.user == 'chesire_cat':
+                if self.boundjid.user == 'cheshire_cat':
                     body = '%s :D' % body
                 msg.reply(body).send()
     
