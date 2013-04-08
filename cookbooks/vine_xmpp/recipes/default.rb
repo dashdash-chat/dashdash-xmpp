@@ -26,7 +26,7 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
     #{xmpp_env_dir}/bin/python setup.py install
   EOH
 end
-['mysql-python', 'dnspython',
+['mysql-python', 'dnspython', 'pyasn1', 'pyasn1_modules',
  'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp',
  'boto', 'celery', 'Flask-OAuth', 'Flask-SQLAlchemy'  #TODO re-use the python-twitter library for all OAuth, so we don't need flask here
 ].each do |library|

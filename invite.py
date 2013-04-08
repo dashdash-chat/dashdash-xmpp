@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import MySQLdb
 import sys
-import os, random, string  # for password generation    
+import os, random, string  # for password generation
 import constants
 from constants import g
 import user as u
@@ -148,41 +148,61 @@ class InsertedInvite(AbstractInvite):
     
 
 class FetchedInvite(AbstractInvite):
-    def __init__(self, code, sender_id=None, visible=None):
+    def __init__(self, code=None, sender_id=None, invitee_id=None, visible=None):
         super(FetchedInvite, self).__init__()
-        if code.startswith(super(FetchedInvite, self).url_prefix):
-            code = code.replace(super(FetchedInvite, self).url_prefix, '')
-        self.code = code
-        if sender_id and visible is not None:
-            results = g.db.execute_and_fetchall("""SELECT id, max_uses
-                                                   FROM invites
-                                                   WHERE code = %(code)s
-                                                   AND sender = %(sender_id)s
-                                                   LIMIT 1
-                                                """, {
-                                                   'code': code,
-                                                   'sender_id': sender_id
-                                                })
-            if len(results) < 1:
-                raise NotInviteException, 'No invite found for code %s' % code
-            self.id = results[0][0]
-            self.sender = u.FetchedUser(dbid=sender_id)
-            self.max_uses = results[0][1]
-            self.visible = visible
+        if code is not None:
+            if code.startswith(super(FetchedInvite, self).url_prefix):
+                code = code.replace(super(FetchedInvite, self).url_prefix, '')
+            self.code = code
+            if sender_id and visible is not None:
+                results = g.db.execute_and_fetchall("""SELECT id, max_uses
+                                                       FROM invites
+                                                       WHERE code = %(code)s
+                                                       AND sender = %(sender_id)s
+                                                       LIMIT 1
+                                                    """, {
+                                                       'code': code,
+                                                       'sender_id': sender_id
+                                                    })
+                if len(results) < 1:
+                    raise NotInviteException, 'No invite found for code %s' % code
+                self.id = results[0][0]
+                self.sender = u.FetchedUser(dbid=sender_id)
+                self.max_uses = results[0][1]
+                self.visible = visible
+            else:
+                results = g.db.execute_and_fetchall("""SELECT id, max_uses, sender, visible
+                                                       FROM invites
+                                                       WHERE code = %(code)s
+                                                       LIMIT 1
+                                                    """, {
+                                                       'code': code
+                                                    })
+                if len(results) < 1:
+                    raise NotInviteException, 'No invite found for code %s' % code
+                self.id = results[0][0]
+                self.max_uses = results[0][1]
+                self.sender = u.FetchedUser(dbid=results[0][2])
+                self.visible = results[0][3]
         else:
-            results = g.db.execute_and_fetchall("""SELECT id, max_uses, sender, visible
-                                                   FROM invites
-                                                   WHERE code = %(code)s
-                                                   LIMIT 1
-                                                """, {
-                                                   'code': code
-                                                })
-            if len(results) < 1:
-                raise NotInviteException, 'No invite found for code %s' % code
-            self.id = results[0][0]
-            self.max_uses = results[0][1]
-            self.sender = u.FetchedUser(dbid=results[0][2])
-            self.visible = results[0][3]
+            if invitee_id is not None:
+                results = g.db.execute_and_fetchall("""SELECT invites.id, invites.code, invites.sender, invites.max_uses
+                                                       FROM invites, invitees
+                                                       WHERE invites.id = invitees.invite_id
+                                                       AND invitees.invitee_id = %(invitee_id)s
+                                                       LIMIT 1
+                                                    """, {
+                                                       'invitee_id': invitee_id
+                                                    })
+                if len(results) < 1:
+                    raise NotInviteException, 'No invite found for code %s' % code
+                self.id = results[0][0]
+                self.code = results[0][1]
+                self.sender = u.FetchedUser(dbid=results[0][2])
+                self.max_uses = results[0][3]
+                self.visible = visible
+            else:
+                raise NotInviteException, 'No invite found for code=%s, sender_id=%s, invitee_id=%s, visible=%s' % (code, sender_id, invitee_id, visible)
     
     @staticmethod
     def fetch_sender_invites(sender):
@@ -192,5 +212,5 @@ class FetchedInvite(AbstractInvite):
                                             """, {
                                                'sender': sender.id
                                             })
-        return [FetchedInvite(result[0], sender_id=result[1], visible=result[2]) for result in results]
+        return [FetchedInvite(code=result[0], sender_id=result[1], visible=result[2]) for result in results]
     

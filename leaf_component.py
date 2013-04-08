@@ -408,19 +408,24 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
-            if user.name != constants.help_jid_user and user.needs_onboarding():
+            if user.name != constants.helpbot_jid_user and user.needs_onboarding():
                 try:
-                    helpbot = FetchedUser(name=constants.help_jid_user)
+                    helpbot = FetchedUser(name=constants.helpbot_jid_user)
                     if helpbot.is_online():
                         try:
                             self.create_edge(None, helpbot.name, user.name)
                         except ExecutionError:
                             pass
+                        try:
+                            invite = FetchedInvite(invitee_id=user.id)
+                            self.create_edge(None, helpbot.name, invite.sender.name)
+                        except ExecutionError:
+                            pass
                         outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)  # either the edge that existed, or the one we just made
                         edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
-                        self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.onboarding_continue, user.name))
+                        self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
                 except NotUserException:
-                    g.logger.error('%s user does not exist in the database!' % constants.help_jid_user)
+                    g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
             if user.name in constants.watched_usernames:
                 client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
                 for to_number in constants.twilio_to_numbers:
@@ -1201,7 +1206,7 @@ class LeafComponent(ComponentXMPP):
     
     def hide_invite(self, parent_command_id, invite_code):
         try:
-            invite = FetchedInvite(invite_code)
+            invite = FetchedInvite(code=invite_code)
             if not invite.visible:
                 return parent_command_id, '%s\'s invite %s was already hidden.' % (invite.sender.name, invite.code)
             invite.hide()
@@ -1213,7 +1218,7 @@ class LeafComponent(ComponentXMPP):
     
     def show_invite(self, parent_command_id, invite_code):
         try:
-            invite = FetchedInvite(invite_code)
+            invite = FetchedInvite(code=invite_code)
             if invite.visible:
                 return parent_command_id, '%s\'s invite %s was already visible.' % (invite.sender.name, invite.code)
             invite.show()
@@ -1233,7 +1238,7 @@ class LeafComponent(ComponentXMPP):
     
     def del_invite(self, parent_command_id, invite_code):
         try:
-            invite = FetchedInvite(invite_code)
+            invite = FetchedInvite(code=invite_code)
             invite.delete()
             return parent_command_id, '%s\'s invite %s has been deleted.' % (invite.sender.name, invite.code)
         except NotInviteException, e:

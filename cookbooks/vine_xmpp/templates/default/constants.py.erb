@@ -17,16 +17,17 @@ graph_jid_user = '<%= node.run_state['config']['xmlrpc']['graph_user'] %>'
 graph_jid = '%s@%s' % (graph_jid_user, domain)
 graph_xmpp_password = '<%= node.run_state['config']['xmlrpc']['graph_password'] %>'
 
-help_jid_user = '<%= node.run_state['config']['xmpp_users']['help_user'] %>'
-help_xmpp_password = '<%= node.run_state['config']['xmpp_users']['help_password'] %>'
-onboarding_continue = 'continue onboarding'
-onboarding_messages = ['Welcome to Vine!']  # The indices in these lists correspond to a user's onboarding_stage integer, at least for now
+helpbot_jid_user = '<%= node.run_state['config']['xmpp_users']['helpbot_user'] %>'
+helpbot_xmpp_password = '<%= node.run_state['config']['xmpp_users']['helpbot_password'] %>'
+act_on_user_stage = 'fiph5bap3av5on5bid2y'  # just a random string
 
 xmlrpc_port = <%= node.run_state['config']['xmlrpc']['port'] %>
 leaves_xmlrpc_user = '<%= node.run_state['config']['xmlrpc']['leaves_user'] %>'
 leaves_xmlrpc_password = '<%= node.run_state['config']['xmlrpc']['leaves_password'] %>'
 web_xmlrpc_user = '<%= node.run_state['config']['xmlrpc']['web_user'] %>'
 web_xmlrpc_password = '<%= node.run_state['config']['xmlrpc']['web_password'] %>'
+helpbot_xmlrpc_user = '<%= node.run_state['config']['xmlrpc']['helpbot_user'] %>'
+helpbot_xmlrpc_password = '<%= node.run_state['config']['xmlrpc']['helpbot_password'] %>'
 
 db_host = '<%= node.run_state['config']['mysql']['host'] %>'
 db_name = '<%= node.run_state['config']['mysql']['main_name'] %>'
@@ -35,8 +36,8 @@ leaves_mysql_user = '<%= node.run_state['config']['mysql']['leaves_user'] %>'
 leaves_mysql_password ='<%= node.run_state['config']['mysql']['leaves_password'] %>'
 graph_mysql_user = '<%= node.run_state['config']['mysql']['graph_user'] %>'
 graph_mysql_password = '<%= node.run_state['config']['mysql']['graph_password'] %>'
-help_mysql_user = '<%= node.run_state['config']['mysql']['help_user'] %>'
-help_mysql_password = '<%= node.run_state['config']['mysql']['help_password'] %>'
+helpbot_mysql_user = '<%= node.run_state['config']['mysql']['helpbot_user'] %>'
+helpbot_mysql_password = '<%= node.run_state['config']['mysql']['helpbot_password'] %>'
 celery_db_name = '<%= node.run_state['config']['mysql']['celery_name'] %>'
 celery_mysql_user = '<%= node.run_state['config']['mysql']['celery_user'] %>'
 celery_mysql_password = '<%= node.run_state['config']['mysql']['celery_password'] %>'
