@@ -25,12 +25,18 @@ class EchoBot(sleekxmpp.ClientXMPP):
     
     def message(self, msg):
         if msg['type'] in ('chat', 'normal') and msg['body'].startswith('[') and not msg['body'].startswith('/me '):
-            body = msg['body'].split(']')[1].strip()
+            from_string, body = msg['body'].split('] ', 1)
+            from_string  = from_string.strip('[')
+            from_strings = from_string.split(', ')
+            body = body.strip()
             if self.last_message != body:  # simple guard against infinite loops between demobots
                 self.last_message = body
                 if self.boundjid.user == 'cheshire_cat':
                     body = '%s :D' % body
-                msg.reply(body).send()
+                if len(from_strings) == 2 and from_strings[1].strip() == 'whispering':
+                    msg.reply('/whisper %s %s' % (from_strings[0].strip(), body)).send()
+                else:
+                    msg.reply(body).send()
     
 
 if __name__ == '__main__':
