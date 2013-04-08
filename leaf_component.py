@@ -427,14 +427,24 @@ class LeafComponent(ComponentXMPP):
                 try:
                     helpbot = FetchedUser(name=constants.helpbot_jid_user)
                     if helpbot.is_online():
+                        def quiet_create_edge(username1, username2):
+                            try:
+                                self.create_edge(None, username1, username2)
+                            except IntegrityError:
+                                pass  # The edge already exists
+                            except ExecutionError:
+                                g.logger.warning('Unable to create edge from %s to %s.' % (username1, username2))
                         try:
                             invite = FetchedInvite(invitee_id=user.id)
-                            self.create_edge(None, helpbot.name, invite.sender.name)
-                        except IntegrityError:
-                            pass  # The edge already exists
-                        except ExecutionError:
-                            g.logger.warning('Unable to create edge from helpbot to user %s.' % invite.sender)
-                        outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)  # either the edge that existed, or the one we just made
+                            quiet_create_edge(helpbot.name, invite.sender.name)
+                        except NotInviteException:
+                            pass
+                        try:
+                            outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
+                        except NotEdgeException:  # Old users we're demo'ing with might not have these edges, so create them temporarily.
+                            quiet_create_edge(helpbot.name, user.name)
+                            quiet_create_edge(user.name, helpbot.name)
+                            outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
                         edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
                         self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
                 except NotUserException:
