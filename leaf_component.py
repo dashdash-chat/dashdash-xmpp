@@ -343,6 +343,14 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.invites_for))
+        self.commands.add(SlashCommand(command_name     = 'score',
+                                       list_rank        = 13,
+                                       text_arg_format  = '<username>',
+                                       text_description = 'Queue a celery task to score the edges for the speicified user.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token,
+                                       action           = self.score_edges))
+    
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
@@ -1284,6 +1292,17 @@ class LeafComponent(ComponentXMPP):
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
+    def score_edges(self, parent_command_id, username):
+        try:
+            user = FetchedUser(name=username)
+            if celery_tasks:
+                celery_tasks.score_edges.delay(user.id)
+                return parent_command_id, 'Score edges Celery task queued for %s' % user.name
+            else:
+                raise ExecutionError, (parent_command_id, 'the celery_tasks module was not found.')
+        except NotUserException, e:
+            raise ExecutionError, (parent_command_id, e)
     
     def _format_list_output(self, items, title, item_formatter):
         output = '\n\t%d %s' % (len(items), title)
