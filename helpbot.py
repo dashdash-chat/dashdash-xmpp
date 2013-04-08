@@ -110,7 +110,6 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 if msg['body'].startswith('*** '):  # Do this first, in case the conversation is residually active
                     if msg['body'].find(constants.act_on_user_stage) >= 0:
                         try:
-                            g.logger.info(msg['body'])
                             _, sender_name = msg['body'].split(constants.act_on_user_stage, 1)
                             sender = FetchedUser(can_write=True, name=sender_name.strip())
                             if sender.needs_onboarding():  # Only handle this message once, otherwise we'll jump ahead in the flow.
