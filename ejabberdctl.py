@@ -83,6 +83,7 @@ class EjabberdCTL(object):
     def _retried_xmlrpc_command(self, command, data):
         xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
         for i in range(1, NUM_RETRIES + 1):
+            result = None
             try:
                 result = self._xmlrpc_command(command, data, xmlrpc_server)
             except socket.error as e:
@@ -90,7 +91,7 @@ class EjabberdCTL(object):
                     g.logger.warning('Failed %s XMLRPC command #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], e))
                 else:
                     raise e
-            if result['res'] == 0:
+            if result is not None and 'res' in result and result['res'] == 0:
                 return True
             else:
                 g.logger.warning('Failed %s XMLRPC connabd #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], result))

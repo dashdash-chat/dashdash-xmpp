@@ -428,14 +428,12 @@ class LeafComponent(ComponentXMPP):
                     helpbot = FetchedUser(name=constants.helpbot_jid_user)
                     if helpbot.is_online():
                         try:
-                            self.create_edge(None, helpbot.name, user.name)
-                        except ExecutionError:
-                            pass
-                        try:
                             invite = FetchedInvite(invitee_id=user.id)
                             self.create_edge(None, helpbot.name, invite.sender.name)
+                        except IntegrityError:
+                            pass  # The edge already exists
                         except ExecutionError:
-                            pass
+                            g.logger.warning('Unable to create edge from helpbot to user %s.' % invite.sender)
                         outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)  # either the edge that existed, or the one we just made
                         edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
                         self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
@@ -807,11 +805,13 @@ class LeafComponent(ComponentXMPP):
     
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
+        user1 = None
+        user2 = None
         if len(vinebot.participants) == 2:
             user1, user2 = vinebot.participants
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
-        if len(vinebot.participants) == 0:  # revert to the statuses of the users, not of the conversation
+        if user1 and user2 and len(vinebot.participants) == 0:  # revert to the statuses of the users, not of the conversation
             self.send_presences(vinebot, [user1], pshow=user2.status())
             self.send_presences(vinebot, [user2], pshow=user1.status())
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
