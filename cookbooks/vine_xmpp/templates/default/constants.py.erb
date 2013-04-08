@@ -48,7 +48,7 @@ aws_secret_access_key = '<%= node.run_state['config']['aws']['secret_access_key'
 
 vinebot_prefix = 'vinebot_'
 
-protected_users = <%= node.run_state['config']['xmpp_users']['admins'] %> + [web_xmlrpc_user, leaves_jid_user, graph_jid_user]
+protected_users = <%= node.run_state['config']['xmpp_users']['admins'] %> + [web_xmlrpc_user, leaves_xmlrpc_user, helpbot_xmlrpc_user, leaves_jid_user, graph_jid_user]
 admin_jids = ['%s@%s' % (user, domain) for user in <%= node.run_state['config']['xmpp_users']['admins'] %>]
 graph_xmpp_jid = '%s@%s' % ('<%= node.run_state['config']['xmlrpc']['graph_user'] %>', domain)
 
