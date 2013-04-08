@@ -29,7 +29,7 @@ class AbstractUser(object):
         self._outgoing_vinebots = None
         self._incoming_vinebots = None
         self._noted_vinebot_ids = None
-        self._onboarding_stage = 0  # by default
+        self._stage = None
         self.can_write = can_write
         # if self.can_write:  the user doesn't actually require a lock, since deleting is really the only potential issue
     
@@ -90,20 +90,29 @@ class AbstractUser(object):
         return frozenset([FetchedUser(name=block_pair[0], dbid=block_pair[1]) for block_pair in block_pairs])
     
     def needs_onboarding(self):
-        return self._onboarding_stage < len(constants.onboarding_messages)
+        return self.stage == 'welcome'
     
-    def increment_onboarding_stage(self):
-        if not self.can_write:
-            raise UserPermissionsException
+    def set_stage(self, stage):
+        # if not self.can_write:  #NOTE that this actually doesn't mess up any Vinebot state, so we don't need to be careful about this
+        #     raise UserPermissionsException
         g.db.execute("""UPDATE users
-                        SET onboarding_stage = %(onboarding_stage)s
+                        SET stage = %(stage)s
                         WHERE id = %(id)s
                      """, {
-                        'onboarding_stage': self._onboarding_stage + 1,
+                        'stage': str(stage),
                         'id': self.id
                      })
-        self._onboarding_stage += 1
+        self._stage = str(stage)
     
+    def _fetch_stage(self):
+        stage = g.db.execute_and_fetchall("""SELECT stage
+                                                    FROM users
+                                                    WHERE id = %(id)s
+                                                 """, {
+                                                    'id': self.id
+                                                 }, strip_pairs=True)
+        return stage[0] if stage else None
+        
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                     FROM users, edges AS outgoing, edges AS incoming
@@ -335,13 +344,14 @@ class AbstractUser(object):
             if self._outgoing_vinebots is None:
                 self._outgoing_vinebots = self._fetch_vinebots_outgoing_only()
             return self._outgoing_vinebots
-        elif name == 'onboarding_stage':
-            return self._onboarding_stage  # This should never be None, but we still want to lock down the setter
-        else:
-            dict.__getattr__(self, name)
+        elif name == 'stage':
+            if self._stage is None:
+                self._stage = self._fetch_stage()
+            return self._stage
+        # __getattr__ is only called as a last resort, so we don't need a catchall
     
     def __setattr__(self, name, value):
-        if name == ['jid', 'friends', 'active_vinebots', 'observed_vinebots', 'symmetric_vinebots', 'incoming_vinebots', 'outgoing_vinebots', 'onboarding_stage']:
+        if name == ['jid', 'friends', 'active_vinebots', 'observed_vinebots', 'symmetric_vinebots', 'incoming_vinebots', 'outgoing_vinebots', 'stage']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
@@ -389,9 +399,10 @@ class InsertedUser(AbstractUser):
             dbid = dbid[0]
             g.db.execute("""UPDATE users
                             SET is_active = true,
-                                onboarding_stage = 0
+                                stage = %(stage)s
                             WHERE id = %(id)s
                          """, {
+                            'stage': None,
                             'id': dbid
                          })
         if should_register and password:
@@ -401,7 +412,6 @@ class InsertedUser(AbstractUser):
         self.twitter_id = None  # Newly-created users won't ever have tokens, since they haven't auth'd on the site yet
         self.twitter_token = None
         self.twitter_secret = None
-        self._onboarding_stage = 0
     
 
 class FetchedUser(AbstractUser):
@@ -410,7 +420,7 @@ class FetchedUser(AbstractUser):
         self.name = None
         self.id = None
         if name and dbid:
-            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, onboarding_stage
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage
                                                FROM users
                                                WHERE id = %(id)s
                                             """, {
@@ -421,7 +431,7 @@ class FetchedUser(AbstractUser):
                 self.id = dbid
                 self.name = name.lower()
         elif name:
-            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, onboarding_stage
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage
                                                 FROM users
                                                 WHERE name = %(name)s
                                                 AND is_active = true
@@ -433,7 +443,7 @@ class FetchedUser(AbstractUser):
                 self.id = res[0]
                 self.name = name.lower()
         elif dbid:
-            res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret, onboarding_stage
+            res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret, stage
                                                 FROM users
                                                 WHERE id = %(id)s
                                                 AND is_active = true
@@ -451,5 +461,5 @@ class FetchedUser(AbstractUser):
         self.twitter_id     = res[1]
         self.twitter_token  = res[2]
         self.twitter_secret = res[3]
-        self._onboarding_stage = res[4]
+        self._stage = res[4]
     
