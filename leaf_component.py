@@ -250,6 +250,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string_or_none,
                                        action           = self.tweet_invite))
+        self.commands.add(SlashCommand(command_name     = 'me',
+                                       list_rank        = 30,
+                                       text_arg_format  = '<action_message>',
+                                       text_description = 'Sends a message in the format "*** [username] action_message".',
+                                       validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_string_or_none,
+                                       action           = self.me_action_message))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -1018,6 +1025,12 @@ class LeafComponent(ComponentXMPP):
             g.logger.info('[tweet_invite] other error')
             return parent_command_id, 'Something went wrong posting to Twitter - try signing in again at http://%s.\n' % constants.domain + \
                                       'Here\'s what would have been tweeted:\n\t%s' % tweet
+    
+    def me_action_message(self, parent_command_id, vinebot, sender, action_message):
+        if action_message is None:
+            raise ExecutionError, (parent_command_id, 'you must specify an action_message.')
+        self.broadcast_alert(vinebot, "%s %s" % (sender.name, action_message), parent_command_id=parent_command_id, activate=True)
+        g.logger.info('[me] %03d participants' % len(vinebot.participants))
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
