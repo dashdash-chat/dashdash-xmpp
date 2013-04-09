@@ -445,7 +445,7 @@ class LeafComponent(ComponentXMPP):
                             quiet_create_edge(helpbot.name, user.name)
                             quiet_create_edge(user.name, helpbot.name)
                             outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
-                        edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
+                        edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
                         self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
                 except NotUserException:
                     g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
