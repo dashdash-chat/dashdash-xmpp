@@ -87,8 +87,9 @@ class EjabberdCTL(object):
             try:
                 result = self._xmlrpc_command(command, data, xmlrpc_server)
             except socket.error as e:
-                if e.errno == errno.ECONNRESET:
+                if e.errno in [errno.ECONNRESET, errno.ETIMEDOUT]:
                     g.logger.warning('Failed %s XMLRPC command #%d for %s with %s and error %s' % (command, i, data['localuser'], data['user'], e))
+                    xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
                 else:
                     raise e
             if result is not None and 'res' in result and result['res'] == 0:
