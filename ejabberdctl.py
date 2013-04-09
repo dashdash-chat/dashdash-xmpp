@@ -94,7 +94,7 @@ class EjabberdCTL(object):
             if result is not None and 'res' in result and result['res'] == 0:
                 return True
             else:
-                g.logger.warning('Failed %s XMLRPC connabd #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], result))
+                g.logger.warning('Failed %s XMLRPC command #%d for %s with %s: %s' % (command, i, data['localuser'], data['user'], result))
         return False
     
     def _xmlrpc_command(self, command, data, xmlrpc_server=None):        

@@ -70,7 +70,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 other_recipient = invite.sender
             else:
                 yes_stage = 'no_friends_online'
-                yes_response = "Your friend %s (who invited you) isn't online right now, so I'll start a conversation with another bot, %s.%s" % (invite.sender.name, constants.echo_user, temp_text)
+                yes_response = "Your friend %s isn't online right now, so I'll start a conversation with another bot, %s.%s" % (invite.sender.name, constants.echo_user, temp_text)
                 other_body = str(uuid.uuid4())  # doesn't matter what, as long as it won't be sent by someone else next
                 other_recipient = FetchedUser(name=constants.echo_user)
             self._send_message(other_recipient, other_body)

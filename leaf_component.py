@@ -33,7 +33,7 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-ROSTER_SYNC_PROBABILITY = 100
+ROSTER_SYNC_PROBABILITY = 200
 CURRENT_TCO_LENGTH = 20
 
 class LeafComponent(ComponentXMPP):
