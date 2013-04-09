@@ -86,6 +86,11 @@ class HelpBot(sleekxmpp.ClientXMPP):
         self.register_plugin('xep_0060') # PubSub
         self.register_plugin('xep_0199') # XMPP Ping
     
+    def disconnect(self, *args, **kwargs):
+        kwargs['wait'] = True
+        super(HelpBot, self).disconnect(*args, **kwargs)
+        g.db.cleanup()  # Cleanup after last scheduled task is done
+    
     def _send_message(self, recipient, body):
         msg = self.Message()
         msg['type'] = 'chat'
