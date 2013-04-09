@@ -153,8 +153,8 @@ class AbstractVinebot(object):
     
     def check_recent_activity(self, excluded_user=None):
         return self._fetch_last_active(excluded_user) > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
-        
-    def _fetch_last_active(self, excluded_user=None):        
+    
+    def _fetch_last_active(self, excluded_user=None):
         last_message = g.db.execute_and_fetchall("""SELECT sent_on
                                                     FROM messages
                                                     WHERE vinebot_id = %(vinebot_id)s
@@ -190,7 +190,7 @@ class AbstractVinebot(object):
         else:
             return datetime.now() #TODO find a better default
     
-    def _set_topic(self, body):        
+    def _set_topic(self, body):
         if not self.can_write:
             raise VinebotPermissionsException
         g.db.execute("""DELETE FROM topics
