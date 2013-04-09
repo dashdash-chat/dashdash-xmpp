@@ -111,38 +111,40 @@ class HelpBot(sleekxmpp.ClientXMPP):
     
     def message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            try:
-                vinebot = FetchedVinebot(jiduser=msg['from'].username)
-                if msg['body'].startswith('*** '):  # Do this first, in case the conversation is residually active
-                    if msg['body'].find(constants.act_on_user_stage) >= 0:
-                        try:
-                            _, sender_name = msg['body'].split(constants.act_on_user_stage, 1)
-                            sender = FetchedUser(can_write=True, name=sender_name.strip())
-                            if sender.needs_onboarding():  # Only handle this message once, otherwise we'll jump ahead in the flow.
-                                msg.reply(self.message_graph.get_reply(sender, None)).send()
-                        except NotUserException:
-                            g.logger.warning('User not found for %s' % sender_name.strip())
-                    # elif msg['body'].find('left the conversation') >= 0:  #TODO This seems to cause an infinite loop when removing participants, which, uh, shouldn't happen.
-                    #     msg.reply('/leave').send()
-                    else:
-                        g.logger.warning('Message ignored: %s' % msg)
-                elif len(vinebot.participants) == 2:
-                    sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
-                    body = msg['body'].replace('[%s]' % sender.name, '').strip()
-                    msg.reply(self.message_graph.get_reply(sender, body)).send()
+            if msg['body'].startswith('*** '):  # Do this first, in case the conversation is residually active
+                if msg['body'].find(constants.act_on_user_stage) >= 0:
+                    try:
+                        _, sender_name = msg['body'].split(constants.act_on_user_stage, 1)
+                        sender = FetchedUser(can_write=True, name=sender_name.strip())
+                        if sender.needs_onboarding():  # Only handle this message once, otherwise we'll jump ahead in the flow.
+                            msg.reply(self.message_graph.get_reply(sender, None)).send()
+                    except NotUserException:
+                        g.logger.warning('User not found for %s' % sender_name.strip())
+                # elif msg['body'].find('left the conversation') >= 0:  #TODO This seems to cause an infinite loop when removing participants, which, uh, shouldn't happen.
+                #     msg.reply('/leave').send()
                 else:
-                    from_string, _ = msg['body'].split('] ', 1)
-                    from_string  = from_string.strip('[')
-                    from_strings = from_string.split(', ')
-                    sender_name = from_strings[0].strip()
-                    if len(from_strings) == 2 and from_strings[1].strip() == 'whispering':
-                        msg.reply('/whisper %s %s' % (sender_name, self.final_message)).send()
-                    elif sender_name != constants.echo_user:
-                        msg.reply('/me sits quietly').send()
-                vinebot.release_lock()
-            except NotVinebotException:
-                msg.reply('Sorry, something seems to be wrong. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
-    
+                    g.logger.warning('Message ignored: %s' % msg)
+            else:
+                try:
+                    vinebot = FetchedVinebot(jiduser=msg['from'].username)                    
+                    if len(vinebot.participants) == 2:
+                        sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
+                        body = msg['body'].replace('[%s]' % sender.name, '').strip()
+                        msg.reply(self.message_graph.get_reply(sender, body)).send()
+                    else:
+                        from_string, _ = msg['body'].split('] ', 1)
+                        from_string  = from_string.strip('[')
+                        from_strings = from_string.split(', ')
+                        sender_name = from_strings[0].strip()
+                        if len(from_strings) == 2 and from_strings[1].strip() == 'whispering':
+                            msg.reply('/whisper %s %s' % (sender_name, self.final_message)).send()
+                        elif sender_name != constants.echo_user:
+                            msg.reply('/me sits quietly').send()
+                except NotVinebotException:
+                    msg.reply('Sorry, something seems to be wrong. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
+                finally:
+                    if vinebot:
+                        vinebot.release_lock()
 
 if __name__ == '__main__':
     optp = OptionParser()
