@@ -35,7 +35,7 @@ class AbstractVinebot(object):
     
     def acquire_lock(self):
         if self.can_write:
-            g.db.lock_vinebot(self.jiduser, 10)
+            g.db.lock_vinebot(self.jiduser, 5)
     
     def release_lock(self):
         if self.can_write:

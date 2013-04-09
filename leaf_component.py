@@ -1049,6 +1049,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you must specify an action_message.')
         self.broadcast_alert(vinebot, "%s %s" % (sender.name, action_message), parent_command_id=parent_command_id, activate=True)
         g.logger.info('[me] %03d participants' % len(vinebot.participants))
+        return parent_command_id, ''
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
