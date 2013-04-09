@@ -627,6 +627,15 @@ class LeafComponent(ComponentXMPP):
                                 pshow=None if pshow == 'available' else pshow,
                                 pstatus=', '.join(statuses))
     
+    def send_probes(self, vinebot, recipients):
+        pfrom = constants.leaves_jid
+        if vinebot:
+            pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
+        for recipient in recipients:
+            self.sendPresence(pfrom=pfrom,
+                                pto='%s@%s' % (recipient.name, constants.domain),
+                                ptype='probe')
+    
     def send_idle_presences(self):
         for active_vinebot in FetchedVinebot.fetch_vinebots_with_participants():
             self.send_presences(active_vinebot, active_vinebot.everyone, pshow='away' if active_vinebot.is_idle else 'available')
@@ -824,15 +833,12 @@ class LeafComponent(ComponentXMPP):
     
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
-        user1 = None
-        user2 = None
+        old_participants = []
         if len(vinebot.participants) == 2:
-            user1, user2 = vinebot.participants
+            old_participants = list(vinebot.participants)
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
-        if user1 and user2 and len(vinebot.participants) == 0:  # revert to the statuses of the users, not of the conversation
-            self.send_presences(vinebot, [user1], pshow=user2.status())
-            self.send_presences(vinebot, [user2], pshow=user1.status())
+        self.send_probes(vinebot, old_participants)  # revert to the statuses of the users, not of the conversation
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
