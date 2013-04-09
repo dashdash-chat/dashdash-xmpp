@@ -594,6 +594,7 @@ class LeafComponent(ComponentXMPP):
                     vinebot.release_lock()
     
     def handle_chatstate(self, msg):
+        vinebot = None
         try:
             user = FetchedUser(name=msg['from'].user)
             vinebot = FetchedVinebot(jiduser=msg['to'].user)
