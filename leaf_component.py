@@ -445,9 +445,14 @@ class LeafComponent(ComponentXMPP):
                             quiet_create_edge(helpbot.name, user.name)
                             quiet_create_edge(user.name, helpbot.name)
                             outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
-                        edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
-                        self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
-                        edge_vinebot.release_lock()
+                        try:
+                            edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
+                            self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
+                        except NotVinebotException:
+                            g.logger.warning('No vinebot found for edge %s' % outgoing_edge)
+                        finally:
+                            if edge_vinebot:
+                                edge_vinebot.release_lock()
                 except NotUserException:
                     g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
             if user.name in constants.watched_usernames:
@@ -602,6 +607,9 @@ class LeafComponent(ComponentXMPP):
             pass
         except NotUserException:
             pass
+        finally:
+            if vinebot:
+                vinebot.release_lock()
     
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
@@ -1201,6 +1209,9 @@ class LeafComponent(ComponentXMPP):
                 except NotVinebotException:
                     errors.append('No database entry for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
                     g.ectl.delete_rosteritem(user.name, roster_user)
+                finally:
+                    if roster_vinebot:
+                        roster_vinebot.release_lock()
             if errors:
                 return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:
