@@ -431,9 +431,9 @@ class LeafComponent(ComponentXMPP):
                             try:
                                 self.create_edge(None, username1, username2)
                             except IntegrityError:
-                                pass  # The edge already exists
-                            except ExecutionError:
-                                g.logger.warning('Unable to create edge from %s to %s.' % (username1, username2))
+                                pass  #TODO maybe move this into create_edge
+                            except ExecutionError, e:
+                                g.logger.warning(e)
                         try:
                             invite = FetchedInvite(invitee_id=user.id)
                             quiet_create_edge(helpbot.name, invite.sender.name)
