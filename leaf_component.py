@@ -433,7 +433,7 @@ class LeafComponent(ComponentXMPP):
                             except IntegrityError:
                                 pass  #TODO maybe move this into create_edge
                             except ExecutionError, e:
-                                g.logger.warning(e)
+                                g.logger.warning(e[1])
                         try:
                             invite = FetchedInvite(invitee_id=user.id)
                             quiet_create_edge(helpbot.name, invite.sender.name)

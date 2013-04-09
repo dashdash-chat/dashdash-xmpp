@@ -62,7 +62,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
         self.message_graph.add_node('welcome', node_welcome)
         def node_roster_groups(user, body):
             invite = FetchedInvite(invitee_id=user.id)
-            temp_text = "\n\nLook for the contact for our conversation in your buddy list under 'Vine Conversations', and send a message to it."
+            temp_text = "\n\nLook for the contact for our conversation in your buddy list under 'Vine Conversations', and send a message to it. (It may take a moment to appear.)"
             if invite.sender.is_online():
                 yes_stage = 'friends_online'
                 yes_response = "Great, I'll send %s a message!%s" % (invite.sender.name, temp_text)
@@ -101,9 +101,11 @@ class HelpBot(sleekxmpp.ClientXMPP):
             edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
             msg['to'] = '%s@%s' % (edge_vinebot.jiduser, constants.leaves_domain)
             msg.send()
-            edge_vinebot.release_lock()
         except NotEdgeException:
             g.logger.warning('No edge found from %s to intended message recipient %s!' % (self_user.name, recipient.name))
+        finally:
+            if edge_vinebot:
+                edge_vinebot.release_lock()
     
     def start(self, event):
         self.send_presence()
