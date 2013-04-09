@@ -101,6 +101,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
             edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
             msg['to'] = '%s@%s' % (edge_vinebot.jiduser, constants.leaves_domain)
             msg.send()
+            edge_vinebot.release_lock()
         except NotEdgeException:
             g.logger.warning('No edge found from %s to intended message recipient %s!' % (self_user.name, recipient.name))
     
@@ -138,6 +139,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
                         msg.reply('/whisper %s %s' % (sender_name, self.final_message)).send()
                     elif sender_name != constants.echo_user:
                         msg.reply('/me sits quietly').send()
+                vinebot.release_lock()
             except NotVinebotException:
                 msg.reply('Sorry, something seems to be wrong. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
     

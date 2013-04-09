@@ -447,6 +447,7 @@ class LeafComponent(ComponentXMPP):
                             outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
                         edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
                         self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
+                        edge_vinebot.release_lock()
                 except NotUserException:
                     g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
             if user.name in constants.watched_usernames:
