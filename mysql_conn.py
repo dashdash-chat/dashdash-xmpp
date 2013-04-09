@@ -164,7 +164,8 @@ class MySQLManager(object):
     
     def release_vinebot(self, lock_name):
         if not lock_name in self._vinebot_conn_dict:
-            raise Exception  # somehow we locked a vinebot without storing the connection
+            g.logger.warning('Vinebot locked by name %s without a stored connection!' % lock_name)
+            return
         db = self._vinebot_conn_dict.pop(lock_name)
         db.execute("SELECT RELEASE_LOCK(%(lock_name)s)", {'lock_name': lock_name})
         self._vinebot_conn_pool.add(db)
