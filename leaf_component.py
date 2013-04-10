@@ -690,7 +690,7 @@ class LeafComponent(ComponentXMPP):
         if parent_message_id is None and parent_command_id is None:
             g.logger.error('Call to send_alert with no parent. msg=%s' % (body, msg))
     
-    def activate_vinebot(self, vinebot, activater):
+    def activate_vinebot(self, vinebot, activater, force_activate=False):
         if vinebot.is_active:
             g.logger.error('Called activate_vinebot for id=%d when vinebot was already active.' % vinebot.id)
             return True
@@ -698,7 +698,7 @@ class LeafComponent(ComponentXMPP):
             raise Exception, 'Called activate_vinebot for id=%d when vinebot was not active and had no edges.' % vinebot.id
         user1, user2 = vinebot.edge_users
         both_users_online = user1.is_online() and user2.is_online()
-        if vinebot.check_recent_activity(excluded_user=activater):    
+        if force_activate or vinebot.check_recent_activity(excluded_user=activater):    
             g.logger.info('[activate] %03d participants' % len(vinebot.participants))
             self.send_presences(vinebot, [user1])  # just activated vinebots are never idle
             self.send_presences(vinebot, [user2])
@@ -855,11 +855,11 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'you can\'t invite administrator accounts.')
         if invitee in vinebot.participants:
             raise ExecutionError, (parent_command_id, '%s is already in this conversation.' % invitee.name)
-        if len(vinebot.participants) == 0:
-            raise ExecutionError, (parent_command_id, 'You can\'t invite someone before the conversation has started.')
         if not invitee.is_online():
             raise ExecutionError, (parent_command_id, '%s is offline and can\'t be invited.' % invitee.name)
         g.logger.info('[invite] %03d participants' % len(vinebot.participants))
+        if not vinebot.is_active:
+            self.activate_vinebot(vinebot, inviter, force_activate=True)
         if vinebot.topic:
             alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter.name, invitee.name, vinebot.topic)
         else:
@@ -937,6 +937,8 @@ class LeafComponent(ComponentXMPP):
     
     def list_participants(self, parent_command_id, vinebot, user):
         usernames = [participant.name for participant in vinebot.participants.difference([user])]
+        if len(vinebot.participants) == 0:
+            return parent_command_id, 'This conversation isn\'t yet active, so there are no participants.'
         if user in vinebot.participants:
             usernames.append('you')
         if vinebot.topic:

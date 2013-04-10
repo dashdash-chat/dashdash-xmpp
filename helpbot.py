@@ -122,7 +122,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
                             msg.reply(self.message_graph.get_reply(sender, None)).send()
                     except NotUserException:
                         g.logger.warning('User not found for %s' % sender_name.strip())
-                # elif msg['body'].find('left the conversation') >= 0:  #TODO This seems to cause an infinite loop when removing participants, which, uh, shouldn't happen.
+                # elif msg['body'].find('left the conversation') >= 0:  #TODO This seems to cause an infinite loop when removing participants, which, uh, shouldn't happen. Maybe because when you /leave yourself that triggers it again?
                 #     msg.reply('/leave').send()
                 else:
                     g.logger.warning('Message ignored: %s' % msg)
