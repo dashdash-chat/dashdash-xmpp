@@ -390,7 +390,8 @@ class LeafComponent(ComponentXMPP):
         g.use_new_logger('%s%02d' % (constants.leaves_mysql_lock_name, self.acquired_lock_num))
         if not other_leaves_online:
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
-                self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
+                self.send_presences(vinebot, vinebot.observers, pshow='away' if vinebot.is_idle else 'available')
+                self.send_presences(vinebot, vinebot.participants)
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
                     self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
@@ -639,7 +640,8 @@ class LeafComponent(ComponentXMPP):
     
     def send_idle_presences(self):
         for active_vinebot in FetchedVinebot.fetch_vinebots_with_participants():
-            self.send_presences(active_vinebot, active_vinebot.everyone, pshow='away' if active_vinebot.is_idle else 'available')
+            self.send_presences(active_vinebot, active_vinebot.observers, pshow='away' if active_vinebot.is_idle else 'available')
+            self.send_presences(active_vinebot, active_vinebot.participants)
             if active_vinebot.is_idle:
                 g.logger.info('[idle] %03d participants' % len(active_vinebot.participants))
     
