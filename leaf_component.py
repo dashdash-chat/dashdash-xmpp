@@ -622,7 +622,7 @@ class LeafComponent(ComponentXMPP):
             if vinebot.topic:
                 statuses.append(unicode(vinebot.topic))
             if vinebot.is_active and vinebot.is_idle:
-                statuses.append('last active %s ago' % vinebot.last_active)
+                statuses.append(vinebot.last_active_text)
         for recipient in recipients:
             self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.domain),
@@ -816,7 +816,7 @@ class LeafComponent(ComponentXMPP):
     
     ##### user /commands
     def debug_vinebot(self, parent_command_id, vinebot, user):
-        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.last_active, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
+        self.send_alert(vinebot, None, user, 'dbid = %d\n%s\n%s\nparticipants = %s\nedge_users = %s' % (vinebot.id, vinebot.jiduser, vinebot.last_active_text, vinebot.participants, vinebot.edge_users), parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def user_joined(self, parent_command_id, vinebot, user):

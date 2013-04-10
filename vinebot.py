@@ -29,7 +29,7 @@ class AbstractVinebot(object):
         self._edges = None
         self._participants = None
         self._observers = None
-        self._last_active = None
+        self._last_active_text = None
         self.can_write = can_write
         #TODO add transactions?
     
@@ -152,7 +152,10 @@ class AbstractVinebot(object):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
     def check_recent_activity(self, excluded_user=None):
-        return self._fetch_last_active(excluded_user) > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
+        last_active = self._fetch_last_active(excluded_user)
+        if last_active is None:
+            return False
+        return last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
     
     def _fetch_last_active(self, excluded_user=None):
         last_message = g.db.execute_and_fetchall("""SELECT sent_on
@@ -188,7 +191,7 @@ class AbstractVinebot(object):
         elif last_command:
             return last_command[0]
         else:
-            return datetime.now() #TODO find a better default
+            return None
     
     def _set_topic(self, body):
         if not self.can_write:
@@ -224,17 +227,19 @@ class AbstractVinebot(object):
         return "\"%s\" as of %s ago" % (body, self._format_time_since_stamp(created))
     
     def _format_time_since_stamp(self, timestamp):
+        if timestamp is None:
+            return 'has never been active'
         # generates strings that look like "1 day, 5 hours, 6 mins", FML
         remainder = (datetime.now() - timestamp).total_seconds()
         days,    remainder = divmod(remainder, 60 * 60 * 24)
         hours,   remainder = divmod(remainder, 60 * 60)
         minutes, remainder = divmod(remainder, 60)
         if (days + hours + minutes) == 0:
-            return 'a moment'
+            return 'last active a moment ago'
         count_units =  [(days, 'day'), (hours, 'hour'), (minutes, 'minute')]
-        return ', '.join(['%d %s%s' %  (count, unit, '' if count == 1 else 's')
-                          for count, unit in count_units
-                          if count > 0])
+        return 'last active %s ago' % ', '.join(['%d %s%s' %  (count, unit, '' if count == 1 else 's')
+                                                 for count, unit in count_units
+                                                 if count > 0])
     
     def delete(self, new_vinebot=None):
         if not self.can_write:
@@ -270,10 +275,10 @@ class AbstractVinebot(object):
             return self._topic
         elif name == 'is_active':
             return len(self.participants) >= 2
-        elif name == 'last_active':
-            if self._last_active is None:
-                self._last_active = self._format_time_since_stamp(self._fetch_last_active())
-            return self._last_active
+        elif name == 'last_active_text':
+            if self._last_active_text is None:
+                self._last_active_text = self._format_time_since_stamp(self._fetch_last_active())
+            return self._last_active_text
         elif name == 'is_idle':
             return not self.check_recent_activity()
         elif name == 'group':
@@ -313,7 +318,7 @@ class AbstractVinebot(object):
     def __setattr__(self, name, value):
         if name == 'topic':
             self._set_topic(value)
-        elif name in ['topic', 'is_active', 'last_active', 'is_idle', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
+        elif name in ['topic', 'is_active', 'last_active_text', 'is_idle', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
