@@ -72,7 +72,7 @@ class LeafComponent(ComponentXMPP):
         def admin_to_leaf(sender, vinebot):
             return not vinebot and sender.jid in constants.admin_jids
         def admin_or_graph_to_leaf(sender, vinebot):
-            return not vinebot and sender.jid in (constants.admin_jids + [constants.graph_xmpp_jid])
+            return not vinebot and sender.jid in (constants.admin_jids + [constants.graph_jid])
         def participant_or_edgeuser_to_vinebot(sender, vinebot):
             return vinebot and (sender in vinebot.participants or sender in vinebot.edge_users)   # short circuit to avoid the extra query
         def observer_to_vinebot(sender, vinebot):
@@ -578,7 +578,7 @@ class LeafComponent(ComponentXMPP):
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user. Try another contact in your list?', parent_message_id=parent_message_id)
             except NotVinebotException:
-                if user.jid in (constants.admin_jids + [constants.graph_xmpp_jid]):
+                if user.jid in (constants.admin_jids + [constants.graph_jid]):
                     if self.commands.is_command(msg['body']):
                         handle_command(msg, user)
                     else:
@@ -849,7 +849,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, '%s isn\'t yet using Vine. Perhaps you meant "/tweet_invite %s"?' % (invitee, invitee))
         if inviter == invitee:
             raise ExecutionError, (parent_command_id, 'you can\'t invite yourself.')
-        if invitee.jid in (constants.admin_jids + [constants.graph_xmpp_jid, constants.leaves_xmlrpc_user]):
+        if invitee.name in constants.protected_users:
             raise ExecutionError, (parent_command_id, 'you can\'t invite administrator accounts.')
         if invitee in vinebot.participants:
             raise ExecutionError, (parent_command_id, '%s is already in this conversation.' % invitee.name)
@@ -873,7 +873,7 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee)
         if kicker == kickee:
             raise ExecutionError, (parent_command_id, 'you can\'t kick yourself. Maybe you meant /leave?')
-        if kickee.jid in (constants.admin_jids + [constants.graph_xmpp_jid, constants.leaves_xmlrpc_user]):
+        if kickee.name in constants.protected_users:
             raise ExecutionError, (parent_command_id, 'you can\'t kick administrator accounts.')
         if len(vinebot.participants) == 2:
             raise ExecutionError, (parent_command_id, 'you can\'t kick someone if it\'s just the two of you. Maybe you meant /leave?')

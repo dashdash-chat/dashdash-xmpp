@@ -319,7 +319,7 @@ class AbstractUser(object):
         if name == 'jid':
             return '%s@%s' % (self.name, constants.domain)
         elif name == 'is_protected':
-            return self.jid in (constants.admin_jids + [constants.graph_xmpp_jid, '%s@%s' % (constants.leaves_xmlrpc_user, constants.domain)])
+            return self.name in constants.protected_users
         elif name == 'friends':
             if self._friends is None:
                 self._friends = self._fetch_friends()
