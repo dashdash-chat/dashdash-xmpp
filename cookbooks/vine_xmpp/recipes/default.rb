@@ -2,7 +2,7 @@
 # Cookbook Name:: vine_xmpp
 # Recipe:: default
 #
-# Copyright 2013, Vine.IM
+# Copyright 2013, Dashdash, Inc.
 #
 # All rights reserved - Do Not Redistribute
 #

@@ -262,21 +262,21 @@ class LeafComponent(ComponentXMPP):
         self.commands.add(SlashCommand(command_name     = 'new_user',
                                        list_rank        = 1,
                                        text_arg_format  = '<username> <password>',
-                                       text_description = 'Create a new user in both ejabberd and the Vine database.',
+                                       text_description = 'Create a new user in both ejabberd and the Dashdash database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token_token,
                                        action           = self.create_user))
         self.commands.add(SlashCommand(command_name     = 'del_user',
                                        list_rank        = 2,
                                        text_arg_format  = '<username>',
-                                       text_description = 'Unregister a user in ejabberd and deactivate her in the Vine database.',
+                                       text_description = 'Unregister a user in ejabberd and deactivate her in the Dashdash database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.delete_user))
         self.commands.add(SlashCommand(command_name     = 'purge_user',
                                        list_rank        = 3,
                                        text_arg_format  = '<username> --force',
-                                       text_description = 'Unregister a user in ejabberd and purge ALL of her entries from the Vine database.',
+                                       text_description = 'Unregister a user in ejabberd and purge ALL of her entries from the Dashdash database.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token_token,
                                        action           = self.purge_user))
@@ -297,7 +297,7 @@ class LeafComponent(ComponentXMPP):
         self.commands.add(SlashCommand(command_name     = 'sync',
                                        list_rank        = 6,
                                        text_arg_format  = '<username>',
-                                       text_description = 'Remove old, unused vinebots from a user\'s roster.',
+                                       text_description = 'Remove old, unused conversation contacts from a user\'s roster.',
                                        validate_sender  = admin_or_graph_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.sync_roster))
@@ -311,14 +311,14 @@ class LeafComponent(ComponentXMPP):
         self.commands.add(SlashCommand(command_name     = 'hide_invite',
                                        list_rank        = 10,
                                        text_arg_format  = '<code>',
-                                       text_description = 'Mark an invite as hidden, so that it isn\'t listed on http://vine.im',
+                                       text_description = 'Mark an invite as hidden, so that it isn\'t listed on http://dashdash.com.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.hide_invite))
         self.commands.add(SlashCommand(command_name     = 'show_invite',
                                        list_rank        = 11,
                                        text_arg_format  = '<code>',
-                                       text_description = 'Mark an invite as visible, so that it is listed on http://vine.im.',
+                                       text_description = 'Mark an invite as visible, so that it is listed on http://dashdash.com.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.show_invite))
@@ -350,7 +350,6 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.score_edges))
-    
     
     def disconnect(self, *args, **kwargs):
         other_leaves_online = False
@@ -848,7 +847,7 @@ class LeafComponent(ComponentXMPP):
         try:
             invitee = FetchedUser(name=invitee)
         except NotUserException:
-            raise ExecutionError, (parent_command_id, '%s isn\'t yet using Vine. Perhaps you meant "/tweet_invite %s"?' % (invitee, invitee))
+            raise ExecutionError, (parent_command_id, '%s isn\'t yet using Dashdash. Perhaps you meant "/tweet_invite %s"?' % (invitee, invitee))
         if inviter == invitee:
             raise ExecutionError, (parent_command_id, 'you can\'t invite yourself.')
         if invitee.name in constants.protected_users:
@@ -891,7 +890,7 @@ class LeafComponent(ComponentXMPP):
         try:
             blockee = FetchedUser(name=blockee)
         except NotUserException:
-            raise ExecutionError, (parent_command_id, '%s isn\'t a Vine.IM user, so can\'t be blocked.' % blockee)
+            raise ExecutionError, (parent_command_id, '%s isn\'t a Dashdash user, so can\'t be blocked.' % blockee)
         if blocker == blockee:
             raise ExecutionError, (parent_command_id, 'you can\'t block yourself.')
         if blockee.name in constants.protected_users:
@@ -911,7 +910,7 @@ class LeafComponent(ComponentXMPP):
         try:
             unblockee = FetchedUser(name=unblockee)
         except NotUserException:
-            raise ExecutionError, (parent_command_id, '%s isn\'t a Vine.IM user, so can\'t be unblocked.' % unblockee)
+            raise ExecutionError, (parent_command_id, '%s isn\'t a Dashdash user, so can\'t be unblocked.' % unblockee)
         if unblocker == unblockee:
             raise ExecutionError, (parent_command_id, 'you can\'t unblock yourself.')
         if unblockee.name in constants.protected_users:
@@ -1017,7 +1016,7 @@ class LeafComponent(ComponentXMPP):
         else:
             other_participants = list(vinebot.participants.difference([sender]))
             tweet_first = 'Come chat with me'
-            tweet_last =  ' and @%s on @VineIM!' % other_participants.pop().name
+            tweet_last =  ' and @%s on @DashdashInc!' % other_participants.pop().name
             tweet_extra = ' It\'s like a cocktail party, but on the Internet:'
             for other_participant in other_participants:
                 tweet_body = tweet_first + tweet_last
@@ -1037,9 +1036,9 @@ class LeafComponent(ComponentXMPP):
         except IntegrityError:
             old_user = FetchedUser(name=twitter_username)
             if old_user.is_online():
-                raise ExecutionError, (parent_command_id, '%s is already using Vine.IM. Try /invite-ing them to this conversation?' % old_user.name)
+                raise ExecutionError, (parent_command_id, '%s is already using Dashdash. Try /invite-ing them to this conversation?' % old_user.name)
             else:
-                raise ExecutionError, (parent_command_id, '%s is already using Vine.IM, but is offline right now.' % old_user.name)
+                raise ExecutionError, (parent_command_id, '%s is already using Dashdash, but is offline right now.' % old_user.name)
         try:
             invite = InsertedInvite(sender)
             invite.use(new_user)

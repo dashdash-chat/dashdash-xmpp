@@ -106,7 +106,7 @@ class SlashCommandRegistry(object):
                     else:
                         command_string += '*\t/%s %s: %s\n' % (slash_command.name, slash_command.arg_format, slash_command.description)
             if command_string == '':
-                return None, 'You do not have permission to send any commands to this vinebot.'
+                return None, 'You do not have permission to send any commands to this contact.'
             else:
                 return None, 'The available commands are:\n' + command_string
         else:

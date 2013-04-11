@@ -58,15 +58,15 @@ class HelpBot(sleekxmpp.ClientXMPP):
         self.final_message = "Sorry, there's nothing else I can do for you right now. Type /help for a list of commands, or ping @lehrblogger with questions!"
         self.message_graph = MessageGraph(self.final_message)
         def node_welcome(user, body):
-            return 'roster_groups', "Hi %s, welcome to Vine! I'm here to help you get started. First, look for two new new groups in your buddy list. Do you see them?" % user.name
+            return 'roster_groups', "Hi %s, welcome to Dashdash! I'm here to help you get started. First, look for two new new groups in your buddy list. Do you see them?" % user.name
         self.message_graph.add_node('welcome', node_welcome)
         def node_roster_groups(user, body):
             invite = FetchedInvite(invitee_id=user.id)
-            temp_text = "\n\nLook for the contact for our conversation in your buddy list under 'Vine Conversations', and send a message to it. (It may take a moment to appear.)"
+            temp_text = "\n\nLook for the contact for our conversation in your buddy list under 'Dashdash Conversations', and send a message to it. (It may take a moment to appear.)"
             if invite.sender.is_online():
                 yes_stage = 'friends_online'
                 yes_response = "Great, I'll send %s a message!%s" % (invite.sender.name, temp_text)
-                other_body = "Hi! Your friend %s just signed up for Vine, so I thought I'd send you a message to show him/her how the buddy list works." % user.name
+                other_body = "Hi! Your friend %s just signed up for Dashdash, so I thought I'd send you a message to show him/her how the buddy list works." % user.name
                 other_recipient = invite.sender
             else:
                 yes_stage = 'no_friends_online'

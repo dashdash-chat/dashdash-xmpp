@@ -286,8 +286,8 @@ class AbstractVinebot(object):
             if self.is_active:
                 group = 'Conversations' 
             if constants.debug:
-                return 'Vine %s (Dev)' % group
-            return 'Vine %s' % group
+                return 'Dashdash %s (Dev)' % group
+            return 'Dashdash %s' % group
         elif name == 'edges':
             if self._edges is None:
                 self._edges = self._fetch_edges()

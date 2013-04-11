@@ -45,7 +45,7 @@ aws_sqs_prefix = '<%= node.run_state['config']['aws']['sqs_prefix'] %>'
 aws_access_key_id = '<%= node.run_state['config']['aws']['access_key_id'] %>'
 aws_secret_access_key = '<%= node.run_state['config']['aws']['secret_access_key'] %>'  # if it's broken, regenerate this until you get one without a "/"
 
-vinebot_prefix = 'vinebot_'
+vinebot_prefix = 'contact_'
 
 protected_users = <%= node.run_state['config']['xmpp_users']['admins'] %> + [web_xmlrpc_user, leaves_xmlrpc_user, helpbot_xmlrpc_user, leaves_jid_user, graph_jid_user]
 admin_jids = ['%s@%s' % (user, domain) for user in <%= node.run_state['config']['xmpp_users']['admins'] %>]

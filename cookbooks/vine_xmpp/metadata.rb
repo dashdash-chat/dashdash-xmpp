@@ -1,4 +1,4 @@
-maintainer       "Vine.IM"
+maintainer       "Dashdash, Inc."
 maintainer_email "lehrburger@gmail.com"
 license          "All rights reserved"
 description      "Installs/Configures vine_xmpp"
