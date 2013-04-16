@@ -125,7 +125,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 # elif msg['body'].find('left the conversation') >= 0:  #TODO This seems to cause an infinite loop when removing participants, which, uh, shouldn't happen. Maybe because when you /leave yourself that triggers it again?
                 #     msg.reply('/leave').send()
                 else:
-                    g.logger.warning('Message ignored: %s' % msg)
+                    pass  # Ignore all other status messages for now
             else:
                 try:
                     vinebot = FetchedVinebot(jiduser=msg['from'].username)                    
