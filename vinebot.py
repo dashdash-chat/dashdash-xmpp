@@ -224,22 +224,25 @@ class AbstractVinebot(object):
         return None
     
     def _format_topic(self, body, created):
-        return "\"%s\" as of %s ago" % (body, self._format_time_since_stamp(created))
+        if created is not None:
+            return '"%s" as of %s ago' % (body, self._format_timestamp(created))
+        else:
+            return '"%s"' % body
     
-    def _format_time_since_stamp(self, timestamp):
+    def _format_timestamp(self, timestamp):
         if timestamp is None:
-            return 'has never been active'
+            return ''
         # generates strings that look like "1 day, 5 hours, 6 mins", FML
         remainder = (datetime.now() - timestamp).total_seconds()
         days,    remainder = divmod(remainder, 60 * 60 * 24)
         hours,   remainder = divmod(remainder, 60 * 60)
         minutes, remainder = divmod(remainder, 60)
         if (days + hours + minutes) == 0:
-            return 'last active a moment ago'
+            return 'a moment'
         count_units =  [(days, 'day'), (hours, 'hour'), (minutes, 'minute')]
-        return 'last active %s ago' % ', '.join(['%d %s%s' %  (count, unit, '' if count == 1 else 's')
-                                                 for count, unit in count_units
-                                                 if count > 0])
+        return ', '.join(['%d %s%s' %  (count, unit, '' if count == 1 else 's')
+                          for count, unit in count_units
+                          if count > 0])
     
     def delete(self, new_vinebot=None):
         if not self.can_write:
@@ -277,7 +280,11 @@ class AbstractVinebot(object):
             return len(self.participants) >= 2
         elif name == 'last_active_text':
             if self._last_active_text is None:
-                self._last_active_text = self._format_time_since_stamp(self._fetch_last_active())
+                timestamp = self._fetch_last_active()
+                if timestamp is not None:
+                    self._last_active_text = 'last active %s ago' % self._format_timestamp(timestamp)
+                else:
+                    self._last_active_text = 'has never been active'
             return self._last_active_text
         elif name == 'is_idle':
             return not self.check_recent_activity()
