@@ -1,7 +1,7 @@
 from gevent import monkey; monkey.patch_all()
 import sys
 from datetime import datetime
-from MySQLdb import IntegrityError, OperationalError
+from MySQLdb import IntegrityError, OperationalError, ProgrammingError
 import logging
 from optparse import OptionParser
 import random
@@ -355,7 +355,13 @@ class LeafComponent(ComponentXMPP):
         other_leaves_online = False
         for lock_num_to_check in range(constants.max_leaves):
             if self.acquired_lock_num != lock_num_to_check:
-                checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaves_mysql_lock_name, lock_num_to_check))
+                try:
+                    checked_lock = g.db.is_unlocked_leaf('%s%s' % (constants.leaves_mysql_lock_name, lock_num_to_check))
+                except ProgrammingError, e:
+                    if e[0] == 2014:
+                        g.logger.error('Caught ProgrammingError 2014 "%s" from is_unlocked_leaf(%s%s), aborting disconnect' % (e[1], constants.leaves_mysql_lock_name, lock_num_to_check))
+                        return False
+                    raise e
                 if not checked_lock:
                     other_leaves_online = True
                     break
