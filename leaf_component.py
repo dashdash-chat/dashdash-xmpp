@@ -1082,6 +1082,8 @@ class LeafComponent(ComponentXMPP):
     def me_action_message(self, parent_command_id, vinebot, sender, action_message):
         if action_message is None:
             raise ExecutionError, (parent_command_id, 'you must specify an action_message.')
+        if not vinebot.is_active:
+            self.activate_vinebot(vinebot, sender, force_activate=True)
         self.broadcast_alert(vinebot, "%s %s" % (sender.name, action_message), parent_command_id=parent_command_id, activate=True)
         g.logger.info('[me] %03d participants' % len(vinebot.participants))
         return parent_command_id, ''
