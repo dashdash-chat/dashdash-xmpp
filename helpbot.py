@@ -140,7 +140,10 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 try:
                     vinebot = FetchedVinebot(jiduser=msg['from'].username)                    
                     if len(vinebot.participants) <= 2:
-                        sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
+                        if len(vinebot.participants) == 2:
+                            sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
+                        else:
+                            sender = filter(lambda user: user.name != self.boundjid.user, vinebot.edge_users)[0]
                         body = msg['body'].replace('[%s]' % sender.name, '').strip()
                         msg.reply(self.message_graph.get_reply(sender, body)).send()
                     else:
