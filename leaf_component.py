@@ -614,12 +614,16 @@ class LeafComponent(ComponentXMPP):
         try:
             user = FetchedUser(name=msg['from'].user)
             vinebot = FetchedVinebot(jiduser=msg['to'].user)
+            del msg['id']
+            del msg['body']
+            del msg['html']
+            del msg['type']
             if user in vinebot.participants:
-                del msg['id']
-                del msg['body']
-                del msg['html']
-                del msg['type']
                 self.broadcast_message(vinebot, user, vinebot.everyone, None, msg=msg)
+            elif user in vinebot.observers:
+                self.broadcast_message(vinebot, user, vinebot.participants, None, msg=msg)
+            elif user in vinebot.edge_users:
+                self.broadcast_message(vinebot, user, vinebot.edge_users, None, msg=msg)
         except NotVinebotException:
             pass
         except NotUserException:
