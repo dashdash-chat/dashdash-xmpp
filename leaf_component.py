@@ -622,9 +622,6 @@ class LeafComponent(ComponentXMPP):
             del msg['type']
             if user in vinebot.participants:
                 self.broadcast_message(vinebot, user, vinebot.everyone.difference([user]), None, msg=msg)
-            elif user in vinebot.observers:
-                msg.error()  #TODO figure out why, without this one line, it broadcasts your own chat state back to you in a two person conversation with helpbot
-                self.broadcast_message(vinebot, user, vinebot.participants, None, msg=msg)
             elif user in vinebot.edge_users:
                 self.broadcast_message(vinebot, user, vinebot.edge_users.difference([user]), None, msg=msg)
         except NotVinebotException:
