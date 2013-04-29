@@ -1003,7 +1003,9 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
         else:
             vinebot.topic = topic  # using a fancy custom setter!
-            if vinebot.is_active or self.activate_vinebot(vinebot, sender):  # short-circuit prevents unnecessary vinebot activation
+            g.logger.warning(vinebot.is_active)
+            g.logger.warning(vinebot.topic)
+            if vinebot.is_active or (vinebot.topic and self.activate_vinebot(vinebot, sender)):  # short-circuit prevents unnecessary vinebot activation
                 if vinebot.topic:
                     body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
                 else:
@@ -1016,10 +1018,18 @@ class LeafComponent(ComponentXMPP):
                     self.broadcast_message(vinebot, None, vinebot.edge_users, body, parent_command_id=parent_command_id, activate=True)
             else:
                 if vinebot.topic:
-                    body = 'You\'ve set the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
+                    modified = 'set'
                 else:
-                    body = 'You\'ve cleared the topic of conversation, but %s is offline so won\'t be notified.' % iter(vinebot.edge_users).next().name
-                self.send_alert(vinebot, None, sender, body, parent_command_id=None)
+                    modified = 'cleared'
+                recipient = vinebot.edge_users.difference([sender]).pop()
+                if recipient.is_online():
+                    notified = 'we didn\'t notify %s' % recipient.name
+                else:
+                    notified = '%s is offline so won\'t be notified' % recipient.name
+                body = 'You\'ve %s the topic of conversation, but %s.' % (modified, notified)
+                self.send_presences(vinebot, [recipient], pshow=sender.status())
+                self.send_presences(vinebot, [sender], pshow=recipient.status())
+                self.send_alert(vinebot, None, sender, body, parent_command_id=parent_command_id)
         g.logger.info('[topic] %03d participants' % len(vinebot.participants))
         return parent_command_id, ''
     
