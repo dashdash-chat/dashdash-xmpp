@@ -1347,13 +1347,13 @@ class LeafComponent(ComponentXMPP):
             output = '%d %s has:' % (sender.id, sender.name)
             output += self._format_list_output(visible,
                                                'visible invites',
-                                               lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
+                                               lambda invite: '%s%s' % (invite.url, '' if (invite.max_uses - len(invite.recipients)) == 1 else ' (%d uses left)' % (invite.max_uses - len(invite.recipients))))
             output += self._format_list_output(used,
                                                'used invites',
                                                lambda invite: '%s by %s' % (invite.url, ", ".join([r.name for r in invite.recipients])))
             output += self._format_list_output(hidden,
                                                'hidden invites',
-                                               lambda invite: '%s (%d use%s left)' % (invite.url, invite.max_uses - len(invite.recipients), '' if (invite.max_uses - len(invite.recipients)) == 1 else 's'))
+                                               lambda invite: '%s%s' % (invite.url, '' if (invite.max_uses - len(invite.recipients)) == 1 else ' (%d uses left)' % (invite.max_uses - len(invite.recipients))))
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
