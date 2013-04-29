@@ -51,10 +51,14 @@ class MessageGraph(object):
 class HelpBot(sleekxmpp.ClientXMPP):
     def __init__(self):
         sleekxmpp.ClientXMPP.__init__(self, '%s@%s' % (constants.helpbot_jid_user, constants.domain), constants.helpbot_xmpp_password)
+        self.register_plugin('xep_0030') # Service Discovery
+        self.register_plugin('xep_0004') # Data Forms
+        self.register_plugin('xep_0060') # PubSub
+        self.register_plugin('xep_0199') # XMPP Ping
         g.db = MySQLManager(constants.helpbot_mysql_user, constants.helpbot_mysql_password)
         g.ectl = EjabberdCTL(constants.helpbot_xmlrpc_user, constants.helpbot_xmlrpc_password)
         self.add_event_handler("session_start", self.start)
-        self.add_event_handler("message", self.message)
+        self.add_event_handler("message", self.handle_message)
         self.final_message = "Sorry, there's nothing else I can do for you right now. Type /help for a list of commands, or ping @lehrblogger with questions!"
         self.message_graph = MessageGraph(self.final_message)
         def node_welcome(user, body):
@@ -64,27 +68,26 @@ class HelpBot(sleekxmpp.ClientXMPP):
             invite = FetchedInvite(invitee_id=user.id)
             temp_text = "\n\nLook for the contact for our conversation in your buddy list under 'Dashdash Conversations', and send a message to it. (It may take a moment to appear.)"
             if invite.sender.is_online():
-                yes_stage = 'friends_online'
                 yes_response = "Great, I'll send %s a message!%s" % (invite.sender.name, temp_text)
                 other_body = "Hi! Your friend %s just signed up for Dashdash, so I thought I'd send you a message to show him/her how the buddy list works." % user.name
                 other_recipient = invite.sender
             else:
-                yes_stage = 'no_friends_online'
                 yes_response = "Your friend %s isn't online right now, so I'll start a conversation with another bot, %s.%s" % (invite.sender.name, constants.echo_user, temp_text)
                 other_body = str(uuid.uuid4())  # doesn't matter what, as long as it won't be sent by someone else next
                 other_recipient = FetchedUser(name=constants.echo_user)
             self._send_message(other_recipient, other_body)
             return MessageGraph.process_yes_no('roster_groups',
                                                body,
-                                               yes_stage,
+                                               'conver_started',
                                                yes_response,
                                                'roster_groups',
                                                "Sorry, then something might be broken. Maybe check again, or ping lehrblogger for help?")
         self.message_graph.add_node('roster_groups', node_roster_groups)
-        self.register_plugin('xep_0030') # Service Discovery
-        self.register_plugin('xep_0004') # Data Forms
-        self.register_plugin('xep_0060') # PubSub
-        self.register_plugin('xep_0199') # XMPP Ping
+        def node_new_invites(user, body):
+            self._send_command('/new_invite %s' % user.name)
+            self._send_command('/new_invite %s' % user.name)
+            return 'invites_given', 'One last thing – I\'ve given you a couple of Dashdash invite codes that your friends can use to sign up. You can type /invites to see them here, or sign in to http://%s.\n\nAsk @lehrblogger if you need more, and thanks for using Dashdash!' % constants.domain
+        self.message_graph.add_node('conver_started', node_new_invites)
     
     def disconnect(self, *args, **kwargs):
         kwargs['wait'] = True
@@ -107,11 +110,18 @@ class HelpBot(sleekxmpp.ClientXMPP):
             if edge_vinebot:
                 edge_vinebot.release_lock()
     
+    def _send_command(self, command):
+        msg = self.Message()
+        msg['type'] = 'chat'
+        msg['body'] = command
+        msg['to'] = constants.leaves_jid
+        msg.send()
+    
     def start(self, event):
         self.send_presence()
         self.get_roster()
     
-    def message(self, msg):
+    def handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
             if msg['body'].startswith('*** '):  # Do this first, in case the conversation is residually active
                 if msg['body'].find(constants.act_on_user_stage) >= 0:
@@ -129,7 +139,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
             else:
                 try:
                     vinebot = FetchedVinebot(jiduser=msg['from'].username)                    
-                    if len(vinebot.participants) == 2:
+                    if len(vinebot.participants) <= 2:
                         sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
                         body = msg['body'].replace('[%s]' % sender.name, '').strip()
                         msg.reply(self.message_graph.get_reply(sender, body)).send()
@@ -147,6 +157,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 finally:
                     if vinebot:
                         vinebot.release_lock()
+    
 
 if __name__ == '__main__':
     optp = OptionParser()

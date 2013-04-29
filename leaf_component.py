@@ -73,6 +73,8 @@ class LeafComponent(ComponentXMPP):
             return not vinebot and sender.jid in constants.admin_jids
         def admin_or_graph_to_leaf(sender, vinebot):
             return not vinebot and sender.jid in (constants.admin_jids + [constants.graph_jid])
+        def admin_or_helpbot_to_leaf(sender, vinebot):
+            return not vinebot and sender.jid in (constants.admin_jids + [constants.helpbot_jid])
         def participant_or_edgeuser_to_vinebot(sender, vinebot):
             return vinebot and (sender in vinebot.participants or sender in vinebot.edge_users)   # short circuit to avoid the extra query
         def observer_to_vinebot(sender, vinebot):
@@ -326,7 +328,7 @@ class LeafComponent(ComponentXMPP):
                                        list_rank        = 8,
                                        text_arg_format  = '<username> <optional max_uses (default 1)>',
                                        text_description = 'Generate a new invite code with the given user as the sender.',
-                                       validate_sender  = admin_to_leaf,
+                                       validate_sender  = admin_or_helpbot_to_leaf,
                                        transform_args   = logid_token_int_or_none,
                                        action           = self.new_invite))
         self.commands.add(SlashCommand(command_name     = 'del_invite',
@@ -594,7 +596,7 @@ class LeafComponent(ComponentXMPP):
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
                             self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user. Try another contact in your list?', parent_message_id=parent_message_id)
             except NotVinebotException:
-                if user.jid in (constants.admin_jids + [constants.graph_jid]):
+                if user.jid in (constants.admin_jids + [constants.graph_jid, constants.helpbot_jid]):
                     if self.commands.is_command(msg['body']):
                         handle_command(msg, user)
                     else:

@@ -16,6 +16,7 @@ graph_jid_user = '<%= node.run_state['config']['xmlrpc']['graph_user'] %>'
 graph_jid = '%s@%s' % (graph_jid_user, domain)
 graph_xmpp_password = '<%= node.run_state['config']['xmlrpc']['graph_password'] %>'
 helpbot_jid_user = '<%= node.run_state['config']['xmpp_users']['helpbot_user'] %>'
+helpbot_jid = '%s@%s' % (helpbot_jid_user, domain)
 helpbot_xmpp_password = '<%= node.run_state['config']['xmpp_users']['helpbot_password'] %>'
 act_on_user_stage = 'fiph5bap3av5on5bid2y'  # just a random string
 
