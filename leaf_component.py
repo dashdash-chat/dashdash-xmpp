@@ -694,7 +694,7 @@ class LeafComponent(ComponentXMPP):
     def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
         self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
     
-    def send_alert(self, vinebot, sender, recipient, body, prefix='***', fromjid=None, parent_message_id=None, parent_command_id=None):
+    def send_alert(self, vinebot, sender, recipient, body, prefix='/**', fromjid=None, parent_message_id=None, parent_command_id=None):
         if body == '':
             return
         elif body.startswith('Sorry, '):
