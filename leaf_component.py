@@ -1044,7 +1044,10 @@ class LeafComponent(ComponentXMPP):
             if tweet_body and len(tweet_body) > max_tweet_body:
                 raise ExecutionError, (parent_command_id, 'The tweet you specified was %d characters, and can\'t be longer than %d characters. Try again?' % (len(tweet_body), max_tweet_body))    
         else:
-            other_participants = list(vinebot.participants.difference([sender]))
+            if vinebot.is_active:
+                other_participants = list(vinebot.participants.difference([sender]))
+            else:
+                other_participants = list(vinebot.edge_users.difference([sender]))
             tweet_first = 'Come chat with me'
             tweet_last =  ' and @%s on @DashdashInc!' % other_participants.pop().name
             tweet_extra = ' It\'s like a cocktail party, but on the Internet:'
@@ -1080,6 +1083,8 @@ class LeafComponent(ComponentXMPP):
                               access_token_key=sender.twitter_token, access_token_secret=sender.twitter_secret)
             status = api.PostUpdate(tweet)
             alert_msg = '%s has invited %s to the conversation on Twitter.\n\thttp://twitter.com/%s/status/%s' % (sender.name, twitter_username, sender.name, status.id)
+            if not vinebot.is_active:
+                self.activate_vinebot(vinebot, sender, force_activate=True)
             self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True)
             g.logger.info('[tweet_invite] success')
             return parent_command_id, ''
