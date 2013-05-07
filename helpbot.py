@@ -62,6 +62,8 @@ class HelpBot(sleekxmpp.ClientXMPP):
         self.final_message = "Sorry, there's nothing else I can do for you right now. Type /help for a list of commands, or ping @lehrblogger with questions!"
         self.message_graph = MessageGraph(self.final_message)
         def node_welcome(user, body):
+            self._send_command('new_invite', user.name)
+            self._send_command('new_invite', user.name)
             return 'roster_groups', "Hi %s, welcome to Dashdash! I'm here to help you get started. First, look for two new new groups in your buddy list. Do you see them?" % user.name
         self.message_graph.add_node('welcome', node_welcome)
         def node_roster_groups(user, body):
@@ -84,8 +86,6 @@ class HelpBot(sleekxmpp.ClientXMPP):
                                                "Sorry, then something might be broken. Maybe check again, or ping lehrblogger for help?")
         self.message_graph.add_node('roster_groups', node_roster_groups)
         def node_new_invites(user, body):
-            self._send_command('/new_invite %s' % user.name)
-            self._send_command('/new_invite %s' % user.name)
             return 'invites_given', 'One last thing – I\'ve given you a couple of Dashdash invite codes that your friends can use to sign up. You can type /invites to see them here, or sign in to http://%s.\n\nAsk @lehrblogger if you need more, and thanks for using Dashdash!' % constants.domain
         self.message_graph.add_node('conver_started', node_new_invites)
     
@@ -110,10 +110,10 @@ class HelpBot(sleekxmpp.ClientXMPP):
             if edge_vinebot:
                 edge_vinebot.release_lock()
     
-    def _send_command(self, command):
+    def _send_command(self, command, args):
         msg = self.Message()
         msg['type'] = 'chat'
-        msg['body'] = command
+        msg['body'] = '/%s %s' % (command, args)
         msg['to'] = constants.leaves_jid
         msg.send()
     
