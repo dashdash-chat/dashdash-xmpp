@@ -123,7 +123,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
     
     def handle_message(self, msg):
         if msg['type'] in ('chat', 'normal'):
-            if msg['body'].startswith('*** '):  # Do this first, in case the conversation is residually active
+            if msg['body'].startswith('*** ') or msg['body'].startswith('/** '):  # Do this first, in case the conversation is residually active
                 if msg['body'].find(constants.act_on_user_stage) >= 0:
                     try:
                         _, sender_name = msg['body'].split(constants.act_on_user_stage, 1)
@@ -158,8 +158,11 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 except NotVinebotException:
                     msg.reply('Sorry, something seems to be wrong. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
                 finally:
-                    if vinebot:
-                        vinebot.release_lock()
+                    try:
+                        if vinebot:
+                            vinebot.release_lock()
+                    except NameError:
+                        pass
     
 
 if __name__ == '__main__':
