@@ -420,6 +420,7 @@ class FetchedUser(AbstractUser):
         self.name = None
         self.id = None
         if name and dbid:
+            dbid = int(dbid)
             res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage
                                                FROM users
                                                WHERE id = %(id)s
@@ -443,6 +444,7 @@ class FetchedUser(AbstractUser):
                 self.id = res[0]
                 self.name = name.lower()
         elif dbid:
+            dbid = int(dbid)
             res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret, stage
                                                 FROM users
                                                 WHERE id = %(id)s
