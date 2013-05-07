@@ -154,9 +154,14 @@ class HelpBot(sleekxmpp.ClientXMPP):
                         if len(from_strings) == 2 and from_strings[1].strip() == 'whispering':
                             msg.reply('/whisper %s %s' % (sender_name, self.final_message)).send()
                         elif sender_name != constants.echo_user:
-                            msg.reply('/me sits quietly').send()
+                            self_user = FetchedUser(name=constants.helpbot_jid_user)
+                            sender, body, sent_on, recipients = vinebot.get_last_message(sender=self_user)
+                            idle_message = 'sits quietly'
+                            if vinebot.participants != recipients or body != '%s %s' % (self_user.name, idle_message):
+                                msg.reply('/me %s' % idle_message).send()
                 except NotVinebotException:
-                    msg.reply('Sorry, something seems to be wrong. Type /help for a list of commands, or ping @lehrblogger with questions!').send()
+                    if msg['from'].domain != constants.leaves_domain:  # Ignore error responses from the leaves, to prevent infinite loops
+                        msg.reply('Sorry, something seems to be wrong. Ping @lehrblogger with questions!').send()
                 finally:
                     try:
                         if vinebot:

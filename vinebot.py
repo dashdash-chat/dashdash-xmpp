@@ -192,6 +192,78 @@ class AbstractVinebot(object):
             return last_command[0]
         else:
             return None
+        
+    def get_last_message(self, sender=None):
+        if sender:  # Either the sender is specified or IS NOT NULL, otherwise pairs of queries are the same
+            last_message = g.db.execute_and_fetchall("""SELECT messages.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
+                                                        FROM messages
+                                                        LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                        WHERE messages.vinebot_id = %(vinebot_id)s
+                                                        AND messages.sender_id = %(sender_id)s
+                                                        AND messages.body IS NOT NULL
+                                                        AND messages.parent_command_id IS NULL
+                                                        GROUP BY messages.id
+                                                        ORDER BY messages.sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id,
+                                                        'sender_id': sender.id
+                                                     })
+            last_command = g.db.execute_and_fetchall("""SELECT commands.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
+                                                        FROM messages
+                                                        LEFT OUTER JOIN commands ON messages.parent_command_id = commands.id
+                                                        LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                        WHERE commands.vinebot_id = %(vinebot_id)s
+                                                        AND commands.sender_id = %(sender_id)s
+                                                        AND messages.sender_id IS NULL
+                                                        AND commands.command_name IN ('me', 'topic')
+                                                        AND commands.is_valid IS TRUE
+                                                        GROUP BY messages.id
+                                                        ORDER BY commands.sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id,
+                                                        'sender_id': sender.id
+                                                     })
+        else:
+            last_message = g.db.execute_and_fetchall("""SELECT messages.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
+                                                        FROM messages
+                                                        LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                        AND messages.sender_id IS NOT NULL
+                                                        AND messages.body IS NOT NULL
+                                                        AND messages.parent_command_id IS NULL
+                                                        GROUP BY messages.id
+                                                        ORDER BY messages.sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id
+                                                     })
+            last_command = g.db.execute_and_fetchall("""SELECT commands.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
+                                                        FROM messages
+                                                        LEFT OUTER JOIN commands ON messages.parent_command_id = commands.id
+                                                        LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                        WHERE commands.vinebot_id = %(vinebot_id)s
+                                                        AND commands.sender_id IS NOT NULL
+                                                        AND messages.sender_id IS NULL
+                                                        AND commands.command_name IN ('me', 'topic')
+                                                        AND commands.is_valid IS TRUE
+                                                        GROUP BY messages.id
+                                                        ORDER BY commands.sent_on DESC
+                                                        LIMIT 1
+                                                     """, {
+                                                        'vinebot_id': self.id
+                                                     })
+        return_tuple = None
+        if last_message and last_command:
+            return_tuple = last_message[0] if last_message[0][2] > last_command[0][2] else last_command[0]
+        elif last_message:
+            return_tuple = last_message[0]
+        elif last_command:
+            return_tuple = last_command[0]
+        return (u.FetchedUser(dbid=return_tuple[0]),
+               return_tuple[1],
+               return_tuple[2],
+               set([u.FetchedUser(dbid=recipient_id) for recipient_id in return_tuple[3].split(',')]))
     
     def _set_topic(self, body):
         if not self.can_write:
