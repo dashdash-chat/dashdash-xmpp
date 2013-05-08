@@ -1241,12 +1241,12 @@ class LeafComponent(ComponentXMPP):
             expected_rosteritems = frozenset([(expected.jiduser, expected.group, marshall_nick(expected.get_nick(user))) for expected in expected_vinebots])
             actual_rosteritems = frozenset([(actual[0], actual[1], marshall_nick(actual[2])) for actual in user_roster])
             errors = []
-            for roster_user, roster_group, roster_nick in expected_rosteritems.difference(actual_rosteritems):
-                errors.append('No rosteritem found for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
-                g.ectl.add_rosteritem(user.name, roster_user, roster_group, unmarshall_nick(roster_nick))
             for roster_user, roster_group, roster_nick in actual_rosteritems.difference(expected_rosteritems):
                 errors.append('No vinebot found for rosteritem %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
                 g.ectl.delete_rosteritem(user.name, roster_user)
+            for roster_user, roster_group, roster_nick in expected_rosteritems.difference(actual_rosteritems):
+                errors.append('No rosteritem found for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
+                g.ectl.add_rosteritem(user.name, roster_user, roster_group, unmarshall_nick(roster_nick))
             for roster_user, roster_group, roster_nick in user_roster:
                 try:
                     roster_vinebot = FetchedVinebot(jiduser=roster_user)
