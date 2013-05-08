@@ -159,7 +159,7 @@ class MySQLManager(object):
             g.logger.debug('Acquired lock %s with MySQL conn %s' % (lock_name, db))
         else:
             self._vinebot_conn_pool.add(db)
-            g.logger.error('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
+            g.logger.warning('Failed to acquire %s before timeout %d!' % (lock_name, timeout))
         return lock_was_acquired
     
     def release_vinebot(self, lock_name):
