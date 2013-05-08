@@ -41,17 +41,17 @@ class AbstractVinebot(object):
         if self.can_write:
             g.db.release_vinebot(self.jiduser)
     
-    def add_to_roster_of(self, user, nick):
+    def add_to_roster_of(self, user, nick, async=True):
         if not self.can_write:
             raise VinebotPermissionsException
-        g.ectl.add_rosteritem(user.name, self.jiduser, self.group, nick)
+        g.ectl.add_rosteritem(user.name, self.jiduser, self.group, nick, async)
     
-    def remove_from_roster_of(self, user):
+    def remove_from_roster_of(self, user, async=True):
         if not self.can_write:
             raise VinebotPermissionsException
         g.send_presences(self, [user])
         g.send_presences(self, [user], pshow='unavailable')
-        g.ectl.delete_rosteritem(user.name, self.jiduser)
+        g.ectl.delete_rosteritem(user.name, self.jiduser, async)
     
     def _fetch_participants(self):
         participants = g.db.execute_and_fetchall("""SELECT users.name, users.id
@@ -142,9 +142,9 @@ class AbstractVinebot(object):
         new_observers = get_observers_for(new_participants)
         # Then, update the participants
         for old_participant in old_participants.difference(new_observers).difference(new_participants).difference(protected_participants):
-            self.remove_from_roster_of(old_participant)
+            self.remove_from_roster_of(old_participant, async=False)
         for new_participant in new_participants.union(protected_participants):  # we still need to give the old edge users the updated nick
-            self.add_to_roster_of(new_participant, self.get_nick(new_participant))
+            self.add_to_roster_of(new_participant, self.get_nick(new_participant), async=False)
         # Finally, update the observers
         for old_observer in old_observers.difference(new_participants).difference(protected_participants).difference(new_observers):
             self.remove_from_roster_of(old_observer)

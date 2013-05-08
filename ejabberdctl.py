@@ -29,24 +29,43 @@ class EjabberdCTL(object):
             'host': constants.domain,
         })
     
-    def add_rosteritem(self, user, vinebot_user, group, nick):
-        gevent.spawn(self._retried_xmlrpc_command, 'add_rosteritem', {
-                        'localuser': user,
-                        'localserver': constants.domain,
-                        'user': vinebot_user,
-                        'server': constants.leaves_domain,
-                        'group': group,
-                        'nick': nick,
-                        'subs': 'both'
-                    })
+    def add_rosteritem(self, user, vinebot_user, group, nick, async=True):
+        if async:
+            gevent.spawn(self._retried_xmlrpc_command, 'add_rosteritem', {
+                         'localuser': user,
+                         'localserver': constants.domain,
+                         'user': vinebot_user,
+                         'server': constants.leaves_domain,
+                         'group': group,
+                         'nick': nick,
+                         'subs': 'both'
+                     })
+        else:
+            self._retried_xmlrpc_command('add_rosteritem', {
+                                         'localuser': user,
+                                         'localserver': constants.domain,
+                                         'user': vinebot_user,
+                                         'server': constants.leaves_domain,
+                                         'group': group,
+                                         'nick': nick,
+                                         'subs': 'both'
+                                     })
     
-    def delete_rosteritem(self, user, vinebot_user):
-        gevent.spawn(self._retried_xmlrpc_command, 'delete_rosteritem', {
-                        'localuser': user,
-                        'localserver': constants.domain,
-                        'user': vinebot_user,
-                        'server': constants.leaves_domain
-                    })
+    def delete_rosteritem(self, user, vinebot_user, async=True):
+        if async:
+            gevent.spawn(self._retried_xmlrpc_command, 'delete_rosteritem', {
+                         'localuser': user,
+                         'localserver': constants.domain,
+                         'user': vinebot_user,
+                         'server': constants.leaves_domain
+                     })
+        else:
+            self._retried_xmlrpc_command('delete_rosteritem', {
+                                         'localuser': user,
+                                         'localserver': constants.domain,
+                                         'user': vinebot_user,
+                                         'server': constants.leaves_domain
+                                     })
     
     def get_roster(self, user):    
         rosteritems = self._xmlrpc_command('get_roster', {
