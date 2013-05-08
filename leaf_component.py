@@ -775,7 +775,7 @@ class LeafComponent(ComponentXMPP):
                     if len(vinebot.edges) == 1:
                         vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
                     else:#if len(vinebot.edges) == 2:
-                        vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)                        
+                        vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)
                 for active_vinebot in active_vinebots:  # No matter what, we still need to release these locks
                     active_vinebot.release_lock()
             else:
@@ -800,7 +800,7 @@ class LeafComponent(ComponentXMPP):
                 if old_vinebot:
                     old_vinebot.release_lock()
         else:
-            # this conversation had more than three people so start, so nothing changes if we remove someone
+            # this conversation had more than three people to start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
         self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
     

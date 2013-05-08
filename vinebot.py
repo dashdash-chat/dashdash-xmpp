@@ -192,7 +192,7 @@ class AbstractVinebot(object):
             return last_command[0]
         else:
             return None
-        
+    
     def get_last_message(self, sender=None):
         if sender:  # Either the sender is specified or IS NOT NULL, otherwise pairs of queries are the same
             last_message = g.db.execute_and_fetchall("""SELECT messages.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
