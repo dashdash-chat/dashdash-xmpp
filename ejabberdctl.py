@@ -4,6 +4,7 @@ import io
 import errno
 import socket
 import gevent
+from httplib import BadStatusLine
 import xmlrpclib
 import constants
 from constants import g
@@ -111,6 +112,9 @@ class EjabberdCTL(object):
                     xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
                 else:
                     raise e
+            except BadStatusLine:
+                g.logger.warning('Failed %s XMLRPC command #%d for %s with %s and error BadStatusLine' % (command, i, data['localuser'], data['user']))
+                xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
             if result is not None and 'res' in result and result['res'] == 0:
                 return True
             else:
