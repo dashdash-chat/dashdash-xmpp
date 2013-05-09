@@ -421,7 +421,7 @@ class LeafComponent(ComponentXMPP):
         vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
+            vinebot = FetchedVinebot(can_write=False, jiduser=presence['to'].user)
             if vinebot.is_active:
                 if user in vinebot.participants:
                     self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
@@ -498,11 +498,10 @@ class LeafComponent(ComponentXMPP):
         vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
+            vinebot = FetchedVinebot(jiduser=presence['to'].user)
             if user in vinebot.participants:  # [] if vinebot is not active
-                if len(vinebot.participants) > 2:
-                    self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
-                else:  # elif len(participants) == 2:    
+                if len(participants) == 2:  
+                    vinebot.make_writer()  
                     g.logger.info('[away] %03d participants' % len(vinebot.participants))
                     remaining_user = iter(vinebot.participants.difference([user])).next()
                     self.remove_participant(vinebot, user)  # this deactivates the vinebot
@@ -530,9 +529,10 @@ class LeafComponent(ComponentXMPP):
         vinebot = None
         try:
             user = FetchedUser(name=presence['from'].user)
-            vinebot = FetchedVinebot(can_write=True, jiduser=presence['to'].user)
+            vinebot = FetchedVinebot(jiduser=presence['to'].user)
             if not user.is_online():
                 if user in vinebot.participants:  # [] if vinebot is not active
+                    vinebot.make_writer()
                     if len(vinebot.participants) > 2:
                         self.send_presences(vinebot, vinebot.everyone.difference([user]), pshow='away' if vinebot.is_idle else 'available')
                     else:  # elif len(participants) == 2:

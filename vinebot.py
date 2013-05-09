@@ -41,6 +41,11 @@ class AbstractVinebot(object):
         if self.can_write:
             g.db.release_vinebot(self.jiduser)
     
+    def make_writer(self):
+        self.release_lock()
+        self.can_write = True
+        self.acquire_lock()
+    
     def add_to_roster_of(self, user, nick, async=True):
         if not self.can_write:
             raise VinebotPermissionsException
