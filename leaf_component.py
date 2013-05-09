@@ -776,6 +776,7 @@ class LeafComponent(ComponentXMPP):
                         vinebot.update_rosters(old_participants, set([]), protected_participants=set([iter(vinebot.edges).next().f_user]))
                     else:#if len(vinebot.edges) == 2:
                         vinebot.update_rosters(old_participants, set([]), protected_participants=vinebot.edge_users)
+                    self.send_probes(vinebot, old_participants)  # revert to the statuses of the users, not of the conversation
                 for active_vinebot in active_vinebots:  # No matter what, we still need to release these locks
                     active_vinebot.release_lock()
             else:
@@ -802,7 +803,6 @@ class LeafComponent(ComponentXMPP):
         else:
             # this conversation had more than three people to start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
-        self.send_presences(vinebot, vinebot.everyone, pshow='away' if vinebot.is_idle else 'available')
     
     def cleanup_and_delete_edge(self, edge):
         vinebot = None
@@ -855,12 +855,8 @@ class LeafComponent(ComponentXMPP):
     
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
-        old_participants = []
-        if len(vinebot.participants) == 2:
-            old_participants = list(vinebot.participants)
         self.remove_participant(vinebot, user)
         self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
-        self.send_probes(vinebot, old_participants)  # revert to the statuses of the users, not of the conversation
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
