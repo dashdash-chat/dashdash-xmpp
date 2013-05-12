@@ -612,25 +612,27 @@ class LeafComponent(ComponentXMPP):
                     vinebot.release_lock()
     
     def handle_chatstate(self, msg):
-        vinebot = None
-        try:
-            user = FetchedUser(name=msg['from'].user)
-            vinebot = FetchedVinebot(jiduser=msg['to'].user)
-            del msg['id']
-            del msg['body']
-            del msg['html']
-            del msg['type']
-            if user in vinebot.participants:
-                self.broadcast_message(vinebot, user, vinebot.everyone.difference([user]), None, msg=msg)
-            elif user in vinebot.edge_users:
-                self.broadcast_message(vinebot, user, vinebot.edge_users.difference([user]), None, msg=msg)
-        except NotVinebotException:
-            pass
-        except NotUserException:
-            pass
-        finally:
-            if vinebot:
-                vinebot.release_lock()
+        if msg['type'] in ('chat', 'normal'):
+            vinebot = None
+            try:
+                user = FetchedUser(name=msg['from'].user)
+                vinebot = FetchedVinebot(jiduser=msg['to'].user)
+                del msg['id']
+                del msg['body']
+                del msg['html']
+                del msg['type']
+                if user in vinebot.participants:
+                    self.broadcast_message(vinebot, user, vinebot.everyone.difference([user]), None, msg=msg)
+                elif user in vinebot.edge_users:
+                    g.logger.info((user, vinebot.edge_users, vinebot.edge_users.difference([user])))
+                    self.broadcast_message(vinebot, user, vinebot.edge_users.difference([user]), None, msg=msg)
+            except NotVinebotException:
+                pass
+            except NotUserException:
+                pass
+            finally:
+                if vinebot:
+                    vinebot.release_lock()
     
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
