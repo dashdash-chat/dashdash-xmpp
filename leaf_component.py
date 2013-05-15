@@ -624,7 +624,6 @@ class LeafComponent(ComponentXMPP):
                 if user in vinebot.participants:
                     self.broadcast_message(vinebot, user, vinebot.everyone.difference([user]), None, msg=msg)
                 elif user in vinebot.edge_users:
-                    g.logger.info((user, vinebot.edge_users, vinebot.edge_users.difference([user])))
                     self.broadcast_message(vinebot, user, vinebot.edge_users.difference([user]), None, msg=msg)
             except NotVinebotException:
                 pass
