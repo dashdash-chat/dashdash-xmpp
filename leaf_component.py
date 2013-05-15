@@ -500,7 +500,7 @@ class LeafComponent(ComponentXMPP):
             user = FetchedUser(name=presence['from'].user)
             vinebot = FetchedVinebot(jiduser=presence['to'].user)
             if user in vinebot.participants:  # [] if vinebot is not active
-                if len(participants) == 2:  
+                if len(vinebot.participants) == 2:  
                     vinebot.make_writer()  
                     g.logger.info('[away] %03d participants' % len(vinebot.participants))
                     remaining_user = iter(vinebot.participants.difference([user])).next()
