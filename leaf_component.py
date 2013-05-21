@@ -1004,8 +1004,6 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
         else:
             vinebot.topic = topic  # using a fancy custom setter!
-            g.logger.warning(vinebot.is_active)
-            g.logger.warning(vinebot.topic)
             if vinebot.is_active or (vinebot.topic and self.activate_vinebot(vinebot, sender)):  # short-circuit prevents unnecessary vinebot activation
                 if vinebot.topic:
                     body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
