@@ -1252,8 +1252,11 @@ class LeafComponent(ComponentXMPP):
                     errors.append('No database entry for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
                     g.ectl.delete_rosteritem(user.name, roster_user)
                 finally:
-                    if roster_vinebot:
-                        roster_vinebot.release_lock()
+                    try:
+                        if roster_vinebot:
+                            roster_vinebot.release_lock()
+                    except NameError:
+                        pass
             if errors:
                 return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:

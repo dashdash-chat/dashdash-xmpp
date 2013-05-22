@@ -265,6 +265,8 @@ class AbstractVinebot(object):
             return_tuple = last_message[0]
         elif last_command:
             return_tuple = last_command[0]
+        if return_tuple is None:
+            return (None, None, None, None)
         return (u.FetchedUser(dbid=return_tuple[0]),
                return_tuple[1],
                return_tuple[2],
