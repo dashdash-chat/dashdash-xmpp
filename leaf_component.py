@@ -785,22 +785,23 @@ class LeafComponent(ComponentXMPP):
                 vinebot.delete()
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(old_participants, vinebot.participants)
-            user1, user2 = vinebot.participants
-            try:
+            if len(vinebot.edges) == 0:  # Only move edges to this vinebot if it doesn't already have any
+                user1, user2 = vinebot.participants
                 try:
-                    edge = FetchedEdge(f_user=user2, t_user=user1)
-                    old_vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
-                except NotEdgeException:
                     try:
-                        edge = FetchedEdge(f_user=user1, t_user=user2)
+                        edge = FetchedEdge(f_user=user2, t_user=user1)
                         old_vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
                     except NotEdgeException:
-                        old_vinebot = None
-                if old_vinebot and not old_vinebot.is_active:
-                    old_vinebot.delete(new_vinebot=vinebot)
-            finally:
-                if old_vinebot:
-                    old_vinebot.release_lock()
+                        try:
+                            edge = FetchedEdge(f_user=user1, t_user=user2)
+                            old_vinebot = FetchedVinebot(can_write=True, dbid=edge.vinebot_id)
+                        except NotEdgeException:
+                            old_vinebot = None
+                    if old_vinebot and not old_vinebot.is_active:
+                        old_vinebot.delete(new_vinebot=vinebot)
+                finally:
+                    if old_vinebot:
+                        old_vinebot.release_lock()
         else:
             # this conversation had more than three people to start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
