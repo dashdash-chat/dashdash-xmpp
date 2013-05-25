@@ -970,7 +970,8 @@ class LeafComponent(ComponentXMPP):
                     ''.join(['\t%s\n' % username for username in usernames]).strip('\n'))
     
     def list_observers(self, parent_command_id, vinebot, user):
-        observers = filter(lambda observer: observer.is_online(), vinebot.observers)
+        connected_users = g.ectl.connected_users()
+        observers = list(vinebot.observers.intersection(connected_users))
         observer_string = ''.join(['\t%s\n' % observer.name for observer in observers]).strip('\n')
         if vinebot.is_active:
             if len(observers) > 1:
@@ -1242,30 +1243,15 @@ class LeafComponent(ComponentXMPP):
             actual_rosteritems = frozenset([(actual[0], actual[1], marshall_nick(actual[2])) for actual in user_roster])
             errors = []
             for roster_user, roster_group, roster_nick in actual_rosteritems.difference(expected_rosteritems):
-                errors.append('No vinebot found for rosteritem %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
+                errors.append('No vinebot found for rosteritem %s with group %s and nick %s' % (roster_user, roster_group, list(roster_nick)))
                 g.ectl.delete_rosteritem(user.name, roster_user)
             for roster_user, roster_group, roster_nick in expected_rosteritems.difference(actual_rosteritems):
-                errors.append('No rosteritem found for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
+                errors.append('No rosteritem found for vinebot %s with group %s and nick %s' % (roster_user, roster_group, list(roster_nick)))
                 g.ectl.add_rosteritem(user.name, roster_user, roster_group, unmarshall_nick(roster_nick))
-            for roster_user, roster_group, roster_nick in user_roster:
-                try:
-                    roster_vinebot = FetchedVinebot(jiduser=roster_user)
-                    if roster_group != roster_vinebot.group:
-                        errors.append('Incorrect group %s found for rosteritem %s with nick %s' % (roster_group, roster_user, roster_nick))
-                        g.ectl.add_rosteritem(user.name, roster_user, roster_vinebot.group, roster_nick)
-                except NotVinebotException:
-                    errors.append('No database entry for vinebot %s with group %s and nick %s' % (roster_user, roster_group, roster_nick))
-                    g.ectl.delete_rosteritem(user.name, roster_user)
-                finally:
-                    try:
-                        if roster_vinebot:
-                            roster_vinebot.release_lock()
-                    except NameError:
-                        pass
             if errors:
-                return parent_command_id, '%s has the following roster errors:\n\t%s' % (user.name, '\n\t'.join(errors))
+                return parent_command_id, '%s needed the following roster updates:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:
-                return parent_command_id, '%s has no roster errors.' % user.name
+                return parent_command_id, '%s needed no roster updates.' % user.name
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
     

@@ -8,6 +8,7 @@ from httplib import BadStatusLine
 import xmlrpclib
 import constants
 from constants import g
+import user as u
 
 NUM_RETRIES = 3
 
@@ -100,6 +101,21 @@ class EjabberdCTL(object):
             g.logger.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
             return 'unavailable'
     
+    def connected_users(self):
+        try:
+            res = self._retried_xmlrpc_command('connected_users_vhost', {
+                'host': constants.domain
+            })
+            usernames = [r['sessions'].split('@')[0] for r in res]
+            usernames = filter(lambda username: username not in constants.protected_users, usernames)
+            return frozenset([u.FetchedUser(name=username) for username in usernames])
+        except xmlrpclib.ProtocolError, e:
+            g.logger.error('ProtocolError in connected_users_vhost, assuming none: %s' % str(e))
+            return frozenset([])
+        except xmlrpclib.Fault, e:
+            g.logger.error('Fault in connected_users_vhost, assuming none: %s' % str(e))
+            return frozenset([])
+    
     def _retried_xmlrpc_command(self, command, data):
         xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
         for i in range(1, NUM_RETRIES + 1):
@@ -108,17 +124,19 @@ class EjabberdCTL(object):
                 result = self._xmlrpc_command(command, data, xmlrpc_server)
             except socket.error as e:
                 if e.errno in [errno.ECONNRESET, errno.ETIMEDOUT]:
-                    g.logger.warning('Failed %s XMLRPC command #%d for %s with %s and error %s' % (command, i, data['localuser'], data['user'], e))
+                    g.logger.warning('Failed %s XMLRPC command #%d for %s and error %s' % (command, i, data, e))
                     xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
                 else:
                     raise e
             except BadStatusLine:
-                g.logger.warning('Failed %s XMLRPC command #%d for %s with %s and error BadStatusLine' % (command, i, data['localuser'], data['user']))
+                g.logger.warning('Failed %s XMLRPC command #%d for %s and error BadStatusLine' % (command, i, data))
                 xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
             if result is not None and 'res' in result and result['res'] == 0:
                 return True
+            elif result is not None and command in result:
+                return result[command]
             else:
-                g.logger.warning('Failed %s XMLRPC command #%d for %s with %s and result %s' % (command, i, data['localuser'], data['user'], result))
+                g.logger.warning('Failed %s XMLRPC command #%d for %s and result %s' % (command, i, data, result))
         return False
     
     def _xmlrpc_command(self, command, data, xmlrpc_server=None):        

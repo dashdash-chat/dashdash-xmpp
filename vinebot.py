@@ -135,16 +135,19 @@ class AbstractVinebot(object):
         comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
         return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
     
-    def update_rosters(self, old_participants, new_participants, protected_participants=set([])):  # if there are still edges between the users, we might not want to change their rosteritems
+    def update_rosters(self, old_participants, new_participants, protected_participants=frozenset([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
         # First, create the old and new lists of observers
         def get_observers_for(users):
-            return reduce(lambda observers, user: observers.union(user.friends), users, set([]))
+            return frozenset(reduce(lambda observers, user: observers.union(user.friends), users, set([])))
         old_observers = get_observers_for(old_participants)
-        # if new_participants == self.participants:
-        #     new_observers = self.observers  # no need to calculate the observer list twice
-        # else:
         new_observers = get_observers_for(new_participants)
+        # Only update connected users for now – others will sync_roster when they come online
+        connected_users = g.ectl.connected_users()
+        new_participants = new_participants.intersection(connected_users)
+        new_participants = new_participants.intersection(connected_users)
+        new_observers = new_observers.intersection(connected_users)
+        old_observers = old_observers.intersection(connected_users)
         # Then, update the participants
         for old_participant in old_participants.difference(new_observers).difference(new_participants).difference(protected_participants):
             self.remove_from_roster_of(old_participant, async=False)
