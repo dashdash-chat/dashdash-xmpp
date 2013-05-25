@@ -112,7 +112,7 @@ class AbstractUser(object):
                                                     'id': self.id
                                                  }, strip_pairs=True)
         return stage[0] if stage else None
-        
+    
     def _fetch_friends(self):
         friend_pairs = g.db.execute_and_fetchall("""SELECT users.name, users.id
                                                     FROM users, edges AS outgoing, edges AS incoming
@@ -457,7 +457,7 @@ class FetchedUser(AbstractUser):
                 self.id = dbid
                 self.name = res[0]
         else:
-            raise Exception, 'User objects must be initialized with either a name or id.'
+            raise NotUserException, 'User objects must be initialized with either a name or id.'
         if not self.id or not self.name:
             raise NotUserException, 'User with name=%s and id=%s was not found in the database' % (name.lower(), dbid)
         self.twitter_id     = res[1]

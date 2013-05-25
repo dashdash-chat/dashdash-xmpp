@@ -4,7 +4,6 @@ from datetime import datetime
 from MySQLdb import IntegrityError, OperationalError, ProgrammingError
 import logging
 from optparse import OptionParser
-import random
 import uuid
 import shortuuid
 import sleekxmpp
@@ -33,7 +32,6 @@ if sys.version_info < (3, 0):
 else:
     raw_input = input
 
-ROSTER_SYNC_PROBABILITY = 200
 CURRENT_TCO_LENGTH = 20
 
 class LeafComponent(ComponentXMPP):
@@ -481,9 +479,7 @@ class LeafComponent(ComponentXMPP):
                                                if_machine='Hangup',
                                                url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
                 g.logger.info('[twilio] %s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
-            if random.randint(1, ROSTER_SYNC_PROBABILITY) == 1:
-                _, result = self.sync_roster(None, user.name)
-                g.logger.info('Auto sync_roster in handle_presence_available: %s' % result)
+
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
@@ -606,7 +602,15 @@ class LeafComponent(ComponentXMPP):
                     parent_message_id = g.db.log_message(user, [], msg['body'])
                     self.send_alert(None, None, user, 'Sorry, you can\'t send messages to %s. Try another contact in your list?' % msg['to'], fromjid=msg['to'], parent_message_id=parent_message_id)
             except NotUserException:
-                g.logger.error('Received message from unknown user: %s' % msg)
+                if msg['body'].startswith(constants.session_opened_signal):
+                    try:
+                        opened_user = FetchedUser(name=msg['body'].replace(constants.session_opened_signal, '').strip())
+                        _, result = self.sync_roster(None, opened_user.name)
+                        g.logger.info('Auto sync_roster on session_opened_signal: %s' % result)
+                    except NotUserException:
+                        g.logger.error('Received session_opened_signal for unknown user: %s' % msg)
+                else:
+                    g.logger.error('Received message from unknown user: %s' % msg)
             finally:
                 if vinebot:
                     vinebot.release_lock()

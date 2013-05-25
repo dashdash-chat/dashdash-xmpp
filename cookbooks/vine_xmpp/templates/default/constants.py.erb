@@ -19,6 +19,7 @@ helpbot_jid_user = '<%= node.run_state['config']['xmpp_users']['helpbot_user'] %
 helpbot_jid = '%s@%s' % (helpbot_jid_user, domain)
 helpbot_xmpp_password = '<%= node.run_state['config']['xmpp_users']['helpbot_password'] %>'
 act_on_user_stage = 'fiph5bap3av5on5bid2y'  # just a random string
+session_opened_signal = '<%= node.run_state['config']['leaves']['session_opened_signal'] %>'
 
 xmlrpc_server = '<%= node.run_state['config']['xmlrpc']['domain'] %>'
 xmlrpc_port = <%= node.run_state['config']['xmlrpc']['port'] %>
