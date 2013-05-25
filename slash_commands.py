@@ -110,7 +110,7 @@ class SlashCommandRegistry(object):
             else:
                 return None, 'The available commands are:\n' + command_string
         else:
-            return None, 'Sorry, /%s isn\'t a registered command. Type /help to see a full list.' % command_name
+            return None, 'Sorry, that isn\'t a registered command. Type /help to see a full list.'
     
     def add(self, slash_command):
         if slash_command.name in self.slash_commands:
