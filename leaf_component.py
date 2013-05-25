@@ -1251,10 +1251,10 @@ class LeafComponent(ComponentXMPP):
             actual_rosteritems = frozenset([(actual[0], actual[1], marshall_nick(actual[2])) for actual in user_roster])
             errors = []
             for roster_user, roster_group, roster_nick in actual_rosteritems.difference(expected_rosteritems):
-                errors.append('No vinebot found for rosteritem %s with group %s and nick %s' % (roster_user, roster_group, list(roster_nick)))
+                errors.append('No vinebot found for rosteritem %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(roster_nick)))
                 g.ectl.delete_rosteritem(user.name, roster_user)
             for roster_user, roster_group, roster_nick in expected_rosteritems.difference(actual_rosteritems):
-                errors.append('No rosteritem found for vinebot %s with group %s and nick %s' % (roster_user, roster_group, list(roster_nick)))
+                errors.append('No rosteritem found for vinebot %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(roster_nick)))
                 g.ectl.add_rosteritem(user.name, roster_user, roster_group, unmarshall_nick(roster_nick))
             if errors:
                 return parent_command_id, '%s needed the following roster updates:\n\t%s' % (user.name, '\n\t'.join(errors))

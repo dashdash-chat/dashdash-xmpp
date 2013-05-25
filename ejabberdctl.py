@@ -80,7 +80,7 @@ class EjabberdCTL(object):
                 g.logger.warning('Incorrect roster subscription for: %s' % rosteritem)
             vinebot_user = rosteritem[0]['jid'].split('@')[0]
             if not vinebot_user.startswith(constants.vinebot_prefix):
-                g.logger.warning("Non-vinebot user(s) found on roster for user %s!\n%s" % (user, rosteritems))
+                g.logger.warning("Non-vinebot user found on roster for user %s: %s" % (user, rosteritem))
             roster.append((vinebot_user, rosteritem[4]['group'], rosteritem[1]['nick']))
         return roster
     
