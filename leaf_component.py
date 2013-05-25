@@ -366,15 +366,19 @@ class LeafComponent(ComponentXMPP):
                     other_leaves_online = True
                     break
         if not other_leaves_online:
-            g.logger.info('[shutdown] beginning cleanup')
+            connected_users = g.ectl.connected_users()
+            g.logger.info('[shutdown] beginning cleanup, %d users online' % len(connected_users))
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
                 g.logger.info('[shutdown] sending %d presences for vinebot with dbid=%d' % (len(vinebot.everyone), vinebot.id))
-                self.send_presences(vinebot, vinebot.everyone, pshow='unavailable')
+                self.send_presences(vinebot, vinebot.everyone.intersection(connected_users), pshow='unavailable')
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
-                    g.logger.info('[shutdown] sending presence from user.id=%d to user.id=%d for edge.id=%d and vinebot.id=%d' % (edge.f_user.id, edge.t_user.id, edge.id, vinebot.id))
-                    self.send_presences(vinebot, [edge.f_user], pshow='unavailable')
-            g.logger.info('[shutdown] sending presences to admins')
+                    if edge.f_user in connected_users:
+                        g.logger.info('[shutdown] sending  presence from user.id=%-04d to online  user.id=%-04d for edge.id=%-05d and vinebot.id=%-05d' % (edge.t_user.id, edge.f_user.id, edge.id, vinebot.id))
+                        self.send_presences(vinebot, [edge.f_user], pshow='unavailable')
+                    else:
+                        g.logger.info('[shutdown] skipping presence from user.id=%-04d to offline user.id=%-04d for edge.id=%-05d and vinebot.id=%-05d' % (edge.t_user.id, edge.f_user.id, edge.id, vinebot.id))
+            g.logger.info('[shutdown] sending  presences to admins')
             self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids], pshow='unavailable')
             g.logger.info('[shutdown] cleanup finished, disconnecting')
         kwargs['wait'] = True    
@@ -399,16 +403,20 @@ class LeafComponent(ComponentXMPP):
         other_leaves_online = register_leaf()
         g.use_new_logger('%s%02d' % (constants.leaves_mysql_lock_name, self.acquired_lock_num))
         if not other_leaves_online:
-            g.logger.info('[startup] beginning initialization')
+            connected_users = g.ectl.connected_users()
+            g.logger.info('[startup] beginning initialization, %d users online' % len(connected_users))
             for vinebot in FetchedVinebot.fetch_vinebots_with_participants():
                 g.logger.info('[shutdown] sending %d presences for vinebot with dbid=%d' % (len(vinebot.everyone), vinebot.id))
-                self.send_presences(vinebot, vinebot.observers, pshow='away' if vinebot.is_idle else 'available')
+                self.send_presences(vinebot, vinebot.observers.intersection(connected_users), pshow='away' if vinebot.is_idle else 'available')
                 self.send_presences(vinebot, vinebot.participants)
             for vinebot in FetchedVinebot.fetch_vinebots_with_edges():
                 for edge in vinebot.edges:
-                    g.logger.info('[startup] sending presence from user.id=%d to user.id=%d for edge.id=%d and vinebot.id=%d' % (edge.f_user.id, edge.t_user.id, edge.id, vinebot.id))
-                    self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
-            g.logger.info('[startup] sending presences to admins')
+                    if edge.f_user in connected_users:
+                        g.logger.info('[startup] sending  presence from user.id=%-04d to online  user.id=%-04d for edge.id=%-05d and vinebot.id=%-05d' % (edge.t_user.id, edge.f_user.id, edge.id, vinebot.id))
+                        self.send_presences(vinebot, [edge.f_user], pshow=edge.t_user.status())
+                    else:
+                        g.logger.info('[startup] skipping presence from user.id=%-04d to offline user.id=%-04d for edge.id=%-05d and vinebot.id=%-05d' % (edge.t_user.id, edge.f_user.id, edge.id, vinebot.id))
+            g.logger.info('[startup] sending  presences to admins')
             self.send_presences(None, [FetchedUser(name=admin_jid.split('@')[0]) for admin_jid in constants.admin_jids])
             g.logger.info('[startup] initialization finished')
         self.schedule(name='vinebot_idler', seconds=180, callback=self.send_idle_presences, repeat=True)

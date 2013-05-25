@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-\
 import MySQLdb
+from MySQLdb import ProgrammingError
 import constants
 from constants import g
 
@@ -54,7 +55,10 @@ class MySQLConnection(object):
     
     def cleanup(self):
         if self.conn:
-            self.conn.close()
+            try:
+                self.conn.close()
+            except ProgrammingError, e:
+                g.logger.warning('ProgrammingError closing MySQL connection: %s' % e)
     
 
 class MySQLManager(object):
