@@ -316,6 +316,8 @@ class AbstractVinebot(object):
             return ''
         # generates strings that look like "1 day, 5 hours, 6 mins", FML
         remainder = (datetime.now() - timestamp).total_seconds()
+        if remainder < 1:  # if the timestamp is too recent, the remainder could be negative, and divmod will behave weirdly
+            remainder = 0
         days,    remainder = divmod(remainder, 60 * 60 * 24)
         hours,   remainder = divmod(remainder, 60 * 60)
         minutes, remainder = divmod(remainder, 60)
