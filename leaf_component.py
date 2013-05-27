@@ -20,7 +20,7 @@ from slash_commands import SlashCommand, SlashCommandRegistry, ExecutionError
 from invite import FetchedInvite, InsertedInvite, AbstractInvite, NotInviteException, ImmutableInviteException
 from user import FetchedUser, InsertedUser, NotUserException
 from edge import FetchedEdge, InsertedEdge, NotEdgeException
-from vinebot import FetchedVinebot, InsertedVinebot, NotVinebotException
+from vinebot import AbstractVinebot, FetchedVinebot, InsertedVinebot, NotVinebotException, PRONOUN
 try:
     import web.celery_tasks as celery_tasks
 except ImportError:
@@ -648,18 +648,15 @@ class LeafComponent(ComponentXMPP):
     ##### helper functions
     def send_presences(self, vinebot, recipients, pshow='available'):
         pfrom = constants.leaves_jid
-        statuses = []
-        if vinebot:
-            pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
-            if vinebot.topic:
-                statuses.append(unicode(vinebot.topic))
-            if vinebot.is_active and vinebot.is_idle:
-                statuses.append(vinebot.last_active_text)
+        pstatus = ''
         for recipient in recipients:
+            if vinebot:
+                pfrom = '%s@%s' % (vinebot.jiduser, constants.leaves_domain)
+                pstatus = vinebot.get_status(recipient)
             self.sendPresence(pfrom=pfrom,
                                 pto='%s@%s' % (recipient.name, constants.domain),
                                 pshow=None if pshow == 'available' else pshow,
-                                pstatus=', '.join(statuses))
+                                pstatus=pstatus)
     
     def send_probes(self, vinebot, recipients):
         pfrom = constants.leaves_jid
@@ -797,6 +794,7 @@ class LeafComponent(ComponentXMPP):
                 vinebot.delete()
         elif len(vinebot.participants) == 2:
             vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
             if len(vinebot.edges) == 0:  # Only move edges to this vinebot if it doesn't already have any
                 user1, user2 = vinebot.participants
                 try:
@@ -817,6 +815,7 @@ class LeafComponent(ComponentXMPP):
         else:
             # this conversation had more than three people to start, so nothing changes if we remove someone
             vinebot.update_rosters(old_participants, vinebot.participants)
+            self.send_presences(vinebot, vinebot.everyone)
     
     def cleanup_and_delete_edge(self, edge):
         vinebot = None
@@ -853,7 +852,7 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, ''
     
     def user_joined(self, parent_command_id, vinebot, user):
-        if vinebot.topic:
+        if vinebot.topic is not None:
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user.name, vinebot.topic)
         else:
             alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user.name
@@ -889,7 +888,7 @@ class LeafComponent(ComponentXMPP):
         g.logger.info('[invite] %03d participants' % len(vinebot.participants))
         if not vinebot.is_active:
             self.activate_vinebot(vinebot, inviter, force_activate=True)
-        if vinebot.topic:
+        if vinebot.topic is not None:
             alert_msg = '%s has invited %s to the conversation. The current topic is:\n\t%s' % (inviter.name, invitee.name, vinebot.topic)
         else:
             alert_msg = '%s has invited %s to the conversation. No one has set the topic.' % (inviter.name, invitee.name)
@@ -969,8 +968,8 @@ class LeafComponent(ComponentXMPP):
         if len(vinebot.participants) == 0:
             return parent_command_id, 'This conversation isn\'t yet active, so there are no participants.'
         if user in vinebot.participants:
-            usernames.append('you')
-        if vinebot.topic:
+            usernames.append(PRONOUN)
+        if vinebot.topic is not None:
             return parent_command_id, 'The current participants are:\n%s\nThe current topic is:\n\t%s' % (
                     ''.join(['\t%s\n' % username for username in usernames]).strip('\n'), vinebot.topic)
         else:
@@ -1018,8 +1017,8 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, 'topics can\'t be longer than 100 characters, and this was %d characters.' % len(topic))
         else:
             vinebot.topic = topic  # using a fancy custom setter!
-            if vinebot.is_active or (vinebot.topic and self.activate_vinebot(vinebot, sender)):  # short-circuit prevents unnecessary vinebot activation
-                if vinebot.topic:
+            if vinebot.is_active or (vinebot.topic is not None and self.activate_vinebot(vinebot, sender)):  # short-circuit prevents unnecessary vinebot activation
+                if vinebot.topic is not None:
                     body = '%s has set the topic of the conversation:\n\t%s' % (sender.name, vinebot.topic)
                 else:
                     body = '%s has cleared the topic of conversation.' % sender.name
@@ -1030,7 +1029,7 @@ class LeafComponent(ComponentXMPP):
                     self.send_presences(vinebot, vinebot.edge_users)
                     self.broadcast_message(vinebot, None, vinebot.edge_users, body, parent_command_id=parent_command_id, activate=True)
             else:
-                if vinebot.topic:
+                if vinebot.topic is not None:
                     modified = 'set'
                 else:
                     modified = 'cleared'
@@ -1213,33 +1212,6 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
     def sync_roster(self, parent_command_id, username):
-        def marshall_nick(nick):
-            # this is here and not in the vinebot class because we need it for the strings we get from ejabberd
-            # note that we're comparing nick's and not participant lists because some nick's will contain a "you" in the roster
-            usernames = set([])
-            ampersand_peices = nick.split('&')
-            if len(ampersand_peices) == 1:
-                usernames.add(nick.strip())
-            else:
-                usernames.add(ampersand_peices[1].strip())
-                comma_pieces = ampersand_peices[0].split(',')
-                if len(comma_pieces) == 1:
-                    usernames.add(ampersand_peices[0].strip())
-                else:
-                    for comma_piece in comma_pieces:
-                        usernames.add(comma_piece.strip())
-            return frozenset(usernames)
-        def unmarshall_nick(usernames):
-            if len(usernames) == 1:
-                return list(usernames)[0]
-            else:
-                if 'you' in usernames:
-                    usernames = list(usernames.difference(['you']))
-                    usernames.append('you')
-                else:
-                    usernames = list(usernames)
-                comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
-                return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
         try:
             user = FetchedUser(name=username)
             user_roster = user.roster()
@@ -1247,15 +1219,20 @@ class LeafComponent(ComponentXMPP):
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
-            expected_rosteritems = frozenset([(expected.jiduser, expected.group, marshall_nick(expected.get_nick(user))) for expected in expected_vinebots])
-            actual_rosteritems = frozenset([(actual[0], actual[1], marshall_nick(actual[2])) for actual in user_roster])
+            expected_rosteritems = frozenset([(expected.jiduser, expected.group, AbstractVinebot.marshal_nick(expected.get_nick(user))) for expected in expected_vinebots])
+            actual_rosteritems   = frozenset([(actual[0],        actual[1],      AbstractVinebot.marshal_nick(actual[2]))               for actual   in user_roster])
+            rosteritems_to_delete = []  # Only delete the ones that we aren't going to re-add in a moment, i.e. don't delete for incorrect nicknames
+            expected_jidusers = frozenset([expected_rosteritem[0] for expected_rosteritem in expected_rosteritems])
+            for roster_user, roster_group, nick_tuple in actual_rosteritems:
+                if roster_user not in expected_jidusers:
+                    rosteritems_to_delete.append((roster_user, roster_group, nick_tuple))
             errors = []
-            for roster_user, roster_group, roster_nick in actual_rosteritems.difference(expected_rosteritems):
-                errors.append('No vinebot found for rosteritem %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(roster_nick)))
+            for roster_user, roster_group, nick_tuple in rosteritems_to_delete:
+                errors.append('No vinebot found for rosteritem %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(nick_tuple)))
                 g.ectl.delete_rosteritem(user.name, roster_user)
-            for roster_user, roster_group, roster_nick in expected_rosteritems.difference(actual_rosteritems):
-                errors.append('No rosteritem found for vinebot %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(roster_nick)))
-                g.ectl.add_rosteritem(user.name, roster_user, roster_group, unmarshall_nick(roster_nick))
+            for roster_user, roster_group, nick_tuple in expected_rosteritems.difference(actual_rosteritems):
+                errors.append('No rosteritem found for vinebot %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(nick_tuple)))
+                g.ectl.add_rosteritem(user.name, roster_user, roster_group, AbstractVinebot.unmarshal_nick(nick_tuple))
             if errors:
                 return parent_command_id, '%s needed the following roster updates:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:

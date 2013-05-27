@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import re
+import shortuuid
 import sys
 import uuid
-import shortuuid
 import constants
 from datetime import datetime, timedelta
 from constants import g
@@ -10,6 +11,7 @@ import user as u
 import edge as e
 
 IDLE_MINUTES = 10
+PRONOUN = 'me'
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -25,11 +27,12 @@ class VinebotPermissionsException(Exception):
 
 class AbstractVinebot(object):
     def __init__(self, can_write=False):
-        self._topic = None  # None is meaningful to the leaf component, so it might get initialized again by FetchedVinebot
+        self._topic_body = None
+        self._topic_timestamp = None
         self._edges = None
         self._participants = None
         self._observers = None
-        self._last_active_text = None
+        self._last_active = None
         self.can_write = can_write
         #TODO add transactions?
     
@@ -80,9 +83,9 @@ class AbstractVinebot(object):
                                                  AND participants.user_id = incoming.to_id
                                                  AND participants.user_id = outgoing.from_id
                                                  AND users.is_active = true
-                                                 AND (SELECT COUNT(*) 
-                                                      FROM participants 
-                                                      WHERE participants.vinebot_id = %(id)s 
+                                                 AND (SELECT COUNT(*)
+                                                      FROM participants
+                                                      WHERE participants.vinebot_id = %(id)s
                                                       AND user_id=users.id
                                                      ) = 0
                                               """, {
@@ -111,7 +114,7 @@ class AbstractVinebot(object):
         #NOTE adding "self.participants" here to initialize the pariticipants causes an error I don't understand
         self._participants = self._participants.union([user])
     
-    def remove_participant(self, user): 
+    def remove_participant(self, user):
         if not self.can_write:
             raise VinebotPermissionsException
         self._participants = self._participants.difference([user])
@@ -123,17 +126,94 @@ class AbstractVinebot(object):
                         'user_id': user.id
                      })
     
+    def get_status(self, viewer):
+        statuses = []
+        if self.is_active and self.topic_body is not None:
+            statuses.append(self._participant_string_for_vinebot(viewer, prepend_size=False))
+        elif self.topic:
+            statuses.append(self.topic)
+        if self.is_active and self.is_idle:
+            if self.last_active is None:
+                statuses.append('has never been active')
+            else:
+                statuses.append('last active %s ago' % self._format_timestamp(self.last_active))
+        return '; '.join(statuses)
+    
     def get_nick(self, viewer):
+        if self.is_active and self.topic_body is not None:
+            return '%d: "%s"' % (len(self.participants), self.topic_body)
+        else:
+            return self._participant_string_for_vinebot(viewer, prepend_size=True)
+    
+    def _participant_string_for_vinebot(self, viewer, prepend_size=False):
         if not self.is_active:
-            users = list(self.edge_users.difference([viewer]))
-            if len(users) > 0:
-                return users[0].name
+            usernames = [user.name for user in self.edge_users.difference([viewer])]
+        else:
+            usernames = [user.name for user in self.participants.difference([viewer])]
+            if viewer and viewer in self.participants:
+                usernames.append(PRONOUN)  # Do this here, so we can re-use AbstractVinebot._participant_string(usernames)
+        nick = AbstractVinebot._participant_string(usernames, prepend_size=prepend_size)
+        if nick is None:
             return self.jiduser
-        usernames = [user.name for user in self.participants.difference([viewer])]
-        if viewer and viewer in self.participants:
-            usernames.append('you')
-        comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
-        return '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
+        return nick
+    
+    @staticmethod
+    def _participant_string(usernames, prepend_size=False):
+        usernames = frozenset(usernames)
+        if len(usernames) == 0:
+            return None
+        elif len(usernames) == 1:
+            return list(usernames)[0]
+        else:
+            if PRONOUN in usernames:
+                usernames = list(usernames.difference([PRONOUN]))
+                usernames.sort()  # to prevent the names from jumping around in statuses. sorting by IDs might be better, but would be annoying.
+                usernames.insert(0, PRONOUN)
+            else:
+                usernames = list(usernames)
+                usernames.sort()
+            comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
+            participant_string = '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
+            if prepend_size and len(usernames) > 1:
+                return '%d: %s' % (len(usernames), participant_string)
+            else:
+                return participant_string
+    
+    @staticmethod
+    def marshal_nick(nick):
+        #NOTE we're comparing nicks and not the vinebot properties themselves because we need to
+        # use the roster strings from the actual vinebots, and those might contain a "PRONOUN"
+        size = None
+        usernames = None
+        topic = None
+        topic_match    = re.match(r"^(\d+): \"(.+)\"$"   , nick)
+        active_match   = re.match(r"^(\d+): (.+) & (.+)$", nick)
+        inactive_match = re.match(r"^(.+)$"              , nick)
+        if topic_match is not None:
+            size = int(topic_match.group(1))
+            topic = topic_match.group(2)
+        else:
+            if active_match is not None:
+                size = int(active_match.group(1))
+                usernames = set([active_match.group(3)])
+                comma_pieces = active_match.group(2).split(', ')
+                if len(comma_pieces) == 1:
+                    usernames.add(comma_pieces[0])
+                else:
+                    for comma_piece in comma_pieces:
+                        usernames.add(comma_piece)
+                usernames = frozenset(usernames)
+            elif inactive_match is not None:
+                usernames = frozenset([inactive_match.group(1)])
+        return size, usernames, topic
+    
+    @staticmethod
+    def unmarshal_nick(nick):
+        size, usernames, topic = nick
+        if size is not None and topic is not None:
+            return '%d: "%s"' % (size, topic)
+        else:
+            return AbstractVinebot._participant_string(usernames, prepend_size=True)
     
     def update_rosters(self, old_participants, new_participants, protected_participants=frozenset([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
@@ -160,10 +240,13 @@ class AbstractVinebot(object):
             self.add_to_roster_of(new_observer, nick=observer_nick)
     
     def check_recent_activity(self, excluded_user=None):
-        last_active = self._fetch_last_active(excluded_user)
-        if last_active is None:
-            return False
-        return last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
+        if excluded_user is not None:
+            last_active = self._fetch_last_active(excluded_user=excluded_user)
+            if last_active is None:
+                return False
+            return last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
+        else:
+            return self.last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
     
     def _fetch_last_active(self, excluded_user=None):
         last_message = g.db.execute_and_fetchall("""SELECT sent_on
@@ -283,7 +366,8 @@ class AbstractVinebot(object):
                     """, {
                         'vinebot_id': self.id
                     })
-        self._topic = None
+        self._topic_body = None
+        self._topic_timestamp = None
         if body:
             g.db.execute("""INSERT INTO topics (vinebot_id, body)
                             VALUES (%(vinebot_id)s, %(body)s)
@@ -291,7 +375,9 @@ class AbstractVinebot(object):
                             'vinebot_id': self.id,
                             'body': body.encode('utf-8')
                          })
-            self._topic = self._format_topic(body, datetime.now())
+            self._topic_body = body
+            self._topic_timestamp = datetime.now()
+        self.update_rosters(set([]), self.participants)
     
     def _fetch_topic(self):
         topic = g.db.execute_and_fetchall("""SELECT body, created
@@ -301,15 +387,9 @@ class AbstractVinebot(object):
                                              'vinebot_id': self.id
                                           })
         if topic and len(topic) > 0 and len(topic[0]) == 2:
-            body, created = topic[0]
-            return self._format_topic(body, created)
-        return None
-    
-    def _format_topic(self, body, created):
-        if created is not None:
-            return '"%s" as of %s ago' % (body, self._format_timestamp(created))
-        else:
-            return '"%s"' % body
+            self._topic_body, self._topic_timestamp = topic[0]
+            return self._topic_body, self._topic_timestamp
+        return None, None
     
     def _format_timestamp(self, timestamp):
         if timestamp is None:
@@ -341,41 +421,46 @@ class AbstractVinebot(object):
         # never delete the actual edges though - either they're deleted elsewhere, or will be transferred to a new vinebot
         g.db.execute("""DELETE FROM participants
                            WHERE vinebot_id = %(id)s
-                        """, {           
+                        """, {
                            'id': self.id
                         })
         g.db.execute("""DELETE FROM topics
                            WHERE vinebot_id = %(id)s
-                        """, {           
+                        """, {
                            'id': self.id
                         })
         g.db.execute("""DELETE FROM vinebots
                         WHERE id = %(id)s
                         AND (SELECT COUNT(*) FROM messages WHERE vinebot_id = %(id)s) = 0
                         AND (SELECT COUNT(*) FROM commands WHERE vinebot_id = %(id)s) = 0;
-                    """, {           
+                    """, {
                         'id': self.id
                     })
     
     def __getattr__(self, name):
         if name == 'topic':
-            return self._topic
+            if self.topic_body is not None:
+                if self.topic_timestamp is not None:
+                    return '"%s" as of %s ago' % (self.topic_body, self._format_timestamp(self.topic_timestamp))
+                return '"%s"' % self.topic_body
+            else:
+                return None
+        elif name == 'topic_body':
+            return self._topic_body
+        elif name == 'topic_timestamp':
+            return self._topic_timestamp
         elif name == 'is_active':
             return len(self.participants) >= 2
-        elif name == 'last_active_text':
-            if self._last_active_text is None:
-                timestamp = self._fetch_last_active()
-                if timestamp is not None:
-                    self._last_active_text = 'last active %s ago' % self._format_timestamp(timestamp)
-                else:
-                    self._last_active_text = 'has never been active'
-            return self._last_active_text
+        elif name == 'last_active':
+            if self._last_active is None:
+                self._last_active = self._fetch_last_active()
+            return self._last_active
         elif name == 'is_idle':
             return not self.check_recent_activity()
         elif name == 'group':
             group = 'Contacts'
             if self.is_active:
-                group = 'Conversations' 
+                group = 'Conversations'
             if constants.debug:
                 return 'Dashdash %s (Dev)' % group
             return 'Dashdash %s' % group
@@ -409,7 +494,7 @@ class AbstractVinebot(object):
     def __setattr__(self, name, value):
         if name == 'topic':
             self._set_topic(value)
-        elif name in ['topic', 'is_active', 'last_active_text', 'is_idle', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
+        elif name in ['topic_body', 'topic_timestamp', 'is_active', 'last_active', 'is_idle', 'edges', 'edge_users', 'participants', 'observers', 'everyone']:
             raise AttributeError("%s is an immutable attribute." % name)
         else:
             dict.__setattr__(self, name, value)
@@ -446,7 +531,7 @@ class InsertedVinebot(AbstractVinebot):
         if old_vinebot and old_vinebot.edges:
             self._edges = []
             for edge in old_vinebot.edges:
-                edge.change_vinebot(self) 
+                edge.change_vinebot(self)
                 self._edges.append(edge)
                 self.add_to_roster_of(edge.f_user, self.get_nick(edge.f_user))
     
@@ -458,7 +543,7 @@ class FetchedVinebot(AbstractVinebot):
             self.jiduser = '%s%s' % (constants.vinebot_prefix, shortuuid.encode(uuid.UUID(bytes=_uuid)))
             self.id = dbid
         elif dbid:
-            _uuid = g.db.execute_and_fetchall("""SELECT uuid 
+            _uuid = g.db.execute_and_fetchall("""SELECT uuid
                                                  FROM vinebots
                                                  WHERE id = %(id)s
                                               """, {
@@ -488,27 +573,27 @@ class FetchedVinebot(AbstractVinebot):
         else:
             raise Exception, 'FetchedVinebots require either the vinebot\'s username or database id as parameters.'
         self.acquire_lock()
-        self._topic = self._fetch_topic()
+        self._topic_body, self._topic_timestamp = self._fetch_topic()
     
     @staticmethod
     def fetch_vinebots_with_participants(participants=[]):
         if len(participants) == 0:
-            vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id 
+            vinebot_ids = g.db.execute_and_fetchall("""SELECT vinebot_id
                                                        FROM participants
                                                        GROUP BY vinebot_id
-                                                    """, strip_pairs=True)   
+                                                    """, strip_pairs=True)
             return [FetchedVinebot(dbid=vinebot_id) for vinebot_id in vinebot_ids]
         elif len(participants) == 2:
             participants = list(participants)
-            vinebot_ids = g.db.execute_and_fetchall("""SELECT first_participants.vinebot_id 
+            vinebot_ids = g.db.execute_and_fetchall("""SELECT first_participants.vinebot_id
                                                        FROM participants AS first_participants
                                                        WHERE first_participants.user_id = %(first_user_id)s
-                                                       AND (SELECT COUNT(*) 
+                                                       AND (SELECT COUNT(*)
                                                             FROM participants AS second_participants
                                                             WHERE second_participants.user_id = %(second_user_id)s
                                                             AND first_participants.vinebot_id = second_participants.vinebot_id
                                                            ) > 0
-                                                       AND (SELECT COUNT(*) 
+                                                       AND (SELECT COUNT(*)
                                                             FROM participants AS other_participants
                                                             WHERE other_participants.user_id NOT IN (%(first_user_id)s, %(second_user_id)s)
                                                             AND first_participants.vinebot_id = other_participants.vinebot_id
@@ -523,7 +608,7 @@ class FetchedVinebot(AbstractVinebot):
     
     @staticmethod
     def fetch_vinebots_with_edges():
-        vinebot_ids = g.db.execute_and_fetchall("""SELECT edges.vinebot_id 
+        vinebot_ids = g.db.execute_and_fetchall("""SELECT edges.vinebot_id
                                                    FROM edges
                                                    WHERE edges.vinebot_id IS NOT NULL
                                                    AND (SELECT COUNT(*) FROM participants WHERE vinebot_id = edges.vinebot_id) = 0

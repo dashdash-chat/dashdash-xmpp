@@ -148,5 +148,5 @@ class EjabberdCTL(object):
             'user': self.username,
             'server': constants.domain,
             'password': self.password
-        }, data)
+        }, data)  #LATER do I need to worry about injection attacks when setting topics as roster nicknames?
     
