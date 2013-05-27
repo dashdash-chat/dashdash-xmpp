@@ -1212,6 +1212,38 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, '%s and %s no longer have a directed edge between them.' % (f_user.name, t_user.name)
     
     def sync_roster(self, parent_command_id, username):
+        # RosterItem classes encapsulate data and facilitate comparisons for computing set differences.
+        # We don't want the set differences to be symmetric, since there's no need to delete incorrect
+        # items that we're just going to add with a new group/nickname a moment later.
+        class RosterItem(object):
+            def __init__(self, viewer, jiduser, group, nick):
+                self._viewer = viewer
+                self._jiduser = jiduser
+                self._group = group
+                self._nick = nick
+            def add_to_roster(self):
+                g.ectl.add_rosteritem(self._viewer.name, self._jiduser, self._group, self._nick)
+                return 'Adding   rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
+            def delete_from_roster(self):
+                g.ectl.delete_rosteritem(self._viewer.name, self._jiduser)
+                return 'Deleting rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
+            def __hash__(self):
+                return hash('rosteritem.%s' % self._jiduser)
+            def __eq__(self, other):
+                if not isinstance(other, RosterItem):
+                    return False
+                return (self._jiduser == other._jiduser and self._group == other._group and self._nick == other._nick)
+            def __ne__(self, other):
+                return not self.__eq__(other)
+        class ExpectedRosterItem(RosterItem):
+            def __init__(self, viewer, vinebot):
+                super(ExpectedRosterItem, self).__init__(viewer, vinebot.jiduser, vinebot.group, vinebot.get_nick(viewer))
+            def __eq__(self, other):
+                if isinstance(other, ActualRosterItem):  # when figuring out which rosteritems to delete, we only care about jids
+                    return (self._jiduser == other._jiduser)
+                return super(ExpectedRosterItem, self).__eq__(self, other)
+        class ActualRosterItem(RosterItem):
+            pass  # we only need this class for type checking in ExpectedRosterItem.__eq__
         try:
             user = FetchedUser(name=username)
             user_roster = user.roster()
@@ -1219,20 +1251,13 @@ class LeafComponent(ComponentXMPP):
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
-            expected_rosteritems = frozenset([(expected.jiduser, expected.group, AbstractVinebot.marshal_nick(expected.get_nick(user))) for expected in expected_vinebots])
-            actual_rosteritems   = frozenset([(actual[0],        actual[1],      AbstractVinebot.marshal_nick(actual[2]))               for actual   in user_roster])
-            rosteritems_to_delete = []  # Only delete the ones that we aren't going to re-add in a moment, i.e. don't delete for incorrect nicknames
-            expected_jidusers = frozenset([expected_rosteritem[0] for expected_rosteritem in expected_rosteritems])
-            for roster_user, roster_group, nick_tuple in actual_rosteritems:
-                if roster_user not in expected_jidusers:
-                    rosteritems_to_delete.append((roster_user, roster_group, nick_tuple))
+            expected_rosteritems = frozenset([ExpectedRosterItem(user, expected                       ) for expected in expected_vinebots])
+            actual_rosteritems   = frozenset([ActualRosterItem(  user, actual[0], actual[1], actual[2]) for actual   in user_roster])
             errors = []
-            for roster_user, roster_group, nick_tuple in rosteritems_to_delete:
-                errors.append('No vinebot found for rosteritem %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(nick_tuple)))
-                g.ectl.delete_rosteritem(user.name, roster_user)
-            for roster_user, roster_group, nick_tuple in expected_rosteritems.difference(actual_rosteritems):
-                errors.append('No rosteritem found for vinebot %s with group \'%s\' and nick %s' % (roster_user, roster_group, list(nick_tuple)))
-                g.ectl.add_rosteritem(user.name, roster_user, roster_group, AbstractVinebot.unmarshal_nick(nick_tuple))
+            for actual_rosteritem in actual_rosteritems.difference(expected_rosteritems):
+                errors.append(actual_rosteritem.delete_from_roster())
+            for expected_rosteritem in expected_rosteritems.difference(actual_rosteritems):
+                errors.append(expected_rosteritem.add_to_roster())
             if errors:
                 return parent_command_id, '%s needed the following roster updates:\n\t%s' % (user.name, '\n\t'.join(errors))
             else:

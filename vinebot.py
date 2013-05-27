@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import re
 import shortuuid
 import sys
 import uuid
@@ -129,7 +128,7 @@ class AbstractVinebot(object):
     def get_status(self, viewer):
         statuses = []
         if self.is_active and self.topic_body is not None:
-            statuses.append(self._participant_string_for_vinebot(viewer, prepend_size=False))
+            statuses.append(self._participant_string(viewer, prepend_size=False))
         elif self.topic:
             statuses.append(self.topic)
         if self.is_active and self.is_idle:
@@ -143,77 +142,26 @@ class AbstractVinebot(object):
         if self.is_active and self.topic_body is not None:
             return '%d: "%s"' % (len(self.participants), self.topic_body)
         else:
-            return self._participant_string_for_vinebot(viewer, prepend_size=True)
+            return self._participant_string(viewer, prepend_size=True)
     
-    def _participant_string_for_vinebot(self, viewer, prepend_size=False):
+    def _participant_string(self, viewer, prepend_size):
         if not self.is_active:
             usernames = [user.name for user in self.edge_users.difference([viewer])]
         else:
             usernames = [user.name for user in self.participants.difference([viewer])]
+            usernames.sort()  # to prevent the names from jumping around in statuses, alphabetic order is fine for now
             if viewer and viewer in self.participants:
-                usernames.append(PRONOUN)  # Do this here, so we can re-use AbstractVinebot._participant_string(usernames)
-        nick = AbstractVinebot._participant_string(usernames, prepend_size=prepend_size)
-        if nick is None:
-            return self.jiduser
-        return nick
-    
-    @staticmethod
-    def _participant_string(usernames, prepend_size=False):
-        usernames = frozenset(usernames)
-        if len(usernames) == 0:
-            return None
-        elif len(usernames) == 1:
-            return list(usernames)[0]
-        else:
-            if PRONOUN in usernames:
-                usernames = list(usernames.difference([PRONOUN]))
-                usernames.sort()  # to prevent the names from jumping around in statuses. sorting by IDs might be better, but would be annoying.
                 usernames.insert(0, PRONOUN)
-            else:
-                usernames = list(usernames)
-                usernames.sort()
-            comma_sep = ''.join([', %s' % username for username in usernames[1:-1]])
-            participant_string = '%s%s & %s' % (usernames[0], comma_sep, usernames[-1])
-            if prepend_size and len(usernames) > 1:
+        if len(usernames) == 0:
+            return self.jiduser
+        elif len(usernames) == 1:
+            return usernames[0]
+        else:
+            participant_string = '%s & %s' % (', '.join(usernames[:-1]), usernames[-1])
+            if prepend_size:
                 return '%d: %s' % (len(usernames), participant_string)
             else:
                 return participant_string
-    
-    @staticmethod
-    def marshal_nick(nick):
-        #NOTE we're comparing nicks and not the vinebot properties themselves because we need to
-        # use the roster strings from the actual vinebots, and those might contain a "PRONOUN"
-        size = None
-        usernames = None
-        topic = None
-        topic_match    = re.match(r"^(\d+): \"(.+)\"$"   , nick)
-        active_match   = re.match(r"^(\d+): (.+) & (.+)$", nick)
-        inactive_match = re.match(r"^(.+)$"              , nick)
-        if topic_match is not None:
-            size = int(topic_match.group(1))
-            topic = topic_match.group(2)
-        else:
-            if active_match is not None:
-                size = int(active_match.group(1))
-                usernames = set([active_match.group(3)])
-                comma_pieces = active_match.group(2).split(', ')
-                if len(comma_pieces) == 1:
-                    usernames.add(comma_pieces[0])
-                else:
-                    for comma_piece in comma_pieces:
-                        usernames.add(comma_piece)
-                usernames = frozenset(usernames)
-            elif inactive_match is not None:
-                usernames = frozenset([inactive_match.group(1)])
-        return size, usernames, topic
-    
-    @staticmethod
-    def unmarshal_nick(nick):
-        size, usernames, topic = nick
-        if size is not None and topic is not None:
-            return '%d: "%s"' % (size, topic)
-        else:
-            return AbstractVinebot._participant_string(usernames, prepend_size=True)
     
     def update_rosters(self, old_participants, new_participants, protected_participants=frozenset([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
