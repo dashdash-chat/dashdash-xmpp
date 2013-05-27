@@ -447,47 +447,6 @@ class LeafComponent(ComponentXMPP):
             #LATER maybe use asymmetric presence subscriptions in XMPP to deal with this more efficiently?
             for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
                 self.send_presences(incoming_vinebot, incoming_vinebot.edge_users.difference([user]))
-            if user.name != constants.helpbot_jid_user and user.needs_onboarding():
-                try:
-                    helpbot = FetchedUser(name=constants.helpbot_jid_user)
-                    if helpbot.is_online():
-                        def quiet_create_edge(username1, username2):
-                            try:
-                                self.create_edge(None, username1, username2)
-                            except IntegrityError:
-                                pass  #TODO maybe move this into create_edge
-                            except ExecutionError, e:
-                                g.logger.warning(e[1])
-                        try:
-                            invite = FetchedInvite(invitee_id=user.id)
-                            quiet_create_edge(helpbot.name, invite.sender.name)
-                        except NotInviteException:
-                            pass
-                        try:
-                            outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
-                        except NotEdgeException:  # Old users we're demo'ing with might not have these edges, so create them temporarily.
-                            quiet_create_edge(helpbot.name, user.name)
-                            quiet_create_edge(user.name, helpbot.name)
-                            outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
-                        try:
-                            edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
-                            self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
-                        except NotVinebotException:
-                            g.logger.warning('No vinebot found for edge %s' % outgoing_edge)
-                        finally:
-                            if edge_vinebot:
-                                edge_vinebot.release_lock()
-                except NotUserException:
-                    g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
-            if user.name in constants.watched_usernames:
-                client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
-                for to_number in constants.twilio_to_numbers:
-                    call = client.calls.create(to=to_number,
-                                               from_=constants.twilio_from_number,
-                                               if_machine='Hangup',
-                                               url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
-                g.logger.info('[twilio] %s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))
-
         except NotVinebotException:
             if presence['to'].bare == constants.leaves_jid:
                 self.send_presences(None, [user])
@@ -589,7 +548,7 @@ class LeafComponent(ComponentXMPP):
                             self.send_alert(vinebot, None, user, 'Sorry, only friends of participants can join this conversation.', parent_message_id=parent_message_id)
                     else:
                         if len(vinebot.edges) > 0 and user in vinebot.edge_users:
-                            if self.activate_vinebot(vinebot, user):
+                            if self.activate_vinebot(vinebot, user, force_activate=(user.jid == constants.helpbot_jid)):
                                 self.broadcast_message(vinebot, user, vinebot.edge_users, msg['body'])
                             else:
                                 parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
@@ -612,9 +571,7 @@ class LeafComponent(ComponentXMPP):
             except NotUserException:
                 if msg['body'].startswith(constants.session_opened_signal):
                     try:
-                        opened_user = FetchedUser(name=msg['body'].replace(constants.session_opened_signal, '').strip())
-                        _, result = self.sync_roster(None, opened_user.name)
-                        g.logger.info('Auto sync_roster on session_opened_signal: %s' % result)
+                        self.user_session_opened(FetchedUser(name=msg['body'].replace(constants.session_opened_signal, '').strip()))
                     except NotUserException:
                         g.logger.error('Received session_opened_signal for unknown user: %s' % msg)
                 else:
@@ -646,6 +603,51 @@ class LeafComponent(ComponentXMPP):
                     vinebot.release_lock()
     
     ##### helper functions
+    def user_session_opened(self, user):
+        _, result = self.sync_roster(None, user.name)
+        g.logger.info('Auto sync_roster on session_opened_signal: %s' % result)
+        if user.name != constants.helpbot_jid_user and user.needs_onboarding():
+            try:
+                helpbot = FetchedUser(name=constants.helpbot_jid_user)
+                if helpbot.is_online():
+                    def quiet_create_edge(username1, username2):
+                        try:
+                            self.create_edge(None, username1, username2)
+                        except IntegrityError:
+                            pass  #TODO maybe move this into create_edge
+                        except ExecutionError, e:
+                            g.logger.warning(e[1])
+                    try:
+                        invite = FetchedInvite(invitee_id=user.id)
+                        quiet_create_edge(helpbot.name, invite.sender.name)
+                        quiet_create_edge(invite.sender.name, helpbot.name)
+                    except NotInviteException:
+                        pass
+                    try:
+                        outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
+                    except NotEdgeException:  # Old users we're demo'ing with might not have these edges, so create them temporarily.
+                        quiet_create_edge(helpbot.name, user.name)
+                        quiet_create_edge(user.name, helpbot.name)
+                        outgoing_edge = FetchedEdge(f_user=helpbot, t_user=user)
+                    try:
+                        edge_vinebot = FetchedVinebot(can_write=True, dbid=outgoing_edge.vinebot_id)
+                        self.broadcast_message(edge_vinebot, None, [helpbot], '%s %s' % (constants.act_on_user_stage, user.name))
+                    except NotVinebotException:
+                        g.logger.warning('No vinebot found for edge %s' % outgoing_edge)
+                    finally:
+                        if edge_vinebot:
+                            edge_vinebot.release_lock()
+            except NotUserException:
+                g.logger.error('%s user does not exist in the database!' % constants.helpbot_jid_user)
+        if user.name in constants.watched_usernames:
+            client = TwilioRestClient(constants.twilio_account_sid, constants.twilio_auth_token)
+            for to_number in constants.twilio_to_numbers:
+                call = client.calls.create(to=to_number,
+                                           from_=constants.twilio_from_number,
+                                           if_machine='Hangup',
+                                           url='http://twimlets.com/holdmusic?Bucket=com.twilio.music.ambient')
+            g.logger.info('[twilio] %s has signed on, and %d alert phonecall(s) have been made.' % (user.name, len(constants.twilio_to_numbers)))    
+    
     def send_presences(self, vinebot, recipients, pshow='available'):
         pfrom = constants.leaves_jid
         pstatus = ''

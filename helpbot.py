@@ -77,13 +77,17 @@ class HelpBot(sleekxmpp.ClientXMPP):
                 yes_response = "Your friend %s isn't online right now, so I'll start a conversation with another bot, %s.%s" % (invite.sender.name, constants.echo_user, temp_text)
                 other_body = str(uuid.uuid4())  # doesn't matter what, as long as it won't be sent by someone else next
                 other_recipient = FetchedUser(name=constants.echo_user)
-            self._send_message(other_recipient, other_body)
-            return MessageGraph.process_yes_no('roster_groups',
+            yes_stage = 'conver_started'
+            stage, response = MessageGraph.process_yes_no('roster_groups',
                                                body,
-                                               'conver_started',
+                                               yes_stage,
                                                yes_response,
                                                'roster_groups',
                                                "Sorry, then something might be broken. Maybe check again, or ping lehrblogger for help?")
+            if stage == yes_stage:
+                self._send_message(other_recipient, other_body)
+            return stage, response
+            
         self.message_graph.add_node('roster_groups', node_roster_groups)
         def node_new_invites(user, body):
             return 'invites_given', 'One last thing – I\'ve given you a couple of Dashdash invite codes that your friends can use to sign up. You can type /invites to see them here, or sign in to http://%s.\n\nAsk @lehrblogger if you need more, and thanks for using Dashdash!' % constants.domain
