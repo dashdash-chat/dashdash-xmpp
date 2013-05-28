@@ -85,31 +85,62 @@ class MySQLManager(object):
             db.cleanup()
         self._vinebot_conn_dict = {}
     
-    def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None):
+    def log_message(self, sender, recipients, body, vinebot=None, parent_message_id=None, parent_command_id=None, _suspend=False):
         if body is None or body == '':  # chatstate stanzas and some /command replies stanzas don't have a body, so don't try to log them
             return
-        log_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body)
+        message_id = self.execute("""INSERT INTO messages (vinebot_id, sender_id, parent_message_id, parent_command_id, body, sent_on)
                                     VALUES (
                                         %(vinebot_id)s,
                                         %(sender_id)s,
                                         %(parent_message_id)s,
                                         %(parent_command_id)s,
-                                        %(body)s
+                                        %(body)s,
+                                        %(sent_on)s
                                     )""", {
                                         'vinebot_id': vinebot.id if vinebot else None,
                                         'sender_id': sender.id if sender else None,
                                         'parent_message_id': parent_message_id,
                                         'parent_command_id': parent_command_id,
-                                        'body': body.encode('utf-8')
+                                        'body': body.encode('utf-8'),
+                                        'sent_on': '0000-00-00 00:00:00' if _suspend else None
+                                         # MySQL's timestamp type will automatically replace this NULL with the current time
                                     })
+        self._log_recipients(message_id, recipients)
+        return message_id
+    
+    def suspend_message(self, recipients, body, vinebot, parent_message_id=None, parent_command_id=None):
+        return self.log_message(None,  # sender=None, since we only suspend alert messages from the vinebot
+                                recipients,
+                                body,
+                                vinebot=vinebot,
+                                parent_message_id=parent_message_id,
+                                parent_command_id=parent_command_id,
+                                _suspend=True)
+    
+    def unsuspend_message(self, message_id, recipients):
+        self.execute("""UPDATE messages
+                        SET sent_on = %(sent_on)s
+                        WHERE id = %(message_id)s
+                     """, {
+                        'sent_on': None,  # see above Note
+                        'message_id': message_id
+                     })
+        self.execute("""DELETE FROM recipients        # we aren't actually sending it to everyone we sent it to before
+                        WHERE message_id = %(message_id)s
+                     """, {
+                        'message_id': message_id
+                     })
+        self._log_recipients(message_id, recipients)  # but instead will send it to the subset who are currently in the conversation
+        return message_id                             #LATER this is slightly redundant, but it's not many rows so I'll fix it later
+    
+    def _log_recipients(self, message_id, recipients):
         for recipient in recipients:
             self.execute("""INSERT INTO recipients (message_id, recipient_id)
-                            VALUES (%(log_id)s, %(recipient_id)s)
+                            VALUES (%(message_id)s, %(recipient_id)s)
                          """, {
-                               'log_id': log_id,
-                               'recipient_id': recipient.id
+                            'message_id': message_id,
+                            'recipient_id': recipient.id
                          })
-        return log_id
     
     def log_command(self, sender, command_name, token, string, vinebot=None, is_valid=True):
         if string:

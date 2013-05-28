@@ -503,7 +503,7 @@ class LeafComponent(ComponentXMPP):
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
                     g.logger.info('[offline] %03d participants' % len(vinebot.participants))
                     self.remove_participant(vinebot, user)
-                    self.broadcast_alert(vinebot, '%s has disconnected and left the conversation' % user.name)
+                    self.broadcast_alert(vinebot, '%s had disconnected and left the conversation' % user.name, send_now=False)
                 elif user in vinebot.edge_users:
                     self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
                 for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
@@ -676,7 +676,7 @@ class LeafComponent(ComponentXMPP):
             if active_vinebot.is_idle:
                 g.logger.info('[idle] %03d participants' % len(active_vinebot.participants))
     
-    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None, activate=False):
+    def build_and_send_messages(self, vinebot, sender, recipients, body, msg):
         #LATER fix html, but it's a pain with reformatting
         if msg is None:  # need to pass this for chat states
             msg = self.Message()
@@ -696,6 +696,16 @@ class LeafComponent(ComponentXMPP):
                 actual_recipients.append(recipient)
                 if body and body != '' and sender:
                     g.logger.info('[message] received')
+        return actual_recipients
+    
+    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None, activate=False):
+        if body and body != '':  # Every time we broadcast a message, check for old suspended messages that we might want to also send
+            suspended_messages = vinebot.get_suspended_messages()
+            for suspended_message_id, suspended_message_body, suspended_message_recipients in suspended_messages:
+                suspended_message_recipients = suspended_message_recipients.intersection(recipients)
+                actual_suspended_recipients = self.build_and_send_messages(vinebot, None, suspended_message_recipients, suspended_message_body, None)
+                g.db.unsuspend_message(suspended_message_id, actual_suspended_recipients)
+        actual_recipients = self.build_and_send_messages(vinebot, sender, recipients, body, msg)
         g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
         if body and body != '':
             if sender:
@@ -703,8 +713,11 @@ class LeafComponent(ComponentXMPP):
             if activate and not vinebot.is_idle:
                 self.send_presences(vinebot, vinebot.everyone)
     
-    def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False):
-        self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
+    def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False, send_now=True):
+        if send_now:
+            self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
+        else:
+            g.db.suspend_message(vinebot.participants, body, vinebot, parent_command_id=parent_command_id)
     
     def send_alert(self, vinebot, sender, recipient, body, prefix='/**', fromjid=None, parent_message_id=None, parent_command_id=None):
         if body == '':
@@ -854,10 +867,15 @@ class LeafComponent(ComponentXMPP):
         return parent_command_id, ''
     
     def user_joined(self, parent_command_id, vinebot, user):
-        if vinebot.topic is not None:
-            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. The current topic is:\n\t%s' % (user.name, vinebot.topic)
+        send_now = len(vinebot.participants) < 3  # we still want to tell small conversations about new participants
+        if send_now:
+            alert_msg_first = '%s has joined the conversation, but didn\'t want to interrupt. ' % user.name
         else:
-            alert_msg = '%s has joined the conversation, but didn\'t want to interrupt. No one has set the topic.' % user.name
+            alert_msg_first = '%s had joined the conversation, but hadn\'t wanted to interrupt. ' % user.name
+        if vinebot.topic is not None:
+            alert_msg = '%sThe current topic is:\n\t%s' % (alert_msg_first, vinebot.topic)
+        else:
+            alert_msg = '%sNo one has set the topic.' % alert_msg_first
         try:    
             g.logger.info('[join] %03d participants' % len(vinebot.participants))
             self.add_participant(vinebot, user)
@@ -865,8 +883,8 @@ class LeafComponent(ComponentXMPP):
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
                 raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
             raise e
-        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True)
-        return parent_command_id, ''
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True, send_now=send_now)
+        return parent_command_id, '' if send_now else 'You\'ve joined the conversation, but no one has been notified yet.'
     
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
@@ -1037,7 +1055,7 @@ class LeafComponent(ComponentXMPP):
                     modified = 'cleared'
                 recipient = vinebot.edge_users.difference([sender]).pop()
                 if recipient.is_online():
-                    notified = 'we didn\'t notify %s' % recipient.name
+                    notified = '%s wasn\'t notified.' % recipient.name
                 else:
                     notified = '%s is offline so won\'t be notified' % recipient.name
                 body = 'You\'ve %s the topic of conversation, but %s.' % (modified, notified)

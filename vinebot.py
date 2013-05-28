@@ -307,6 +307,23 @@ class AbstractVinebot(object):
                return_tuple[2],
                set([u.FetchedUser(dbid=recipient_id) for recipient_id in return_tuple[3].split(',')]))
     
+    def get_suspended_messages(self):
+        suspended_messages = g.db.execute_and_fetchall("""SELECT messages.id, messages.body, GROUP_CONCAT(DISTINCT recipients.recipient_id)
+                                                          FROM messages
+                                                          LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                          WHERE messages.vinebot_id = %(vinebot_id)s
+                                                          AND messages.body IS NOT NULL
+                                                          AND messages.sender_id IS NULL
+                                                          AND messages.sent_on = %(sent_on)s
+                                                          GROUP BY messages.id
+                                                       """, {
+                                                          'vinebot_id': self.id,
+                                                          'sent_on': '0000-00-00 00:00:00'
+                                                       })
+        return [(suspended_message[0],
+               suspended_message[1],
+               set([u.FetchedUser(dbid=recipient_id) for recipient_id in suspended_message[2].split(',')])) for suspended_message in suspended_messages]
+    
     def _set_topic(self, body):
         if not self.can_write:
             raise VinebotPermissionsException
