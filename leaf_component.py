@@ -503,7 +503,7 @@ class LeafComponent(ComponentXMPP):
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
                     g.logger.info('[offline] %03d participants' % len(vinebot.participants))
                     self.remove_participant(vinebot, user)
-                    self.broadcast_alert(vinebot, '%s had disconnected and left the conversation' % user.name, send_now=False)
+                    self.broadcast_alert(vinebot, '%s had disconnected and left the conversation' % user.name, postponed_sender=user)
                 elif user in vinebot.edge_users:
                     self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
                 for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
@@ -698,26 +698,30 @@ class LeafComponent(ComponentXMPP):
                     g.logger.info('[message] received')
         return actual_recipients
     
-    def broadcast_message(self, vinebot, sender, recipients, body, msg=None, parent_command_id=None, activate=False):
-        if body and body != '':  # Every time we broadcast a message, check for old suspended messages that we might want to also send
+    def broadcast_message(self, vinebot, sender, current_recipients, body, msg=None, parent_command_id=None, activate=False):
+        if body and body != '' and sender:  # Every time we broadcast a message FROM A USER, check for old suspended messages that we might want to also send
             suspended_messages = vinebot.get_suspended_messages()
             for suspended_message_id, suspended_message_body, suspended_message_recipients in suspended_messages:
-                suspended_message_recipients = suspended_message_recipients.intersection(recipients)
-                actual_suspended_recipients = self.build_and_send_messages(vinebot, None, suspended_message_recipients, suspended_message_body, None)
+                # remember that suspended_message_recipients exludes the sender...
+                # ...so we can re add that person to the group that will receive the sender's message here:
+                suspended_recipients = suspended_message_recipients.union(current_recipients)
+                # ...and also avoid sending that person the trigger message here, since it was possibly sent without the second sender knowing the first sender was present:
+                current_recipients = current_recipients.intersection(suspended_message_recipients)
+                actual_suspended_recipients = self.build_and_send_messages(vinebot, None, suspended_recipients, suspended_message_body, None)
                 g.db.unsuspend_message(suspended_message_id, actual_suspended_recipients)
-        actual_recipients = self.build_and_send_messages(vinebot, sender, recipients, body, msg)
-        g.db.log_message(sender, actual_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
+        actual_current_recipients = self.build_and_send_messages(vinebot, sender, current_recipients, body, msg)
+        g.db.log_message(sender, actual_current_recipients, body, vinebot=vinebot, parent_command_id=parent_command_id)
         if body and body != '':
             if sender:
-                g.logger.info('[message] sent to %03d recipients' % len(actual_recipients))
+                g.logger.info('[message] sent to %03d recipients' % len(actual_current_recipients))
             if activate and not vinebot.is_idle:
                 self.send_presences(vinebot, vinebot.everyone)
     
-    def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False, send_now=True):
-        if send_now:
+    def broadcast_alert(self, vinebot, body, parent_command_id=None, activate=False, postponed_sender=None):
+        if postponed_sender is None:
             self.broadcast_message(vinebot, None, vinebot.participants, body, parent_command_id=parent_command_id, activate=activate)
         else:
-            g.db.suspend_message(vinebot.participants, body, vinebot, parent_command_id=parent_command_id)
+            g.db.suspend_message(vinebot.participants.difference([postponed_sender]), body, vinebot, parent_command_id=parent_command_id)
     
     def send_alert(self, vinebot, sender, recipient, body, prefix='/**', fromjid=None, parent_message_id=None, parent_command_id=None):
         if body == '':
@@ -871,7 +875,7 @@ class LeafComponent(ComponentXMPP):
         if send_now:
             alert_msg_first = '%s has joined the conversation, but didn\'t want to interrupt. ' % user.name
         else:
-            alert_msg_first = '%s had joined the conversation, but hadn\'t wanted to interrupt. ' % user.name
+            alert_msg_first = '%s had joined the conversation, but hadn\'t wanted to interrupt and didn\'t receive the current message. ' % user.name
         if vinebot.topic is not None:
             alert_msg = '%sThe current topic is:\n\t%s' % (alert_msg_first, vinebot.topic)
         else:
@@ -883,7 +887,7 @@ class LeafComponent(ComponentXMPP):
             if e[0] == 1062:  # "Duplicate entry '48-16' for key 'PRIMARY'"
                 raise ExecutionError, (parent_command_id, 'You can\'t join a conversation you\'re already in!')
             raise e
-        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True, send_now=send_now)
+        self.broadcast_alert(vinebot, alert_msg, parent_command_id=parent_command_id, activate=True, postponed_sender=(None if send_now else user))
         return parent_command_id, '' if send_now else 'You\'ve joined the conversation, but no one has been notified yet.'
     
     def user_left(self, parent_command_id, vinebot, user):    
