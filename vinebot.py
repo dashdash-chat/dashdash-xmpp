@@ -268,6 +268,7 @@ class AbstractVinebot(object):
             last_message = g.db.execute_and_fetchall("""SELECT messages.sender_id, messages.body, messages.sent_on, GROUP_CONCAT(DISTINCT recipients.recipient_id)
                                                         FROM messages
                                                         LEFT OUTER JOIN recipients ON messages.id = recipients.message_id
+                                                        WHERE messages.vinebot_id = %(vinebot_id)s
                                                         AND messages.sender_id IS NOT NULL
                                                         AND messages.body IS NOT NULL
                                                         AND messages.parent_command_id IS NULL
