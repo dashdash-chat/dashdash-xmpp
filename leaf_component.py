@@ -541,7 +541,7 @@ class LeafComponent(ComponentXMPP):
                         elif user in vinebot.observers:
                             g.logger.info('[enter] %03d participants' % len(vinebot.participants))
                             self.add_participant(vinebot, user)
-                            self.broadcast_alert(vinebot, '%s has joined the conversation' % user.name)
+                            self.broadcast_alert(vinebot, '%s has joined the conversation.' % user.name)
                             self.broadcast_message(vinebot, user, vinebot.participants, msg['body'], activate=True)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
@@ -893,7 +893,7 @@ class LeafComponent(ComponentXMPP):
     def user_left(self, parent_command_id, vinebot, user):    
         g.logger.info('[left] %03d participants' % len(vinebot.participants))
         self.remove_participant(vinebot, user)
-        self.broadcast_alert(vinebot, '%s has left the conversation' % user.name, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, '%s has left the conversation.' % user.name, parent_command_id=parent_command_id)
         return parent_command_id, 'You left the conversation.'  # do this even if inactive, so users don't know if the other left
     
     def invite_user(self, parent_command_id, vinebot, inviter, invitee):
@@ -935,8 +935,8 @@ class LeafComponent(ComponentXMPP):
             raise ExecutionError, (parent_command_id, '%s isn\'t a participant in the conversation, so can\'t be kicked.' % kickee.name)
         g.logger.info('[kick] %03d participants' % len(vinebot.participants))
         self.remove_participant(vinebot, kickee)
-        self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
-        self.send_alert(vinebot, None, kickee, '%s has kicked you from the conversation' % kicker.name, parent_command_id=parent_command_id)
+        self.broadcast_alert(vinebot, '%s was kicked from the conversation by %s.' % (kickee.name, kicker.name), parent_command_id=parent_command_id)
+        self.send_alert(vinebot, None, kickee, '%s has kicked you from the conversation.' % kicker.name, parent_command_id=parent_command_id)
         return parent_command_id, ''
     
     def block_user(self, parent_command_id, vinebot, blocker, blockee):
@@ -1061,7 +1061,7 @@ class LeafComponent(ComponentXMPP):
                 if recipient.is_online():
                     notified = '%s wasn\'t notified.' % recipient.name
                 else:
-                    notified = '%s is offline so won\'t be notified' % recipient.name
+                    notified = '%s is offline so won\'t be notified.' % recipient.name
                 body = 'You\'ve %s the topic of conversation, but %s.' % (modified, notified)
                 self.send_presences(vinebot, [recipient], pshow=sender.status())
                 self.send_presences(vinebot, [sender], pshow=recipient.status())
