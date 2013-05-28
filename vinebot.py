@@ -321,8 +321,10 @@ class AbstractVinebot(object):
                                                           'sent_on': '0000-00-00 00:00:00'
                                                        })
         return [(suspended_message[0],
-               suspended_message[1],
-               set([u.FetchedUser(dbid=recipient_id) for recipient_id in suspended_message[2].split(',')])) for suspended_message in suspended_messages]
+                 suspended_message[1],
+                 set([] if suspended_message[2] is None else [u.FetchedUser(dbid=recipient_id) for recipient_id in suspended_message[2].split(',')])
+                ) for suspended_message in suspended_messages
+               ]
     
     def _set_topic(self, body):
         if not self.can_write:
