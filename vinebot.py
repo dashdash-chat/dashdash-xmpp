@@ -128,7 +128,7 @@ class AbstractVinebot(object):
     def get_status(self, viewer):
         statuses = []
         if self.is_active and self.topic_body is not None:
-            statuses.append(self._participant_string(viewer, prepend_size=False))
+            statuses.append(self._participant_string(viewer))
         elif self.topic:
             statuses.append(self.topic)
         if self.is_active and self.is_idle:
@@ -142,9 +142,9 @@ class AbstractVinebot(object):
         if self.is_active and self.topic_body is not None:
             return '%s (%d)' % (self.topic_body, len(self.participants))
         else:
-            return self._participant_string(viewer, prepend_size=True)
+            return self._participant_string(viewer)
     
-    def _participant_string(self, viewer, prepend_size):
+    def _participant_string(self, viewer):
         if not self.is_active:
             usernames = [user.name for user in self.edge_users.difference([viewer])]
         else:
@@ -160,10 +160,7 @@ class AbstractVinebot(object):
             return '%s & %s' % (usernames[1], usernames[0])
         else:
             participant_string = '%s & %s' % (', '.join(usernames[:-1]), usernames[-1])
-            if prepend_size:
-                return '%d: %s' % (len(usernames), participant_string)
-            else:
-                return participant_string
+            return participant_string
     
     def update_rosters(self, old_participants, new_participants, protected_participants=frozenset([])):  # if there are still edges between the users, we might not want to change their rosteritems
         observer_nick = self.get_nick(None)
