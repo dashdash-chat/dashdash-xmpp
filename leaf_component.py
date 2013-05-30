@@ -498,12 +498,13 @@ class LeafComponent(ComponentXMPP):
                     vinebot.make_writer()
                     if len(vinebot.participants) > 2:
                         self.send_presences(vinebot, vinebot.everyone.difference([user]), pshow='away' if vinebot.is_idle else 'available')
+                        self.remove_participant(vinebot, user)
+                        self.broadcast_alert(vinebot, '%s had disconnected and left the conversation' % user.name, postponed_sender=user)
                     else:  # elif len(participants) == 2:
                         self.send_presences(vinebot, vinebot.participants.difference([user]))
                         self.send_presences(vinebot, vinebot.participants.difference([user]), pshow='unavailable')
+                        self.remove_participant(vinebot, user)
                     g.logger.info('[offline] %03d participants' % len(vinebot.participants))
-                    self.remove_participant(vinebot, user)
-                    self.broadcast_alert(vinebot, '%s had disconnected and left the conversation' % user.name, postponed_sender=user)
                 elif user in vinebot.edge_users:
                     self.send_presences(vinebot, vinebot.edge_users.difference([user]), pshow='unavailable')
                 for incoming_vinebot in user.incoming_vinebots.difference([vinebot]):
