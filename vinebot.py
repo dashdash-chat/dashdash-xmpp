@@ -140,7 +140,7 @@ class AbstractVinebot(object):
     
     def get_nick(self, viewer):
         if self.is_active and self.topic_body is not None:
-            return '%d: "%s"' % (len(self.participants), self.topic_body)
+            return '%s (%d)' % (self.topic_body, len(self.participants))
         else:
             return self._participant_string(viewer, prepend_size=True)
     
@@ -156,6 +156,8 @@ class AbstractVinebot(object):
             return self.jiduser
         elif len(usernames) == 1:
             return usernames[0]
+        elif len(usernames) == 2 and viewer and viewer in self.participants:
+            return '%s & %s' % (usernames[1], usernames[0])
         else:
             participant_string = '%s & %s' % (', '.join(usernames[:-1]), usernames[-1])
             if prepend_size:
