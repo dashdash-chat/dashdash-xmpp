@@ -702,10 +702,11 @@ class LeafComponent(ComponentXMPP):
     def broadcast_message(self, vinebot, sender, current_recipients, body, msg=None, parent_command_id=None, activate=False):
         if body and body != '' and sender:  # Every time we broadcast a message FROM A USER, check for old suspended messages that we might want to also send
             suspended_messages = vinebot.get_suspended_messages()
+            current_recipients_copy = set(current_recipients).copy()
             for suspended_message_id, suspended_message_body, suspended_message_recipients in suspended_messages:
                 # remember that suspended_message_recipients exludes the sender...
                 # ...so we can re add that person to the group that will receive the sender's message here:
-                suspended_recipients = suspended_message_recipients.union(current_recipients)
+                suspended_recipients = suspended_message_recipients.union(current_recipients_copy)
                 # ...and also avoid sending that person the trigger message here, since it was possibly sent without the second sender knowing the first sender was present:
                 current_recipients = current_recipients.intersection(suspended_message_recipients)
                 actual_suspended_recipients = self.build_and_send_messages(vinebot, None, suspended_recipients, suspended_message_body, None)
