@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-\
 import MySQLdb
-from MySQLdb import ProgrammingError
+from MySQLdb import ProgrammingError, InterfaceError
 import constants
 from constants import g
 
@@ -37,6 +37,10 @@ class MySQLConnection(object):
                 self.cursor.execute(query, data)
             else:
                 raise e
+        except InterfaceError, e:
+            g.logger.warn('MySQL InterfaceError %d "%s" for query, will retry: %s' % (e[0], e[1], query % data))
+            self.connect()  # Try again, but only once
+            self.cursor.execute(query, data)
         return self.conn.insert_id()
     
     def connect(self):
