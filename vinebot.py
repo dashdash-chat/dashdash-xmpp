@@ -193,6 +193,8 @@ class AbstractVinebot(object):
                 return False
             return last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
         else:
+            if self.last_active is None:
+                return False
             return self.last_active > (datetime.now() - timedelta(minutes=IDLE_MINUTES))
     
     def _fetch_last_active(self, excluded_user=None):
