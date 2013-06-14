@@ -1061,10 +1061,10 @@ class LeafComponent(ComponentXMPP):
                     modified = 'cleared'
                 recipient = vinebot.edge_users.difference([sender]).pop()
                 if recipient.is_online():
-                    notified = '%s wasn\'t notified.' % recipient.name
+                    notified = '%s wasn\'t' % recipient.name
                 else:
-                    notified = '%s is offline so won\'t be notified.' % recipient.name
-                body = 'You\'ve %s the topic of conversation, but %s.' % (modified, notified)
+                    notified = '%s is offline so won\'t be' % recipient.name
+                body = 'You\'ve %s the topic of conversation, but %s notified.' % (modified, notified)
                 self.send_presences(vinebot, [recipient], pshow=sender.status())
                 self.send_presences(vinebot, [sender], pshow=recipient.status())
                 self.send_alert(vinebot, None, sender, body, parent_command_id=parent_command_id)
