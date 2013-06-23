@@ -69,7 +69,7 @@ class EjabberdCTL(object):
                                          'server': constants.leaves_domain
                                      })
     
-    def get_roster(self, user):    
+    def get_roster(self, user):
         rosteritems = self._xmlrpc_command('get_roster', {
             'user': user, 
             'host': constants.domain})
