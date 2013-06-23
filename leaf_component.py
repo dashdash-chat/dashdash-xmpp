@@ -1216,7 +1216,7 @@ class LeafComponent(ComponentXMPP):
     
     def online_contacts(self, parent_command_id, vinebot, sender):
         connected_users = g.ectl.connected_users()
-        contacts = set(list(sender.friends) + [vinebot.edge_users.difference(sender).pop() for vinebot in sender.outgoing_vinebots])
+        contacts = set(list(sender.friends) + [vinebot.edge_users.difference([sender]).pop() for vinebot in sender.outgoing_vinebots])
         online_contacts = [contact.name for contact in contacts.intersection(connected_users)]
         if len(online_contacts) == 0:
             return parent_command_id, 'You have no online contacts.'
