@@ -1169,10 +1169,10 @@ class LeafComponent(ComponentXMPP):
         topic = topic[7:].strip()
         if topic == '':
             raise ExecutionError, (parent_command_id, 'you need to specify a topic for the conversation.%s' % suggestion)
-        connected_users = g.ectl.connected_users()
+        connected_users = g.ectl.connected_users().difference(constants.protected_users)
         recipients = []
         offline_usernames = []
-        for username in usernames.split(','):
+        for username in set(usernames.split(',')).difference(constants.protected_users + [constants.echo_user, constants.helpbot_jid_user]):
             if username == sender.name:
                 raise ExecutionError, (parent_command_id, 'you can\'t invite yourself!%s' % suggestion)
             try:
@@ -1217,7 +1217,8 @@ class LeafComponent(ComponentXMPP):
     def online_contacts(self, parent_command_id, vinebot, sender):
         connected_users = g.ectl.connected_users()
         contacts = set(list(sender.friends) + [vinebot.edge_users.difference([sender]).pop() for vinebot in sender.outgoing_vinebots])
-        online_contacts = [contact.name for contact in contacts.intersection(connected_users)]
+        online_contacts = set([contact.name for contact in contacts.intersection(connected_users)])
+        online_contacts = online_contacts.difference(constants.protected_users)
         if len(online_contacts) == 0:
             return parent_command_id, 'You have no online contacts.'
         return parent_command_id, 'You have %d online contact%s:\n\t%s' % (len(online_contacts), '' if len(online_contacts) == 1 else 's', ','.join(online_contacts))
