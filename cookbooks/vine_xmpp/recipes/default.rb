@@ -144,7 +144,7 @@ node.set['papertrail']['watch_files']["#{node['dirs']['log']}/supervisor/echobot
   ruby_block "append line to history" do
     block do
       file = Chef::Util::FileEdit.new("/home/#{node.run_state['config']['user']}/.bash_history")
-      file.insert_line_if_no_match("/[^\s\S]/", command)  # regex never matches anything
+      file.insert_line_if_no_match("/#{Regexp.escape(command)}/", command)
       file.write_file
     end
   end
