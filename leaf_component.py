@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from gevent import monkey; monkey.patch_all()
 import sys
 from datetime import datetime
@@ -267,6 +269,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = user_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string,
                                        action           = self.party))
+        self.commands.add(SlashCommand(command_name     = 'online',
+                                       list_rank        = 6,
+                                       text_arg_format  = '',
+                                       text_description = 'List your contacts who are online – great for copy-pasting into /party!',
+                                       validate_sender  = user_to_vinebot,
+                                       transform_args   = logid_vinebot_sender,
+                                       action           = self.online_contacts))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -1204,6 +1213,14 @@ class LeafComponent(ComponentXMPP):
                                                                       ' was' if len(offline_usernames) == 1 else 's were',
                                                                       '\n\t'.join(offline_usernames))
         return parent_command_id, 'You invited %d user%s to a new conversation!%s' % (len(recipients), '' if len(recipients) == 1 else 's', offline_body)
+    
+    def online_contacts(self, parent_command_id, vinebot, sender):
+        connected_users = g.ectl.connected_users()
+        contacts = set(list(sender.friends) + [vinebot.edge_users.difference(sender).pop() for vinebot in sender.outgoing_vinebots])
+        online_contacts = [contact.name for contact in contacts.intersection(connected_users)]
+        if len(online_contacts) == 0:
+            return parent_command_id, 'You have no online contacts.'
+        return parent_command_id, 'You have %d online contact%s:\n\t%s' % (len(online_contacts), '' if len(online_contacts) == 1 else 's', ','.join(online_contacts))
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
