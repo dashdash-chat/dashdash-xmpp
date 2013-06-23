@@ -92,7 +92,7 @@ class SlashCommandRegistry(object):
                 parent_command_id, result_message = error
                 return parent_command_id, 'Sorry, %s' % result_message
             except PermissionError:
-                return None, 'Sorry, you don\'t have permission to use this command.'
+                return None, 'Sorry, you don\'t have permission to send this command to this contact.'
             except ArgFormatError:
                 return None, 'Sorry, that format wasn\'t quite right. Try:\n\t/%s %s' % \
                     (slash_command.name, slash_command.arg_format)

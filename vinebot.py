@@ -73,23 +73,36 @@ class AbstractVinebot(object):
     
     def _fetch_observers(self):
         if not self.is_active:
-            return frozenset([])
-        observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
-                                                 FROM participants, edges AS outgoing, edges AS incoming, users
-                                                 WHERE outgoing.to_id = users.id
-                                                 AND incoming.from_id = outgoing.to_id
-                                                 AND participants.vinebot_id = %(id)s
-                                                 AND participants.user_id = incoming.to_id
-                                                 AND participants.user_id = outgoing.from_id
-                                                 AND users.is_active = true
-                                                 AND (SELECT COUNT(*)
-                                                      FROM participants
-                                                      WHERE participants.vinebot_id = %(id)s
-                                                      AND user_id=users.id
-                                                     ) = 0
-                                              """, {
-                                                  'id': self.id
-                                              })
+            observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
+                                                     FROM users
+                                                     LEFT OUTER JOIN recipients ON users.id = recipients.recipient_id
+                                                     LEFT OUTER JOIN messages ON recipients.message_id = messages.id
+                                                     LEFT OUTER JOIN commands ON messages.parent_command_id = commands.id
+                                                     WHERE messages.vinebot_id = %(vinebot_id)s
+                                                     AND messages.sender_id IS NULL
+                                                     AND commands.command_name = "party"
+                                                     AND commands.is_valid IS TRUE
+                                                     ORDER BY commands.sent_on DESC
+                                                  """, {
+                                                     'vinebot_id': self.id
+                                                  })
+        else:
+            observers = g.db.execute_and_fetchall("""SELECT users.name, users.id
+                                                     FROM participants, edges AS outgoing, edges AS incoming, users
+                                                     WHERE outgoing.to_id = users.id
+                                                     AND incoming.from_id = outgoing.to_id
+                                                     AND participants.vinebot_id = %(id)s
+                                                     AND participants.user_id = incoming.to_id
+                                                     AND participants.user_id = outgoing.from_id
+                                                     AND users.is_active = true
+                                                     AND (SELECT COUNT(*)
+                                                          FROM participants
+                                                          WHERE participants.vinebot_id = %(id)s
+                                                          AND user_id=users.id
+                                                         ) = 0
+                                                  """, {
+                                                      'id': self.id
+                                                  })
         return frozenset([u.FetchedUser(name=observer[0], dbid=observer[1]) for observer in observers])
     
     def _fetch_edges(self):
@@ -127,15 +140,22 @@ class AbstractVinebot(object):
     
     def get_status(self, viewer):
         statuses = []
+        party_sender = None
+        if len(self.participants) == 1:
+            party_sender = self._fetch_party_sender()
         if self.is_active and self.topic_body is not None:
-            statuses.append(self._participant_string(viewer))
+            if len(self.participants) == 1 and party_sender is not None:
+                statuses.append('/party invite from %s' % party_sender.name)
+            else:
+                statuses.append(self._participant_string(viewer))
         elif self.topic:
             statuses.append(self.topic)
         if self.is_active and self.is_idle:
-            if self.last_active is None:
-                statuses.append('has never been active')
-            else:
-                statuses.append('last active %s ago' % self._format_timestamp(self.last_active))
+            if len(self.participants) > 1 and party_sender is None:
+                if self.last_active is None:
+                    statuses.append('has never been active')
+                else:
+                    statuses.append('last active %s ago' % self._format_timestamp(self.last_active))
         return '; '.join(statuses)
     
     def get_nick(self, viewer):
@@ -143,6 +163,23 @@ class AbstractVinebot(object):
             return '%s (%d)' % (self.topic_body, len(self.participants))
         else:
             return self._participant_string(viewer)
+    
+    def _fetch_party_sender(self):
+        sender_id = g.db.execute_and_fetchall("""SELECT commands.sender_id
+                                                 FROM commands
+                                                 LEFT OUTER JOIN messages ON commands.id = messages.parent_command_id
+                                                 WHERE messages.vinebot_id = %(vinebot_id)s
+                                                 AND messages.sender_id IS NULL
+                                                 AND commands.command_name = "party"
+                                                 AND commands.is_valid IS TRUE
+                                                 ORDER BY commands.sent_on DESC
+                                                 LIMIT 1
+                                              """, {
+                                                 'vinebot_id': self.id
+                                              }, strip_pairs=True)
+        if sender_id:
+            return u.FetchedUser(dbid=sender_id[0])
+        return None
     
     def _participant_string(self, viewer):
         if not self.is_active:
@@ -419,7 +456,7 @@ class AbstractVinebot(object):
         elif name == 'topic_timestamp':
             return self._topic_timestamp
         elif name == 'is_active':
-            return len(self.participants) >= 2
+            return len(self.participants) >= 1  # should only ever be == 1 on a newly-created /party vinebot, but that's ok
         elif name == 'last_active':
             if self._last_active is None:
                 self._last_active = self._fetch_last_active()

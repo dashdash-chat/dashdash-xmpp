@@ -378,7 +378,7 @@ class InsertedUser(AbstractUser):
     def __init__(self, name, password, should_register=True):
         super(InsertedUser, self).__init__(can_write=True)
         name = name.lower()
-        if not re.search('^\w{1,15}$', name):
+        if not re.match('^\w{1,15}$', name):
             raise NotUserException, 'Usernames must match /^\w{1,15}$/'
         try:
             dbid = g.db.execute("""INSERT INTO users (name)

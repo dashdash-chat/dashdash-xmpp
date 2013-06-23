@@ -4,6 +4,7 @@ from datetime import datetime
 from MySQLdb import IntegrityError, OperationalError, ProgrammingError
 import logging
 from optparse import OptionParser
+import re
 import uuid
 import shortuuid
 import sleekxmpp
@@ -81,6 +82,8 @@ class LeafComponent(ComponentXMPP):
             return admin_to_vinebot(sender, vinebot) or observer_to_vinebot(sender, vinebot)
         def admin_or_participant_or_edgeuser_to_vinebot(sender, vinebot):
             return admin_to_vinebot(sender, vinebot) or participant_or_edgeuser_to_vinebot(sender, vinebot)
+        def user_to_vinebot(sender, vinebot):
+            return True
         # Argument transformations for /commands
         def logid_vinebot_sender(command_name, sender, vinebot, arg_string, arg_tokens):
             if vinebot and len(arg_tokens) == 0:
@@ -257,6 +260,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_or_participant_or_edgeuser_to_vinebot,
                                        transform_args   = logid_vinebot_sender_string_or_none,
                                        action           = self.me_action_message))
+        self.commands.add(SlashCommand(command_name     = 'party',
+                                       list_rank        = 5,
+                                       text_arg_format  = '<comma,separated,usernames> /topic <party_topic>',
+                                       text_description = 'Start a new conversation with the specified topic, and send a message to the listed users asking if they want to join. Remember the "/topic" in the middle! ',
+                                       validate_sender  = user_to_vinebot,
+                                       transform_args   = logid_vinebot_sender_token_string,
+                                       action           = self.party))
         #LATER /listen or /eavesdrop to ask for a new topic from the participants?
         # Register admin commands
         self.commands.add(SlashCommand(command_name     = 'new_user',
@@ -558,7 +568,7 @@ class LeafComponent(ComponentXMPP):
                                 self.send_alert(vinebot, None, user, 'Sorry, this user is offline.', parent_message_id=parent_message_id)
                         else:
                             parent_message_id = g.db.log_message(user, [], msg['body'], vinebot=vinebot)
-                            self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this user. Try another contact in your list?', parent_message_id=parent_message_id)
+                            self.send_alert(vinebot, None, user, 'Sorry, you can\'t send messages to this contact. Try another in your list?', parent_message_id=parent_message_id)
             except NotVinebotException:
                 if user.jid in (constants.admin_jids + [constants.graph_jid, constants.helpbot_jid]):
                     if self.commands.is_command(msg['body']):
@@ -1140,6 +1150,60 @@ class LeafComponent(ComponentXMPP):
         self.broadcast_alert(vinebot, "%s %s" % (sender.name, action_message), parent_command_id=parent_command_id, activate=True)
         g.logger.info('[me] %03d participants' % len(vinebot.participants))
         return parent_command_id, ''
+    
+    def party(self, parent_command_id, vinebot, sender, usernames, topic):
+        suggestion = '\n\nCopy-paste your message and try again?'
+        if not re.match('^(\w{1,15})(,(\w{1,15}))*$', usernames):
+            raise ExecutionError, (parent_command_id, 'the list of usernames can\'t be empty and must be formatted like this: user_1,user_2,user_3. Copy-paste your message and try again?%s' % suggestion)
+        if topic[:7] != '/topic ':
+            raise ExecutionError, (parent_command_id, 'you need to separate the topic from the usernames with " /topic ", and remember the username list can\'t contain spaces.%s' % suggestion)
+        topic = topic[7:].strip()
+        if topic == '':
+            raise ExecutionError, (parent_command_id, 'you need to specify a topic for the conversation.%s' % suggestion)
+        connected_users = g.ectl.connected_users()
+        recipients = []
+        offline_usernames = []
+        for username in usernames.split(','):
+            if username == sender.name:
+                raise ExecutionError, (parent_command_id, 'you can\'t invite yourself!%s' % suggestion)
+            try:
+                recipient = FetchedUser(name=username)
+                if recipient in connected_users:
+                    recipients.append(recipient)
+                else:
+                    offline_usernames.append(recipient.name)
+            except NotUserException:
+                raise ExecutionError, (parent_command_id, '%s isn\'t a registered user.%s' % (username, suggestion))
+        if len(recipients) == 0:
+            raise ExecutionError, (parent_command_id, 'at least some of the users you invite must be online.%s' % suggestion)
+        elif len(recipients) == 1:
+            others = ''
+        elif len(recipients) == 2:
+            others = ' and 1 other'
+        else: # len(recipients) > 2
+            others = ' and %d others' % (len(recipients) - 1)
+        invite_body = '%s has invited you%s to talk about:\n\t%s\nRespond to join the conversation!' % (sender.name, others, topic)
+        vinebot = None
+        try:
+            vinebot = InsertedVinebot()
+            vinebot.topic = topic
+            self.add_participant(vinebot, sender)
+            vinebot.add_to_roster_of(sender, topic)
+            for recipient in recipients:
+                vinebot.add_to_roster_of(recipient, topic)
+            self.send_presences(vinebot, [sender] + recipients)
+            self.send_alert(vinebot, sender, sender, 'Waiting for people to join...', parent_command_id=parent_command_id)
+            self.broadcast_message(vinebot, None, recipients, invite_body, parent_command_id=parent_command_id)
+        finally:
+            if vinebot:
+                vinebot.release_lock()
+        g.logger.info('[party] %d online recipients, %d offline recipients' % (len(recipients), len(offline_usernames)))
+        offline_body = ''
+        if len(offline_usernames) > 0:
+            offline_body = '\nThe following %d user%s offline:\n\t%s' % (len(offline_usernames),
+                                                                      ' was' if len(offline_usernames) == 1 else 's were',
+                                                                      '\n\t'.join(offline_usernames))
+        return parent_command_id, 'You invited %d user%s to a new conversation!%s' % (len(recipients), '' if len(recipients) == 1 else 's', offline_body)
     
     ##### admin /commands
     def create_user(self, parent_command_id, username, password):
