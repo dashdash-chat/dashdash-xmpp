@@ -116,6 +116,20 @@ class EjabberdCTL(object):
             g.logger.error('Fault in connected_users_vhost, assuming none: %s' % str(e))
             return frozenset([])
     
+    def get_last(self, user):
+        try:
+            res = self._retried_xmlrpc_command('get_last', {
+                'user': user,
+                'host': constants.domain
+            })
+            return res
+        except xmlrpclib.ProtocolError, e:
+            g.logger.error('ProtocolError in get_last, assuming Never: %s' % str(e))
+            return 'Never'
+        except xmlrpclib.Fault, e:
+            g.logger.error('Fault in get_last, assuming Never: %s' % str(e))
+            return 'Never'
+    
     def _retried_xmlrpc_command(self, command, data):
         xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
         for i in range(1, NUM_RETRIES + 1):

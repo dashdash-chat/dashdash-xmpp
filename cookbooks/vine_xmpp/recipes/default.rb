@@ -27,7 +27,7 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
   EOH
 end
 ['mysql-python', 'dnspython', 'pyasn1', 'pyasn1_modules',
- 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp',
+ 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp', "mailsnake",
  'boto', 'celery', 'Flask-OAuth', 'Flask-SQLAlchemy'  #TODO re-use the python-twitter library for all OAuth, so we don't need flask here
 ].each do |library|
   python_pip library do

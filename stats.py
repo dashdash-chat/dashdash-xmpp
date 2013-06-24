@@ -90,6 +90,7 @@ class DatabaseStats(object):
                 return group_messages_sent[0]
             return 0
 
+
 class EjabberdStats(object):
     g.ectl = EjabberdCTL(constants.leaves_xmlrpc_user, constants.leaves_xmlrpc_password)
     

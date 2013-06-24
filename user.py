@@ -412,6 +412,7 @@ class InsertedUser(AbstractUser):
         self.twitter_id = None  # Newly-created users won't ever have tokens, since they haven't auth'd on the site yet
         self.twitter_token = None
         self.twitter_secret = None
+        self.email = None
     
 
 class FetchedUser(AbstractUser):
@@ -421,7 +422,7 @@ class FetchedUser(AbstractUser):
         self.id = None
         if name and dbid:
             dbid = int(dbid)
-            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage, email
                                                FROM users
                                                WHERE id = %(id)s
                                             """, {
@@ -432,7 +433,7 @@ class FetchedUser(AbstractUser):
                 self.id = dbid
                 self.name = name.lower()
         elif name:
-            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage
+            res = g.db.execute_and_fetchall("""SELECT id, twitter_id, twitter_token, twitter_secret, stage, email
                                                 FROM users
                                                 WHERE name = %(name)s
                                                 AND is_active = true
@@ -445,7 +446,7 @@ class FetchedUser(AbstractUser):
                 self.name = name.lower()
         elif dbid:
             dbid = int(dbid)
-            res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret, stage
+            res = g.db.execute_and_fetchall("""SELECT name, twitter_id, twitter_token, twitter_secret, stage, email
                                                 FROM users
                                                 WHERE id = %(id)s
                                                 AND is_active = true
@@ -464,4 +465,5 @@ class FetchedUser(AbstractUser):
         self.twitter_token  = res[2]
         self.twitter_secret = res[3]
         self._stage = res[4]
+        self.email = res[5]
     
