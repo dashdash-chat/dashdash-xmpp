@@ -25,9 +25,21 @@ def fetch_users():
                                          }, strip_pairs=True)
     return frozenset([u.FetchedUser(dbid=user_id) for user_id in user_ids])
 
+def count_messages_sent(user_id):
+    messages_sent = g.db.execute_and_fetchall("""SELECT COUNT(*)
+                                                 FROM messages
+                                                 WHERE messages.sender_id = %(user_id)s
+                                              """, {
+                                                 'user_id': user_id
+                                              }, strip_pairs=True)
+    if messages_sent and len(messages_sent) == 1:
+        return messages_sent[0]
+    return 0
+
 def subscribe_or_update(user):
     try:
         active = g.ectl.get_last(user.name)
+        messages_sent = count_messages_sent(user.id)
         try:
             ms.listSubscribe(
                 id = 'b2f9b04668',
@@ -35,6 +47,7 @@ def subscribe_or_update(user):
                 merge_vars = {
                        'UNAME': user.name,
                        'LACTIVE': active,
+                       'MSENT': messages_sent
                        },
                 update_existing = True,
                 double_optin = False,
