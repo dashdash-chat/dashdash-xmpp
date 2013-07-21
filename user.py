@@ -381,11 +381,13 @@ class InsertedUser(AbstractUser):
         if not re.match('^\w{1,15}$', name):
             raise NotUserException, 'Usernames must match /^\w{1,15}$/'
         try:
-            dbid = g.db.execute("""INSERT INTO users (name)
-                                   VALUES (%(name)s)
+            dbid = g.db.execute("""INSERT INTO users (name, stage)
+                                   VALUES (%(name)s, %(stage)s)
                                 """, {
-                                   'name': name
+                                   'name': name,
+                                   'stage': 'welcome'
                                 })
+            self._stage = 'welcome'
         except IntegrityError, e:
             dbid = g.db.execute_and_fetchall("""SELECT id
                                                 FROM users
