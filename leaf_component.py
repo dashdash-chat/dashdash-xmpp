@@ -264,7 +264,7 @@ class LeafComponent(ComponentXMPP):
                                        action           = self.me_action_message))
         self.commands.add(SlashCommand(command_name     = 'party',
                                        list_rank        = 5,
-                                       text_arg_format  = '<comma,separated,usernames> /topic <party_topic>',
+                                       text_arg_format  = '<comma,separated,usernames OR *all* OR *friends*> /topic <party_topic>',
                                        text_description = 'Start a new conversation with the specified topic, and send a message to the listed users asking if they want to join. Remember the "/topic" in the middle! ',
                                        validate_sender  = user_to_vinebot,
                                        transform_args   = logid_vinebot_sender_token_string,
@@ -1169,36 +1169,39 @@ class LeafComponent(ComponentXMPP):
     
     def party(self, parent_command_id, vinebot, sender, usernames, topic):
         suggestion = '\n\nCopy-paste your message and try again?'
-        if not re.match('^(\w{1,15})(,(\w{1,15}))*$', usernames):
+        if usernames not in ['*all*', '*friends*'] and not re.match('^(\w{1,15})(,(\w{1,15}))*$', usernames):
             raise ExecutionError, (parent_command_id, 'the list of usernames can\'t be empty and must be formatted like this: user_1,user_2,user_3. Copy-paste your message and try again?%s' % suggestion)
         if topic[:7] != '/topic ':
             raise ExecutionError, (parent_command_id, 'you need to separate the topic from the usernames with " /topic ", and remember the username list can\'t contain spaces.%s' % suggestion)
         topic = topic[7:].strip()
         if topic == '':
             raise ExecutionError, (parent_command_id, 'you need to specify a topic for the conversation.%s' % suggestion)
+        if usernames == '*all*':
+            party_invitees = sender.friends.union(sender.outgoing_vinebots)
+        elif usernames == '*friends*':
+            party_invitees = sender.friends
+        else:
+            party_invitee_usernames = set(usernames.split(',')).difference(constants.protected_users + [constants.echo_user, constants.helpbot_jid_user])
+            party_invitees = []
+            for party_invitee_username in party_invitee_usernames:
+                if party_invitee_username == sender.name:
+                    raise ExecutionError, (parent_command_id, 'you can\'t invite yourself!%s' % suggestion)
+                try:
+                    party_invitee = FetchedUser(name=party_invitee_username)
+                except NotUserException:
+                    raise ExecutionError, (parent_command_id, '%s isn\'t a registered user.%s' % (party_invitee_username, suggestion))
+                party_invitees.append(party_invitee)
+            party_invitees = frozenset(party_invitees)
         connected_users = g.ectl.connected_users().difference(constants.protected_users)
-        recipients = []
         offline_usernames = []
-        for username in set(usernames.split(',')).difference(constants.protected_users + [constants.echo_user, constants.helpbot_jid_user]):
-            if username == sender.name:
-                raise ExecutionError, (parent_command_id, 'you can\'t invite yourself!%s' % suggestion)
-            try:
-                recipient = FetchedUser(name=username)
-                if recipient in connected_users:
-                    recipients.append(recipient)
-                else:
-                    offline_usernames.append(recipient.name)
-            except NotUserException:
-                raise ExecutionError, (parent_command_id, '%s isn\'t a registered user.%s' % (username, suggestion))
+        recipients = []
+        for party_invitee in party_invitees:
+            if party_invitee in connected_users:
+                recipients.append(party_invitee)
+            else:
+                offline_usernames.append(party_invitee.name)
         if len(recipients) == 0:
             raise ExecutionError, (parent_command_id, 'at least some of the users you invite must be online.%s' % suggestion)
-        elif len(recipients) == 1:
-            others = ''
-        elif len(recipients) == 2:
-            others = ' and 1 other'
-        else: # len(recipients) > 2
-            others = ' and %d others' % (len(recipients) - 1)
-        invite_body = '%s has invited you%s to talk about:\n\t%s\nRespond to join the conversation!' % (sender.name, others, topic)
         vinebot = None
         try:
             vinebot = InsertedVinebot()
@@ -1209,13 +1212,23 @@ class LeafComponent(ComponentXMPP):
                 vinebot.add_to_roster_of(recipient, topic)
             self.send_presences(vinebot, [sender] + recipients)
             self.send_alert(vinebot, sender, sender, 'Waiting for people to join...', parent_command_id=parent_command_id)
-            self.broadcast_message(vinebot, None, recipients, invite_body, parent_command_id=parent_command_id)
+            recipients = set(recipients)
+            for recipient in recipients:
+                other_recipients = list(recipients.difference([recipient]))
+                if len(other_recipients) == 0:
+                    others = ''
+                elif len(other_recipients) == 1:
+                    others = ' and %s' % other_recipients[0].name
+                else: # len(other_recipients) > 1
+                    others = ', %s and %s' % (', '.join([o_r.name for o_r in other_recipients[:-1]]), other_recipients[-1].name)
+                invite_body = '%s has invited you%s to talk about:\n\t%s\nRespond to join the conversation!' % (sender.name, others, topic)
+                self.broadcast_message(vinebot, None, [recipient], invite_body, parent_command_id=parent_command_id)
         finally:
             if vinebot:
                 vinebot.release_lock()
         g.logger.info('[party] %d online recipients, %d offline recipients' % (len(recipients), len(offline_usernames)))
         offline_body = ''
-        if len(offline_usernames) > 0:
+        if usernames not in ['*all*', '*friends*'] and len(offline_usernames) > 0:
             offline_body = '\nThe following %d user%s offline:\n\t%s' % (len(offline_usernames),
                                                                       ' was' if len(offline_usernames) == 1 else 's were',
                                                                       '\n\t'.join(offline_usernames))
