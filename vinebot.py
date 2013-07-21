@@ -343,7 +343,7 @@ class AbstractVinebot(object):
         return (u.FetchedUser(dbid=return_tuple[0]),
                return_tuple[1],
                return_tuple[2],
-               set([u.FetchedUser(dbid=recipient_id) for recipient_id in return_tuple[3].split(',')]))
+               set([] if return_tuple[3] is None else [u.FetchedUser(dbid=recipient_id) for recipient_id in return_tuple[3].split(',')]))
     
     def get_suspended_messages(self):
         suspended_messages = g.db.execute_and_fetchall("""SELECT messages.id, messages.body, GROUP_CONCAT(DISTINCT recipients.recipient_id)
