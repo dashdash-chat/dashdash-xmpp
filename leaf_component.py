@@ -362,8 +362,15 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.invites_for))
-        self.commands.add(SlashCommand(command_name     = 'score',
+        self.commands.add(SlashCommand(command_name     = 'new_twitter_invite',
                                        list_rank        = 13,
+                                       text_arg_format  = '<sender> <recipient>',
+                                       text_description = 'Create an used invite tied to a specific Twitter handle.',
+                                       validate_sender  = admin_to_leaf,
+                                       transform_args   = logid_token_token,
+                                       action           = self.new_twitter_invite))
+        self.commands.add(SlashCommand(command_name     = 'score',
+                                       list_rank        = 14,
                                        text_arg_format  = '<username>',
                                        text_description = 'Queue a celery task to score the edges for the speicified user.',
                                        validate_sender  = admin_to_leaf,
@@ -1127,7 +1134,7 @@ class LeafComponent(ComponentXMPP):
                 raise ExecutionError, (parent_command_id, '%s is already using Dashdash, but is offline right now.' % old_user.name)
         try:
             invite = InsertedInvite(sender)
-            invite.use(new_user)
+            invite.use(new_user, pending=True)
         except IntegrityError:
             pass  # We don't need to worry if the user already has an invite
         tweet = '@%s %s %s' % (new_user.name, tweet_body, invite.url)
@@ -1469,6 +1476,27 @@ class LeafComponent(ComponentXMPP):
             return parent_command_id, output
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
+    
+    def new_twitter_invite(self, parent_command_id, sender_name, reciepient_name):
+        sender = FetchedUser(name=sender_name)
+        try:
+            new_user = InsertedUser(reciepient_name, None, should_register=False)
+        except NotUserException:
+            raise ExecutionError, (parent_command_id, 'Twitter usernames only contain letters, numbers, and underscores.')
+        except IntegrityError:
+            old_user = FetchedUser(name=reciepient_name)
+            try:
+                old_invite = FetchedInvite(invitee_id=old_user.id)
+            except NotInviteException:
+                raise ExecutionError, (parent_command_id, '%s is already using Dashdash but didn\'t use an invite.' % old_user.name)
+            raise ExecutionError, (parent_command_id, '%s is already using Dashdash via %s\'s invite %s.' % (old_user.name, old_invite.sender.name, old_invite.url))
+        try:
+            invite = InsertedInvite(sender)
+            invite.use(new_user, pending=True)
+        except IntegrityError:
+            pass  # We don't need to worry if the user already has an invite
+        g.logger.info('[new_twitter_invite] success')
+        return parent_command_id, 'Success: %s can now use %s to sign up.' % (new_user.name, invite.url)                                  
     
     def score_edges(self, parent_command_id, username):
         try:

@@ -47,15 +47,24 @@ class AbstractInvite(object):
     def _has_been_used(self):
         return len(self.recipients) > 0
     
-    def use(self, recipient):
+    def use(self, recipient, pending=False):
         if self._is_used_up():
             raise ImmutableInviteException
-        g.db.execute("""INSERT INTO invitees (invite_id, invitee_id)
-                        VALUES (%(invite_id)s, %(invitee_id)s)
-                     """, {
-                        'invite_id': self.id,
-                        'invitee_id': recipient.id,
-                     })
+        if pending:
+            g.db.execute("""INSERT INTO invitees (invite_id, invitee_id, used)
+                            VALUES (%(invite_id)s, %(invitee_id)s, %(used)s)
+                         """, {
+                            'invite_id': self.id,
+                            'invitee_id': recipient.id,
+                            'used': '0000-00-00 00:00:00'
+                         })
+        else:
+            g.db.execute("""INSERT INTO invitees (invite_id, invitee_id)
+                            VALUES (%(invite_id)s, %(invitee_id)s)
+                         """, {
+                            'invite_id': self.id,
+                            'invitee_id': recipient.id
+                         })
         self.recipients.append(recipient)
     
     def hide(self):
@@ -195,7 +204,7 @@ class FetchedInvite(AbstractInvite):
                                                        'invitee_id': invitee_id
                                                     })
                 if len(results) < 1:
-                    raise NotInviteException, 'No invite found for code %s' % code
+                    raise NotInviteException, 'No invite found for invitee_id=%s' % invitee_id
                 self.id = results[0][0]
                 self.code = results[0][1]
                 self.sender = u.FetchedUser(dbid=results[0][2])
