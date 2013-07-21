@@ -5,12 +5,16 @@ import errno
 import socket
 import gevent
 from httplib import BadStatusLine
+from socket import gaierror
 import xmlrpclib
 import constants
 from constants import g
 import user as u
 
 NUM_RETRIES = 3
+
+class EjabberdCTLException(Exception):
+    pass
 
 class EjabberdCTL(object):
     def __init__(self, username, password):
@@ -70,72 +74,62 @@ class EjabberdCTL(object):
                                      })
     
     def get_roster(self, user):
-        rosteritems = self._xmlrpc_command('get_roster', {
-            'user': user, 
-            'host': constants.domain})
-        roster = []
-        for rosteritem in rosteritems['contacts']:
-            rosteritem = rosteritem['contact']
-            if rosteritem[2]['subscription'] != 'both':
-                g.logger.warning('Incorrect roster subscription for: %s' % rosteritem)
-            vinebot_user = rosteritem[0]['jid'].split('@')[0]
-            if not vinebot_user.startswith(constants.vinebot_prefix):
-                g.logger.warning("Non-vinebot user found on roster for user %s: %s" % (user, rosteritem))
-            roster.append((vinebot_user, rosteritem[4]['group'], rosteritem[1]['nick']))
-        return roster
+        try:
+            rosteritems = self._xmlrpc_command('get_roster', {
+                'user': user, 
+                'host': constants.domain
+            }, assuming_text='none')
+            roster = []
+            for rosteritem in rosteritems['contacts']:
+                rosteritem = rosteritem['contact']
+                if rosteritem[2]['subscription'] != 'both':
+                    g.logger.warning('Incorrect roster subscription for: %s' % rosteritem)
+                vinebot_user = rosteritem[0]['jid'].split('@')[0]
+                if not vinebot_user.startswith(constants.vinebot_prefix):
+                    g.logger.warning("Non-vinebot user found on roster for user %s: %s" % (user, rosteritem))
+                roster.append((vinebot_user, rosteritem[4]['group'], rosteritem[1]['nick']))
+            return roster
+        except EjabberdCTLException, e:
+            return []
     
     def user_status(self, user):
         try:
             res = self._xmlrpc_command('user_sessions_info', {
                 'user': user,
                 'host': constants.domain
-            })
+            }, assuming_text='%s is unavailable' % user)
             if len(res['sessions_info']) > 0:
                 return res['sessions_info'][0]['session'][6]['status']
-            else:
-                return 'unavailable'
-        except xmlrpclib.ProtocolError, e:
-            g.logger.error('ProtocolError in user_status, assuming %s is unavailable: %s' % (user, str(e)))
-            return 'unavailable'
-        except xmlrpclib.Fault, e:
-            g.logger.error('Fault in user_status, assuming %s is unavailable: %s' % (user, str(e)))
-            return 'unavailable'
+        except EjabberdCTLException, e:
+            pass
+        return 'unavailable'
     
     def connected_users(self):
         try:
             res = self._retried_xmlrpc_command('connected_users_vhost', {
                 'host': constants.domain
-            })
+            }, assuming_text='none')
             usernames = [r['sessions'].split('@')[0] for r in res]
             usernames = filter(lambda username: username not in constants.protected_users, usernames)
             return frozenset([u.FetchedUser(name=username) for username in usernames])
-        except xmlrpclib.ProtocolError, e:
-            g.logger.error('ProtocolError in connected_users_vhost, assuming none: %s' % str(e))
-            return frozenset([])
-        except xmlrpclib.Fault, e:
-            g.logger.error('Fault in connected_users_vhost, assuming none: %s' % str(e))
+        except EjabberdCTLException, e:
             return frozenset([])
     
     def get_last(self, user):
         try:
-            res = self._retried_xmlrpc_command('get_last', {
+            return self._retried_xmlrpc_command('get_last', {
                 'user': user,
                 'host': constants.domain
-            })
-            return res
-        except xmlrpclib.ProtocolError, e:
-            g.logger.error('ProtocolError in get_last, assuming Never: %s' % str(e))
-            return 'Never'
-        except xmlrpclib.Fault, e:
-            g.logger.error('Fault in get_last, assuming Never: %s' % str(e))
+            }, assuming_text='Never')
+        except EjabberdCTLException:
             return 'Never'
     
-    def _retried_xmlrpc_command(self, command, data):
+    def _retried_xmlrpc_command(self, command, data, assuming_text=None):
         xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
         for i in range(1, NUM_RETRIES + 1):
             result = None
             try:
-                result = self._xmlrpc_command(command, data, xmlrpc_server)
+                result = self._xmlrpc_command(command, data, xmlrpc_server=xmlrpc_server, assuming_text=assuming_text)
             except socket.error as e:
                 if e.errno in [errno.ECONNRESET, errno.ETIMEDOUT]:
                     g.logger.warning('Failed %s XMLRPC command #%d for %s and error %s' % (command, i, data, e))
@@ -153,14 +147,23 @@ class EjabberdCTL(object):
                 g.logger.warning('Failed %s XMLRPC command #%d for %s and result %s' % (command, i, data, result))
         return False
     
-    def _xmlrpc_command(self, command, data, xmlrpc_server=None):        
+    def _xmlrpc_command(self, command, data, xmlrpc_server=None, assuming_text=None):
         g.logger.debug('XMLRPC ejabberdctl: %s %s' % (command, str(data)))
         if xmlrpc_server is None:
             xmlrpc_server = self.xmlrpc_server_shared
         fn = getattr(xmlrpc_server, command)
-        return fn({
-            'user': self.username,
-            'server': constants.domain,
-            'password': self.password
-        }, data)  #LATER do I need to worry about injection attacks when setting topics as roster nicknames?
+        try:
+            return fn({
+                'user': self.username,
+                'server': constants.domain,
+                'password': self.password
+            }, data)  #LATER do I need to worry about injection attacks when setting topics as roster nicknames?
+        except xmlrpclib.ProtocolError, e:
+            g.logger.error(  'ProtocolError in %s, assuming %s: %s' % (command, assuming_text, str(e)))
+        except xmlrpclib.Fault, e:
+            g.logger.error(          'Fault in %s, assuming %s: %s' % (command, assuming_text, str(e)))
+        except gaierror, e:    
+            g.logger.error('Socket gaierror in %s, assuming %s: %s' % (command, assuming_text, str(e)))
+        raise EjabberdCTLException
+            
     
