@@ -57,6 +57,7 @@ class HelpBot(sleekxmpp.ClientXMPP):
         self.register_plugin('xep_0199') # XMPP Ping
         g.db = MySQLManager(constants.helpbot_mysql_user, constants.helpbot_mysql_password)
         g.ectl = EjabberdCTL(constants.helpbot_xmlrpc_user, constants.helpbot_xmlrpc_password)
+        self.user = FetchedUser(name=constants.helpbot_jid_user)
         self.add_event_handler("session_start", self.start)
         self.add_event_handler("message", self.handle_message)
         self.final_message = "Sorry, there's nothing else I can do for you right now. Type /help for a list of commands, or ping @lehrblogger with questions!"
@@ -102,14 +103,13 @@ class HelpBot(sleekxmpp.ClientXMPP):
         msg = self.Message()
         msg['type'] = 'chat'
         msg['body'] = body
-        self_user = FetchedUser(name=constants.helpbot_jid_user)
         try:
-            outgoing_edge = FetchedEdge(f_user=self_user, t_user=recipient)
+            outgoing_edge = FetchedEdge(f_user=self.user, t_user=recipient)
             edge_vinebot = FetchedVinebot(dbid=outgoing_edge.vinebot_id)
             msg['to'] = '%s@%s' % (edge_vinebot.jiduser, constants.leaves_domain)
             msg.send()
         except NotEdgeException:
-            g.logger.warning('No edge found from %s to intended message recipient %s!' % (self_user.name, recipient.name))
+            g.logger.warning('No edge found from %s to intended message recipient %s!' % (self.user.name, recipient.name))
         finally:
             if edge_vinebot:
                 edge_vinebot.release_lock()
@@ -142,8 +142,10 @@ class HelpBot(sleekxmpp.ClientXMPP):
                     pass  # Ignore all other status messages for now
             else:
                 try:
-                    vinebot = FetchedVinebot(jiduser=msg['from'].username)                    
-                    if len(vinebot.participants) <= 2:
+                    vinebot = FetchedVinebot(jiduser=msg['from'].username)
+                    if self.user not in vinebot.participants:
+                        pass  # The bot should never join conversations on its own
+                    elif len(vinebot.participants) <= 2:
                         if len(vinebot.participants) == 2:
                             sender = filter(lambda user: user.name != self.boundjid.user, vinebot.participants)[0]  # get the other participant's user object
                         else:
@@ -158,10 +160,9 @@ class HelpBot(sleekxmpp.ClientXMPP):
                         if len(from_strings) == 2 and from_strings[1].strip() == 'whispering':
                             msg.reply('/whisper %s %s' % (sender_name, self.final_message)).send()
                         elif sender_name != constants.echo_user:
-                            self_user = FetchedUser(name=constants.helpbot_jid_user)
-                            sender, body, sent_on, recipients = vinebot.get_last_message(sender=self_user)
+                            sender, body, sent_on, recipients = vinebot.get_last_message(sender=self.user)
                             idle_message = 'sits quietly'
-                            if vinebot.participants != recipients or body != '%s %s' % (self_user.name, idle_message):
+                            if vinebot.participants != recipients or body != '%s %s' % (self.user.name, idle_message):
                                 msg.reply('/me %s' % idle_message).send()
                 except NotVinebotException:
                     if msg['from'].domain != constants.leaves_domain:  # Ignore error responses from the leaves, to prevent infinite loops
