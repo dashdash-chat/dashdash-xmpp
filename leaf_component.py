@@ -362,13 +362,13 @@ class LeafComponent(ComponentXMPP):
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token,
                                        action           = self.invites_for))
-        self.commands.add(SlashCommand(command_name     = 'new_twitter_invite',
+        self.commands.add(SlashCommand(command_name     = 'new_invite_public',
                                        list_rank        = 13,
                                        text_arg_format  = '<sender> <recipient>',
                                        text_description = 'Create an used invite tied to a specific Twitter handle.',
                                        validate_sender  = admin_to_leaf,
                                        transform_args   = logid_token_token,
-                                       action           = self.new_twitter_invite))
+                                       action           = self.new_invite_public))
         self.commands.add(SlashCommand(command_name     = 'score',
                                        list_rank        = 14,
                                        text_arg_format  = '<username>',
@@ -1490,7 +1490,7 @@ class LeafComponent(ComponentXMPP):
         except NotUserException, e:
             raise ExecutionError, (parent_command_id, 'are you sure this user exists?')
     
-    def new_twitter_invite(self, parent_command_id, sender_name, reciepient_name):
+    def new_invite_public(self, parent_command_id, sender_name, reciepient_name):
         sender = FetchedUser(name=sender_name)
         try:
             new_user = InsertedUser(reciepient_name, None, should_register=False)
@@ -1508,7 +1508,7 @@ class LeafComponent(ComponentXMPP):
             invite.use(new_user, pending=True)
         except IntegrityError:
             pass  # We don't need to worry if the user already has an invite
-        g.logger.info('[new_twitter_invite] success')
+        g.logger.info('[new_invite_public] success')
         return parent_command_id, 'Success: %s can now use %s to sign up.' % (new_user.name, invite.url)                                  
     
     def score_edges(self, parent_command_id, username):
