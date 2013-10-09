@@ -22,8 +22,11 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
   code <<-EOH
     wget https://gevent.googlecode.com/files/gevent-1.0rc2.tar.gz
     tar xvzf gevent-1.0rc2.tar.gz
-    cd gevent-1.0rc2/
+    cd gevent-1.0rc2
     #{xmpp_env_dir}/bin/python setup.py install
+    cd ..
+    rm gevent-1.0rc2.tar.gz
+    rm -r gevent-1.0rc2
   EOH
 end
 ['mysql-python', 'dnspython', 'pyasn1', 'pyasn1_modules',
