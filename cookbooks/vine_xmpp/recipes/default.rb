@@ -28,6 +28,10 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
     rm gevent-1.0rc2.tar.gz
     rm -r gevent-1.0rc2
   EOH
+  # if gevent is installed already, raise an error to satisfy the not_if condition and halt the installation
+  not_if <<-EOH
+    #{xmpp_env_dir}/bin/python -c "import errno, sys, gevent; sys.exit() if gevent.__version__ == '1.0rc2' else sys.exit(errno.ENOENT);"
+  EOH
 end
 ['mysql-python', 'dnspython', 'pyasn1', 'pyasn1_modules',
  'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp', "mailsnake",
