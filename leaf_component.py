@@ -1349,12 +1349,6 @@ class LeafComponent(ComponentXMPP):
                 self._jiduser = jiduser
                 self._group = group
                 self._nick = nick
-            def add_to_roster(self):
-                g.ectl.add_rosteritem(self._viewer.name, self._jiduser, self._group, self._nick)
-                return 'Adding   rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
-            def delete_from_roster(self):
-                g.ectl.delete_rosteritem(self._viewer.name, self._jiduser)
-                return 'Deleting rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
             def __hash__(self):
                 return hash('rosteritem.%s' % self._jiduser)
             def __eq__(self, other):
@@ -1370,8 +1364,15 @@ class LeafComponent(ComponentXMPP):
                 if isinstance(other, ActualRosterItem):  # when figuring out which rosteritems to delete, we only care about jids
                     return (self._jiduser == other._jiduser)
                 return super(ExpectedRosterItem, self).__eq__(self, other)
-        class ActualRosterItem(RosterItem):
-            pass  # we only need this class for type checking in ExpectedRosterItem.__eq__
+            def add_to_roster(self):
+                g.ectl.add_rosteritem(self._viewer.name, self._jiduser, self._group, self._nick)
+                return 'Adding   rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
+        class ActualRosterItem(RosterItem):  # we need this class for type checking in ExpectedRosterItem.__eq__
+            def __init__(self, viewer, roster_tuple):
+                super(ActualRosterItem, self).__init__(viewer, roster_tuple[0], roster_tuple[1], roster_tuple[2])
+            def delete_from_roster(self):
+                g.ectl.delete_rosteritem(self._viewer.name, self._jiduser)
+                return 'Deleting rosteritem %s with group \'%s\' and nick \'%s\'' % (self._jiduser, self._group, self._nick)
         try:
             user = FetchedUser(name=username)
             user_roster = user.roster()
@@ -1379,8 +1380,8 @@ class LeafComponent(ComponentXMPP):
                                              .union(user.observed_vinebots) \
                                              .union(user.symmetric_vinebots) \
                                              .union(user.outgoing_vinebots)
-            expected_rosteritems = frozenset([ExpectedRosterItem(user, expected                       ) for expected in expected_vinebots])
-            actual_rosteritems   = frozenset([ActualRosterItem(  user, actual[0], actual[1], actual[2]) for actual   in user_roster])
+            expected_rosteritems = frozenset([ExpectedRosterItem(user, expected_vinebot) for expected_vinebot in expected_vinebots])
+            actual_rosteritems   = frozenset([ActualRosterItem(  user, actual_tuple    ) for actual_tuple     in user_roster      ])
             errors = []
             for actual_rosteritem in actual_rosteritems.difference(expected_rosteritems):
                 errors.append(actual_rosteritem.delete_from_roster())
