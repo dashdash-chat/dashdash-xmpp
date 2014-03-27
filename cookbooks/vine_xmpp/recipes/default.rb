@@ -139,7 +139,7 @@ supervisor_service "echobot" do
   stdout_logfile "#{node['supervisor']['log_dir']}/echobot.log"
   stderr_logfile "#{node['supervisor']['log_dir']}/echobot.log"
   stopsignal "INT"
-  autostart true
+  autostart false
   autorestart false
   priority 10
   startsecs 10
