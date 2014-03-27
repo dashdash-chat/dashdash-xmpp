@@ -34,13 +34,21 @@ bash "install gevent 1.0rc2" do  #since pypi only has v0.13
   EOH
 end
 ['mysql-python', 'dnspython', 'pyasn1', 'pyasn1_modules',
- 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp', "mailsnake",
+ 'twilio', 'python-twitter', 'shortuuid', 'sleekxmpp', 'mailsnake',
  'boto', 'celery', 'Flask-OAuth', 'Flask-SQLAlchemy'  #TODO re-use the python-twitter library for all OAuth, so we don't need flask here
 ].each do |library|
   python_pip library do
     virtualenv xmpp_env_dir
     action :install
   end
+end
+bash "chmod ~/.python-eggs" do
+  user node.run_state['config']['user']
+  group node.run_state['config']['group']
+  code <<-EOH
+    mkdir /home/#{node.run_state['config']['user']}/.python-eggs
+    chmod g-wx,o-wx /home/#{node.run_state['config']['user']}/.python-eggs
+  EOH
 end
 
 # Check out the application files and render the python constants template
