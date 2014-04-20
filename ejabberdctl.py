@@ -20,7 +20,7 @@ class EjabberdCTL(object):
     def __init__(self, username, password):
         self.username = username
         self.password = password
-        self.xmlrpc_server_shared = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+        self.xmlrpc_server_shared = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server_ip, constants.xmlrpc_port))
     
     def register(self, user, password):
         self._xmlrpc_command('register', {
@@ -125,7 +125,7 @@ class EjabberdCTL(object):
             return 'Never'
     
     def _retried_xmlrpc_command(self, command, data, assuming_text=None):
-        xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+        xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server_ip, constants.xmlrpc_port))
         for i in range(1, NUM_RETRIES + 1):
             result = None
             try:
@@ -133,12 +133,12 @@ class EjabberdCTL(object):
             except socket.error as e:
                 if e.errno in [errno.ECONNRESET, errno.ETIMEDOUT]:
                     g.logger.warning('Failed %s XMLRPC command #%d for %s and error %s' % (command, i, data, e))
-                    xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+                    xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server_ip, constants.xmlrpc_port))
                 else:
                     raise e
             except BadStatusLine:
                 g.logger.warning('Failed %s XMLRPC command #%d for %s and error BadStatusLine' % (command, i, data))
-                xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.xmlrpc_server, constants.xmlrpc_port))
+                xmlrpc_server = xmlrpclib.ServerProxy('http://%s:%s' % (constants.server_ip, constants.xmlrpc_port))
             if result is not None and 'res' in result and result['res'] == 0:
                 return True
             elif result is not None and command in result:
