@@ -116,7 +116,7 @@ supervisor_service "leaves" do
   priority 2
   startsecs 10
   stopwaitsecs 300
-  action :enable
+  action [:enable, :start]
 end
 supervisor_service "helpbot" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/helpbot.py"
@@ -130,7 +130,7 @@ supervisor_service "helpbot" do
   priority 5
   startsecs 10
   stopwaitsecs 10
-  action :enable
+  action [:enable, :start]
 end
 supervisor_service "echobot" do
   command "#{xmpp_env_dir}/bin/python #{xmpp_repo_dir}/echobot.py"
@@ -144,7 +144,7 @@ supervisor_service "echobot" do
   priority 10
   startsecs 10
   stopwaitsecs 10
-  action :enable
+  action [:enable, :start]
 end
 
 # Send the leaves, helpbot, and echobot logs to Papertrail
